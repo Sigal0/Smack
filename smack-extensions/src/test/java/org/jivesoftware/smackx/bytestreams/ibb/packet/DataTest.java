@@ -16,27 +16,28 @@
  */
 package org.jivesoftware.smackx.bytestreams.ibb.packet;
 
-import static org.custommonkey.xmlunit.XMLAssert.assertXMLEqual;
+import static org.jivesoftware.smack.test.util.XmlUnitUtils.assertXmlSimilar;
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.mock;
 
 import java.util.Properties;
 
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.util.StringUtils;
-import org.jivesoftware.smack.util.XmlStringBuilder;
-import org.jivesoftware.smackx.bytestreams.ibb.packet.Data;
-import org.jivesoftware.smackx.bytestreams.ibb.packet.DataPacketExtension;
-import org.junit.Test;
+import org.jivesoftware.smack.packet.StreamOpen;
+import org.jivesoftware.smack.util.stringencoder.Base64;
+
+import org.jivesoftware.smackx.InitExtensions;
 
 import com.jamesmurty.utils.XMLBuilder;
+import org.junit.Test;
+import org.jxmpp.jid.impl.JidCreate;
 
 /**
  * Test for the Data class.
- * 
+ *
  * @author Henning Staib
  */
-public class DataTest {
+public class DataTest extends InitExtensions {
 
     @Test(expected = IllegalArgumentException.class)
     public void shouldNotInstantiateWithInvalidArgument() {
@@ -50,15 +51,15 @@ public class DataTest {
         assertEquals(IQ.Type.set, data.getType());
     }
 
-    private static Properties outputProperties = new Properties();
+    private static final Properties outputProperties = new Properties();
     {
         outputProperties.put(javax.xml.transform.OutputKeys.OMIT_XML_DECLARATION, "yes");
     }
 
     @Test
     public void shouldReturnValidIQStanzaXML() throws Exception {
-        String encodedData = StringUtils.encodeBase64("Test");
-        
+        String encodedData = Base64.encode("Test");
+
         String control = XMLBuilder.create("iq")
             .a("from", "romeo@montague.lit/orchard")
             .a("to", "juliet@capulet.lit/balcony")
@@ -71,22 +72,13 @@ public class DataTest {
                 .t(encodedData)
             .asString(outputProperties);
 
-        DataPacketExtension dpe = mock(DataPacketExtension.class);
-        XmlStringBuilder dataTag = new XmlStringBuilder();
-        dataTag.halfOpenElement(DataPacketExtension.ELEMENT);
-        dataTag.xmlnsAttribute(DataPacketExtension.NAMESPACE);
-        dataTag.attribute("seq", "0");
-        dataTag.attribute("sid", "i781hf64");
-        dataTag.rightAngelBracket();
-        dataTag.escape(encodedData);
-        dataTag.closeElement(DataPacketExtension.ELEMENT);
-        when(dpe.toXML()).thenReturn(dataTag);
+        DataPacketExtension dpe = new DataPacketExtension("i781hf64", 0, encodedData);
         Data data = new Data(dpe);
-        data.setFrom("romeo@montague.lit/orchard");
-        data.setTo("juliet@capulet.lit/balcony");
-        data.setPacketID("kr91n475");
-        
-        assertXMLEqual(control, data.toXML().toString());
+        data.setFrom(JidCreate.from("romeo@montague.lit/orchard"));
+        data.setTo(JidCreate.from("juliet@capulet.lit/balcony"));
+        data.setStanzaId("kr91n475");
+
+        assertXmlSimilar(control, data.toXML(StreamOpen.CLIENT_NAMESPACE).toString());
     }
 
 }

@@ -17,16 +17,27 @@
 
 package org.jivesoftware.smackx.workgroup.agent;
 
+import java.io.IOException;
+
 import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.SimpleIQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
 import org.jivesoftware.smack.provider.IQProvider;
-import org.xmlpull.v1.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
+import org.jxmpp.jid.Jid;
 
 
-public class OfferConfirmation extends IQ {
+public class OfferConfirmation extends SimpleIQ {
     private String userJID;
     private long sessionID;
+
+    public OfferConfirmation() {
+        super("offer-confirmation", "http://jabber.org/protocol/workgroup");
+    }
 
     public String getUserJID() {
         return userJID;
@@ -45,42 +56,37 @@ public class OfferConfirmation extends IQ {
     }
 
 
-    public void notifyService(XMPPConnection con, String workgroup, String createdRoomName) throws NotConnectedException {
+    public void notifyService(XMPPConnection con, Jid workgroup, String createdRoomName) throws NotConnectedException, InterruptedException {
         NotifyServicePacket packet = new NotifyServicePacket(workgroup, createdRoomName);
-        con.sendPacket(packet);
+        con.sendStanza(packet);
     }
 
-    public String getChildElementXML() {
-        StringBuilder buf = new StringBuilder();
-        buf.append("<offer-confirmation xmlns=\"http://jabber.org/protocol/workgroup\">");
-        buf.append("</offer-confirmation>");
-        return buf.toString();
-    }
+    public static class Provider extends IQProvider<OfferConfirmation> {
 
-    public static class Provider implements IQProvider {
-
-        public IQ parseIQ(XmlPullParser parser) throws Exception {
+        @Override
+        public OfferConfirmation parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment)
+                        throws XmlPullParserException, IOException {
             final OfferConfirmation confirmation = new OfferConfirmation();
 
             boolean done = false;
             while (!done) {
                 parser.next();
                 String elementName = parser.getName();
-                if (parser.getEventType() == XmlPullParser.START_TAG && "user-jid".equals(elementName)) {
+                if (parser.getEventType() == XmlPullParser.Event.START_ELEMENT && "user-jid".equals(elementName)) {
                     try {
                         confirmation.setUserJID(parser.nextText());
                     }
                     catch (NumberFormatException nfe) {
                     }
                 }
-                else if (parser.getEventType() == XmlPullParser.START_TAG && "session-id".equals(elementName)) {
+                else if (parser.getEventType() == XmlPullParser.Event.START_ELEMENT && "session-id".equals(elementName)) {
                     try {
                         confirmation.setSessionID(Long.valueOf(parser.nextText()));
                     }
                     catch (NumberFormatException nfe) {
                     }
                 }
-                else if (parser.getEventType() == XmlPullParser.END_TAG && "offer-confirmation".equals(elementName)) {
+                else if (parser.getEventType() == XmlPullParser.Event.END_ELEMENT && "offer-confirmation".equals(elementName)) {
                     done = true;
                 }
             }
@@ -92,20 +98,24 @@ public class OfferConfirmation extends IQ {
 
 
     /**
-     * Packet for notifying server of RoomName
+     * Stanza for notifying server of RoomName
      */
-    private class NotifyServicePacket extends IQ {
+    private static class NotifyServicePacket extends IQ {
         String roomName;
 
-        NotifyServicePacket(String workgroup, String roomName) {
+        NotifyServicePacket(Jid workgroup, String roomName) {
+            super("offer-confirmation", "http://jabber.org/protocol/workgroup");
             this.setTo(workgroup);
             this.setType(IQ.Type.result);
 
             this.roomName = roomName;
         }
 
-        public String getChildElementXML() {
-            return "<offer-confirmation  roomname=\"" + roomName + "\" xmlns=\"http://jabber.org/protocol/workgroup" + "\"/>";
+        @Override
+        protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder xml) {
+            xml.attribute("roomname", roomName);
+            xml.setEmptyElement();
+            return xml;
         }
     }
 

@@ -17,21 +17,26 @@
 
 package org.jivesoftware.smackx.iqversion;
 
-import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
 
+import org.jivesoftware.smack.ConnectionCreationListener;
+import org.jivesoftware.smack.Manager;
+import org.jivesoftware.smack.SmackConfiguration;
+import org.jivesoftware.smack.SmackException.NoResponseException;
 import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.XMPPConnection;
-import org.jivesoftware.smack.Manager;
-import org.jivesoftware.smack.PacketListener;
-import org.jivesoftware.smack.filter.AndFilter;
-import org.jivesoftware.smack.filter.IQTypeFilter;
-import org.jivesoftware.smack.filter.PacketFilter;
-import org.jivesoftware.smack.filter.PacketTypeFilter;
-import org.jivesoftware.smack.packet.Packet;
+import org.jivesoftware.smack.XMPPConnectionRegistry;
+import org.jivesoftware.smack.XMPPException.XMPPErrorException;
+import org.jivesoftware.smack.iqrequest.AbstractIqRequestHandler;
+import org.jivesoftware.smack.iqrequest.IQRequestHandler.Mode;
+import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.StanzaError.Condition;
+
 import org.jivesoftware.smackx.disco.ServiceDiscoveryManager;
 import org.jivesoftware.smackx.iqversion.packet.Version;
+
+import org.jxmpp.jid.Jid;
 
 /**
  * A Version Manager that automatically responds to version IQs with a predetermined reply.
@@ -49,50 +54,106 @@ import org.jivesoftware.smackx.iqversion.packet.Version;
  *
  * @author Georg Lukas
  */
-public class VersionManager extends Manager {
-    private static final Map<XMPPConnection, VersionManager> instances =
-            Collections.synchronizedMap(new WeakHashMap<XMPPConnection, VersionManager>());
+public final class VersionManager extends Manager {
+    private static final Map<XMPPConnection, VersionManager> INSTANCES = new WeakHashMap<>();
 
-    private static final PacketFilter PACKET_FILTER = new AndFilter(new PacketTypeFilter(Version.class), IQTypeFilter.GET);
+    private static Version defaultVersion;
 
-    private Version own_version;
+    private Version ourVersion = defaultVersion;
+
+    public static void setDefaultVersion(String name, String version) {
+        setDefaultVersion(name, version, null);
+    }
+
+    public static void setDefaultVersion(String name, String version, String os) {
+        defaultVersion = generateVersionFrom(name, version, os);
+    }
+
+    private static boolean autoAppendSmackVersion = true;
+
+    static {
+        XMPPConnectionRegistry.addConnectionCreationListener(new ConnectionCreationListener() {
+            @Override
+            public void connectionCreated(XMPPConnection connection) {
+                VersionManager.getInstanceFor(connection);
+            }
+        });
+    }
 
     private VersionManager(final XMPPConnection connection) {
         super(connection);
-        instances.put(connection, this);
 
         ServiceDiscoveryManager sdm = ServiceDiscoveryManager.getInstanceFor(connection);
         sdm.addFeature(Version.NAMESPACE);
 
-        connection.addPacketListener(new PacketListener() {
-            /**
-             * Sends a Version reply on request
-             * @throws NotConnectedException 
-             */
-            public void processPacket(Packet packet) throws NotConnectedException {
-                if (own_version == null)
-                    return;
+        connection.registerIQRequestHandler(new AbstractIqRequestHandler(Version.ELEMENT, Version.NAMESPACE, IQ.Type.get,
+                        Mode.async) {
+            @Override
+            public IQ handleIQRequest(IQ iqRequest) {
+                if (ourVersion == null) {
+                    return IQ.createErrorResponse(iqRequest, Condition.not_acceptable);
+                }
 
-                Version reply = new Version(own_version);
-                reply.setPacketID(packet.getPacketID());
-                reply.setTo(packet.getFrom());
-                connection().sendPacket(reply);
+                return Version.createResultFor(iqRequest, ourVersion);
             }
-        }
-        , PACKET_FILTER);
+        });
     }
 
     public static synchronized VersionManager getInstanceFor(XMPPConnection connection) {
-        VersionManager versionManager = instances.get(connection);
+        VersionManager versionManager = INSTANCES.get(connection);
 
         if (versionManager == null) {
             versionManager = new VersionManager(connection);
+            INSTANCES.put(connection, versionManager);
         }
 
         return versionManager;
     }
 
-    public void setVersion(Version v) {
-        own_version = v;
+    public static void setAutoAppendSmackVersion(boolean autoAppendSmackVersion) {
+        VersionManager.autoAppendSmackVersion = autoAppendSmackVersion;
+    }
+
+    public void setVersion(String name, String version) {
+        setVersion(name, version, null);
+    }
+
+    public void setVersion(String name, String version, String os) {
+        ourVersion = generateVersionFrom(name, version, os);
+    }
+
+    public void unsetVersion() {
+        ourVersion = null;
+    }
+
+    public boolean isSupported(Jid jid) throws NoResponseException, XMPPErrorException,
+                    NotConnectedException, InterruptedException {
+        return ServiceDiscoveryManager.getInstanceFor(connection()).supportsFeature(jid,
+                        Version.NAMESPACE);
+    }
+
+    /**
+     * Request version information from a given JID.
+     *
+     * @param jid
+     * @return the version information or {@code null} if not supported by JID
+     * @throws NoResponseException
+     * @throws XMPPErrorException
+     * @throws NotConnectedException
+     * @throws InterruptedException
+     */
+    public Version getVersion(Jid jid) throws NoResponseException, XMPPErrorException,
+                    NotConnectedException, InterruptedException {
+        if (!isSupported(jid)) {
+            return null;
+        }
+        return connection().createStanzaCollectorAndSend(new Version(jid)).nextResultOrThrow();
+    }
+
+    private static Version generateVersionFrom(String name, String version, String os) {
+        if (autoAppendSmackVersion) {
+            name += " (Smack " + SmackConfiguration.getVersion() + ')';
+        }
+        return new Version(name, version, os);
     }
 }

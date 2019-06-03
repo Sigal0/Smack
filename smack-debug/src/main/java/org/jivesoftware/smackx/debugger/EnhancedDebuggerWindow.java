@@ -17,29 +17,47 @@
 
 package org.jivesoftware.smackx.debugger;
 
-import org.jivesoftware.smack.SmackConfiguration;
-import org.jivesoftware.smack.provider.ProviderManager;
-
-import javax.swing.*;
-
-import java.awt.*;
-import java.awt.event.*;
+import java.awt.Dimension;
+import java.awt.GridLayout;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Vector;
 
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.ImageIcon;
+import javax.swing.JFormattedTextField;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JMenuItem;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JScrollPane;
+import javax.swing.JTabbedPane;
+
+import org.jivesoftware.smack.SmackConfiguration;
+import org.jivesoftware.smack.provider.ProviderManager;
+
 /**
  * The EnhancedDebuggerWindow is the main debug window that will show all the EnhancedDebuggers.
  * For each connection to debug there will be an EnhancedDebugger that will be shown in the
- * EnhancedDebuggerWindow.<p>
- * <p/>
+ * EnhancedDebuggerWindow.
+ * <p>
  * This class also provides information about Smack like for example the Smack version and the
  * installed providers.
+ * </p>
  *
  * @author Gaston Dombiak
  */
-public class EnhancedDebuggerWindow {
+public final class EnhancedDebuggerWindow {
 
     private static EnhancedDebuggerWindow instance;
 
@@ -97,7 +115,7 @@ public class EnhancedDebuggerWindow {
      *
      * @return the unique EnhancedDebuggerWindow instance
      */
-    public static EnhancedDebuggerWindow getInstance() {
+    public static synchronized EnhancedDebuggerWindow getInstance() {
         if (instance == null) {
             instance = new EnhancedDebuggerWindow();
         }
@@ -109,7 +127,7 @@ public class EnhancedDebuggerWindow {
      *
      * @param debugger the new debugger to show in the debug window
      */
-    synchronized static void addDebugger(EnhancedDebugger debugger) {
+    static synchronized void addDebugger(EnhancedDebugger debugger) {
         getInstance().showNewDebugger(debugger);
     }
 
@@ -138,7 +156,7 @@ public class EnhancedDebuggerWindow {
      * @param debugger the debugger whose connection logged in to the server
      * @param user     the user@host/resource that has just logged in
      */
-    synchronized static void userHasLogged(EnhancedDebugger debugger, String user) {
+    static synchronized void userHasLogged(EnhancedDebugger debugger, String user) {
         int index = getInstance().tabbedPane.indexOfComponent(debugger.tabbedPane);
         getInstance().tabbedPane.setTitleAt(
                 index,
@@ -153,7 +171,7 @@ public class EnhancedDebuggerWindow {
      *
      * @param debugger the debugger whose connection was properly closed.
      */
-    synchronized static void connectionClosed(EnhancedDebugger debugger) {
+    static synchronized void connectionClosed(EnhancedDebugger debugger) {
         getInstance().tabbedPane.setIconAt(
                 getInstance().tabbedPane.indexOfComponent(debugger.tabbedPane),
                 connectionClosedIcon);
@@ -165,7 +183,7 @@ public class EnhancedDebuggerWindow {
      * @param debugger the debugger whose connection was closed due to an exception.
      * @param e        the exception.
      */
-    synchronized static void connectionClosedOnError(EnhancedDebugger debugger, Exception e) {
+    static synchronized void connectionClosedOnError(EnhancedDebugger debugger, Exception e) {
         int index = getInstance().tabbedPane.indexOfComponent(debugger.tabbedPane);
         getInstance().tabbedPane.setToolTipTextAt(
                 index,
@@ -175,24 +193,25 @@ public class EnhancedDebuggerWindow {
                 connectionClosedOnErrorIcon);
     }
 
-    synchronized static void connectionEstablished(EnhancedDebugger debugger) {
+    static synchronized void connectionEstablished(EnhancedDebugger debugger) {
         getInstance().tabbedPane.setIconAt(
                 getInstance().tabbedPane.indexOfComponent(debugger.tabbedPane),
                 connectionActiveIcon);
     }
-    
+
     /**
      * Creates the main debug window that provides information about Smack and also shows
      * a tab panel for each connection that is being debugged.
      */
     @SuppressWarnings({ "rawtypes", "unchecked" })
-	private void createDebug() {
+    private void createDebug() {
 
         frame = new JFrame("Smack Debug Window");
 
         if (!PERSISTED_DEBUGGER) {
             // Add listener for window closing event
             frame.addWindowListener(new WindowAdapter() {
+                @Override
                 public void windowClosing(WindowEvent evt) {
                     rootWindowClosing(evt);
                 }
@@ -200,10 +219,10 @@ public class EnhancedDebuggerWindow {
         }
 
         // We'll arrange the UI into tabs. The last tab contains Smack's information.
-        // All the connection debugger tabs will be shown before the Smack info tab. 
+        // All the connection debugger tabs will be shown before the Smack info tab.
         tabbedPane = new JTabbedPane();
 
-        // Create the Smack info panel 
+        // Create the Smack info panel
         JPanel informationPanel = new JPanel();
         informationPanel.setLayout(new BoxLayout(informationPanel, BoxLayout.Y_AXIS));
 
@@ -222,7 +241,7 @@ public class EnhancedDebuggerWindow {
         JPanel iqProvidersPanel = new JPanel();
         iqProvidersPanel.setLayout(new GridLayout(1, 1));
         iqProvidersPanel.setBorder(BorderFactory.createTitledBorder("Installed IQ Providers"));
-        Vector<String> providers = new Vector<String>();
+        Vector<String> providers = new Vector<>();
         for (Object provider : ProviderManager.getIQProviders()) {
             if (provider.getClass() == Class.class) {
                 providers.add(((Class<?>) provider).getName());
@@ -241,7 +260,7 @@ public class EnhancedDebuggerWindow {
         JPanel extensionProvidersPanel = new JPanel();
         extensionProvidersPanel.setLayout(new GridLayout(1, 1));
         extensionProvidersPanel.setBorder(BorderFactory.createTitledBorder("Installed Extension Providers"));
-        providers = new Vector<String>();
+        providers = new Vector<>();
         for (Object provider : ProviderManager.getExtensionProviders()) {
             if (provider.getClass() == Class.class) {
                 providers.add(((Class<?>) provider).getName());
@@ -263,6 +282,7 @@ public class EnhancedDebuggerWindow {
         // Add a menu item that allows to close the current selected tab
         JMenuItem menuItem = new JMenuItem("Close");
         menuItem.addActionListener(new ActionListener() {
+            @Override
             public void actionPerformed(ActionEvent e) {
                 // Remove the selected tab pane if it's not the Smack info pane
                 if (tabbedPane.getSelectedIndex() < tabbedPane.getComponentCount() - 1) {
@@ -284,8 +304,9 @@ public class EnhancedDebuggerWindow {
         // Add a menu item that allows to close all the tabs that have their connections closed
         menuItem = new JMenuItem("Close All Not Active");
         menuItem.addActionListener(new ActionListener() {
+            @Override
             public void actionPerformed(ActionEvent e) {
-                ArrayList<EnhancedDebugger> debuggersToRemove = new ArrayList<EnhancedDebugger>();
+                ArrayList<EnhancedDebugger> debuggersToRemove = new ArrayList<>();
                 // Remove all the debuggers of which their connections are no longer valid
                 for (int index = 0; index < tabbedPane.getComponentCount() - 1; index++) {
                     EnhancedDebugger debugger = debuggers.get(index);
@@ -325,21 +346,24 @@ public class EnhancedDebuggerWindow {
      *
      * @param evt the event that indicates that the root window is closing
      */
-    public void rootWindowClosing(WindowEvent evt) {
+    @SuppressWarnings("UnusedVariable")
+    private synchronized void rootWindowClosing(WindowEvent evt) {
         // Notify to all the debuggers to stop debugging
         for (EnhancedDebugger debugger : debuggers) {
             debugger.cancel();
         }
         // Release any reference to the debuggers
-        debuggers.removeAll(debuggers);
+        debuggers.clear();
         // Release the default instance
         instance = null;
+        frame = null;
+        notifyAll();
     }
 
     /**
      * Listens for debug window popup dialog events.
      */
-    private class PopupListener extends MouseAdapter {
+    private static class PopupListener extends MouseAdapter {
 
         JPopupMenu popup;
 
@@ -347,10 +371,12 @@ public class EnhancedDebuggerWindow {
             popup = popupMenu;
         }
 
+        @Override
         public void mousePressed(MouseEvent e) {
             maybeShowPopup(e);
         }
 
+        @Override
         public void mouseReleased(MouseEvent e) {
             maybeShowPopup(e);
         }
@@ -370,5 +396,15 @@ public class EnhancedDebuggerWindow {
 
     public boolean isVisible() {
         return frame != null && frame.isVisible();
+    }
+
+    public synchronized void waitUntilClosed() throws InterruptedException {
+        if (frame == null) {
+            return;
+        }
+
+        while (frame != null) {
+            wait();
+        }
     }
 }

@@ -17,8 +17,10 @@
 
 package org.jivesoftware.smack.packet;
 
+import org.jivesoftware.smack.util.XmlStringBuilder;
+
 /**
- * IQ packet that will be sent to the server to establish a session.<p>
+ * IQ stanza that will be sent to the server to establish a session.<p>
  *
  * If a server supports sessions, it MUST include a <i>session</i> element in the
  * stream features it advertises to a client after the completion of stream authentication.
@@ -30,14 +32,51 @@ package org.jivesoftware.smack.packet;
  *
  * @author Gaston Dombiak
  */
-public class Session extends IQ {
+public class Session extends SimpleIQ {
+
+    public static final String ELEMENT = "session";
+    public static final String NAMESPACE = "urn:ietf:params:xml:ns:xmpp-session";
 
     public Session() {
+        super(ELEMENT, NAMESPACE);
         setType(IQ.Type.set);
     }
 
-    @Override
-    public CharSequence getChildElementXML() {
-        return "<session xmlns=\"urn:ietf:params:xml:ns:xmpp-session\"/>";
+    public static class Feature implements ExtensionElement {
+
+        public static final String OPTIONAL_ELEMENT = "optional";
+
+        private final boolean optional;
+
+        public Feature(boolean optional) {
+            this.optional = optional;
+        }
+
+        public boolean isOptional() {
+            return optional;
+        }
+
+        @Override
+        public String getElementName() {
+            return ELEMENT;
+        }
+
+        @Override
+        public String getNamespace() {
+            return NAMESPACE;
+        }
+
+        @Override
+        public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
+            XmlStringBuilder xml = new XmlStringBuilder(this);
+            if (optional) {
+                xml.rightAngleBracket();
+                xml.emptyElement(OPTIONAL_ELEMENT);
+                xml.closeElement(this);
+            } else {
+                xml.closeEmptyElement();
+            }
+            return xml;
+        }
     }
 }

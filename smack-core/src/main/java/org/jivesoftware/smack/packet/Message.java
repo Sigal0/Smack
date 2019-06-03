@@ -17,9 +17,20 @@
 
 package org.jivesoftware.smack.packet;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+
+import org.jivesoftware.smack.util.Objects;
+import org.jivesoftware.smack.util.TypedCloneable;
 import org.jivesoftware.smack.util.XmlStringBuilder;
 
-import java.util.*;
+import org.jxmpp.jid.Jid;
+import org.jxmpp.jid.impl.JidCreate;
+import org.jxmpp.stringprep.XmppStringprepException;
 
 /**
  * Represents XMPP message packets. A message can be one of several types:
@@ -35,6 +46,7 @@ import java.util.*;
  * For each message type, different message fields are typically used as follows:
  * <p>
  * <table border="1">
+ * <caption>Message Types</caption>
  * <tr><td>&nbsp;</td><td colspan="5"><b>Message type</b></td></tr>
  * <tr><td><i>Field</i></td><td><b>Normal</b></td><td><b>Chat</b></td><td><b>Group Chat</b></td><td><b>Headline</b></td><td><b>XMPPError</b></td></tr>
  * <tr><td><i>subject</i></td> <td>SHOULD</td><td>SHOULD NOT</td><td>SHOULD NOT</td><td>SHOULD NOT</td><td>SHOULD NOT</td></tr>
@@ -45,16 +57,15 @@ import java.util.*;
  *
  * @author Matt Tucker
  */
-public class Message extends Packet {
+public final class Message extends Stanza implements TypedCloneable<Message> {
 
+    public static final String ELEMENT = "message";
     public static final String BODY = "body";
 
-    private Type type = Type.normal;
+    private Type type;
     private String thread = null;
-    private String language;
 
     private final Set<Subject> subjects = new HashSet<Subject>();
-    private final Set<Body> bodies = new HashSet<Body>();
 
     /**
      * Creates a new, "normal" message.
@@ -67,7 +78,7 @@ public class Message extends Packet {
      *
      * @param to the recipient of the message.
      */
-    public Message(String to) {
+    public Message(Jid to) {
         setTo(to);
     }
 
@@ -77,12 +88,59 @@ public class Message extends Packet {
      * @param to the user to send the message to.
      * @param type the message type.
      */
-    public Message(String to, Type type) {
-        setTo(to);
-        
-        if (type != null) {
-            this.type = type;
-        }
+    public Message(Jid to, Type type) {
+        this(to);
+        setType(type);
+    }
+
+    /**
+     * Creates a new message to the specified recipient and with the specified body.
+     *
+     * @param to the user to send the message to.
+     * @param body the body of the message.
+     */
+    public Message(Jid to, String body) {
+        this(to);
+        setBody(body);
+    }
+
+    /**
+     * Creates a new message to the specified recipient and with the specified body.
+     *
+     * @param to the user to send the message to.
+     * @param body the body of the message.
+     * @throws XmppStringprepException if 'to' is not a valid XMPP address.
+     */
+    public Message(String to, String body) throws XmppStringprepException {
+        this(JidCreate.from(to), body);
+    }
+
+    /**
+     * Creates a new message with the specified recipient and extension element.
+     *
+     * @param to
+     * @param extensionElement
+     * @since 4.2
+     */
+    public Message(Jid to, ExtensionElement extensionElement) {
+        this(to);
+        addExtension(extensionElement);
+    }
+
+    /**
+     * Copy constructor.
+     * <p>
+     * This does not perform a deep clone, as extension elements are shared between the new and old
+     * instance.
+     * </p>
+     *
+     * @param other
+     */
+    public Message(Message other) {
+        super(other);
+        this.type = other.type;
+        this.thread = other.thread;
+        this.subjects.addAll(other.subjects);
     }
 
     /**
@@ -92,6 +150,9 @@ public class Message extends Packet {
      * @return the type of the message.
      */
     public Type getType() {
+        if (type == null) {
+            return Type.normal;
+        }
         return type;
     }
 
@@ -99,12 +160,8 @@ public class Message extends Packet {
      * Sets the type of the message.
      *
      * @param type the type of the message.
-     * @throws IllegalArgumentException if null is passed in as the type
      */
     public void setType(Type type) {
-        if (type == null) {
-            throw new IllegalArgumentException("Type cannot be null.");
-        }
         this.type = type;
     }
 
@@ -114,14 +171,14 @@ public class Message extends Packet {
      * <p>
      * The default subject of a message is the subject that corresponds to the message's language.
      * (see {@link #getLanguage()}) or if no language is set to the applications default
-     * language (see {@link Packet#getDefaultLanguage()}).
+     * language (see {@link Stanza#getDefaultLanguage()}).
      *
      * @return the subject of the message.
      */
     public String getSubject() {
         return getSubject(null);
     }
-    
+
     /**
      * Returns the subject corresponding to the language. If the language is null, the method result
      * will be the same as {@link #getSubject()}. Null will be returned if the language does not have
@@ -134,11 +191,11 @@ public class Message extends Packet {
         Subject subject = getMessageSubject(language);
         return subject == null ? null : subject.subject;
     }
-    
+
     private Subject getMessageSubject(String language) {
         language = determineLanguage(language);
         for (Subject subject : subjects) {
-            if (language.equals(subject.language)) {
+            if (Objects.equals(language, subject.language)) {
                 return subject;
             }
         }
@@ -151,8 +208,8 @@ public class Message extends Packet {
      *
      * @return a collection of all subjects in this message.
      */
-    public Collection<Subject> getSubjects() {
-        return Collections.unmodifiableCollection(subjects);
+    public Set<Subject> getSubjects() {
+        return Collections.unmodifiableSet(subjects);
     }
 
     /**
@@ -163,7 +220,7 @@ public class Message extends Packet {
      */
     public void setSubject(String subject) {
         if (subject == null) {
-            removeSubject(""); // use empty string because #removeSubject(null) is ambiguous 
+            removeSubject(""); // use empty string because #removeSubject(null) is ambiguous
             return;
         }
         addSubject(null, subject);
@@ -215,7 +272,7 @@ public class Message extends Packet {
      *
      * @return the languages being used for the subjects.
      */
-    public Collection<String> getSubjectLanguages() {
+    public List<String> getSubjectLanguages() {
         Subject defaultSubject = getMessageSubject(null);
         List<String> languages = new ArrayList<String>();
         for (Subject subject : subjects) {
@@ -223,7 +280,7 @@ public class Message extends Packet {
                 languages.add(subject.language);
             }
         }
-        return Collections.unmodifiableCollection(languages);
+        return Collections.unmodifiableList(languages);
     }
 
     /**
@@ -232,12 +289,12 @@ public class Message extends Packet {
      * <p>
      * The default body of a message is the body that corresponds to the message's language.
      * (see {@link #getLanguage()}) or if no language is set to the applications default
-     * language (see {@link Packet#getDefaultLanguage()}).
+     * language (see {@link Stanza#getDefaultLanguage()}).
      *
      * @return the body of the message.
      */
     public String getBody() {
-        return getBody(null);
+        return getBody(language);
     }
 
     /**
@@ -253,11 +310,11 @@ public class Message extends Packet {
         Body body = getMessageBody(language);
         return body == null ? null : body.message;
     }
-    
+
     private Body getMessageBody(String language) {
         language = determineLanguage(language);
-        for (Body body : bodies) {
-            if (language.equals(body.language)) {
+        for (Body body : getBodies()) {
+            if (Objects.equals(language, body.language) || (language != null && language.equals(this.language) && body.language == null)) {
                 return body;
             }
         }
@@ -271,8 +328,31 @@ public class Message extends Packet {
      * @return a collection of all bodies in this Message.
      * @since 3.0.2
      */
-    public Collection<Body> getBodies() {
-        return Collections.unmodifiableCollection(bodies);
+    public Set<Body> getBodies() {
+        List<ExtensionElement> bodiesList = getExtensions(Body.ELEMENT, Body.NAMESPACE);
+        Set<Body> resultSet = new HashSet<>(bodiesList.size());
+        for (ExtensionElement extensionElement : bodiesList) {
+            Body body = (Body) extensionElement;
+            resultSet.add(body);
+        }
+        return resultSet;
+    }
+
+    /**
+     * Sets the body of the message.
+     *
+     * @param body the body of the message.
+     * @see #setBody(String)
+     * @since 4.2
+     */
+    public void setBody(CharSequence body) {
+        String bodyString;
+        if (body != null) {
+            bodyString = body.toString();
+        } else {
+            bodyString = null;
+        }
+        setBody(bodyString);
     }
 
     /**
@@ -299,8 +379,11 @@ public class Message extends Packet {
      */
     public Body addBody(String language, String body) {
         language = determineLanguage(language);
+
+        removeBody(language);
+
         Body messageBody = new Body(language, body);
-        bodies.add(messageBody);
+        addExtension(messageBody);
         return messageBody;
     }
 
@@ -312,9 +395,11 @@ public class Message extends Packet {
      */
     public boolean removeBody(String language) {
         language = determineLanguage(language);
-        for (Body body : bodies) {
-            if (language.equals(body.language)) {
-                return bodies.remove(body);
+        for (Body body : getBodies()) {
+            String bodyLanguage = body.getLanguage();
+            if (Objects.equals(bodyLanguage, language)) {
+                removeExtension(body);
+                return true;
             }
         }
         return false;
@@ -328,7 +413,8 @@ public class Message extends Packet {
      * @since 3.0.2
      */
     public boolean removeBody(Body body) {
-        return bodies.remove(body);
+        ExtensionElement removedElement = removeExtension(body);
+        return removedElement != null;
     }
 
     /**
@@ -337,15 +423,15 @@ public class Message extends Packet {
      * @return the languages being used for the bodies.
      * @since 3.0.2
      */
-    public Collection<String> getBodyLanguages() {
+    public List<String> getBodyLanguages() {
         Body defaultBody = getMessageBody(null);
         List<String> languages = new ArrayList<String>();
-        for (Body body : bodies) {
+        for (Body body : getBodies()) {
             if (!body.equals(defaultBody)) {
                 languages.add(body.language);
             }
         }
-        return Collections.unmodifiableCollection(languages);
+        return Collections.unmodifiableList(languages);
     }
 
     /**
@@ -368,28 +454,8 @@ public class Message extends Packet {
         this.thread = thread;
     }
 
-    /**
-     * Returns the xml:lang of this Message.
-     *
-     * @return the xml:lang of this Message.
-     * @since 3.0.2
-     */
-    public String getLanguage() {
-        return language;
-    }
-
-    /**
-     * Sets the xml:lang of this Message.
-     *
-     * @param language the xml:lang of this Message.
-     * @since 3.0.2
-     */
-    public void setLanguage(String language) {
-        this.language = language;
-    }
-
     private String determineLanguage(String language) {
-        
+
         // empty string is passed by #setSubject() and #setBody() and is the same as null
         language = "".equals(language) ? null : language;
 
@@ -397,26 +463,28 @@ public class Message extends Packet {
         if (language == null && this.language != null) {
             return this.language;
         }
-        else if (language == null) {
-            return getDefaultLanguage();
-        }
-        else {
-            return language;
-        }
-        
+        return language;
     }
 
     @Override
-    public XmlStringBuilder toXML() {
-        XmlStringBuilder buf = new XmlStringBuilder();
-        buf.halfOpenElement("message");
-        buf.xmlnsAttribute(getXmlns());
-        buf.xmllangAttribute(getLanguage());
-        addCommonAttributes(buf);
-        if (type != Type.normal) {
-            buf.attribute("type", type);
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Message Stanza [");
+        logCommonAttributes(sb);
+        if (type != null) {
+            sb.append("type=").append(type).append(',');
         }
-        buf.rightAngelBracket();
+        sb.append(']');
+        return sb.toString();
+    }
+
+    @Override
+    public XmlStringBuilder toXML(XmlEnvironment enclosingXmlEnvironment) {
+        XmlStringBuilder buf = new XmlStringBuilder(enclosingXmlEnvironment);
+        buf.halfOpenElement(ELEMENT);
+        enclosingXmlEnvironment = addCommonAttributes(buf, enclosingXmlEnvironment);
+        buf.optAttribute("type", type);
+        buf.rightAngleBracket();
 
         // Add the subject in the default language
         Subject defaultSubject = getMessageSubject(null);
@@ -426,86 +494,48 @@ public class Message extends Packet {
         // Add the subject in other languages
         for (Subject subject : getSubjects()) {
             // Skip the default language
-            if(subject.equals(defaultSubject))
+            if (subject.equals(defaultSubject))
                 continue;
-            buf.halfOpenElement("subject").xmllangAttribute(subject.language).rightAngelBracket();
-            buf.escape(subject.subject);
-            buf.closeElement("subject");
-        }
-        // Add the body in the default language
-        Body defaultBody = getMessageBody(null);
-        if (defaultBody != null) {
-            buf.element("body", defaultBody.message);
-        }
-        // Add the bodies in other languages
-        for (Body body : getBodies()) {
-            // Skip the default language
-            if(body.equals(defaultBody))
-                continue;
-            buf.halfOpenElement(BODY).xmllangAttribute(body.getLanguage()).rightAngelBracket();
-            buf.escape(body.getMessage());
-            buf.closeElement(BODY);
+            buf.append(subject.toXML());
         }
         buf.optElement("thread", thread);
         // Append the error subpacket if the message type is an error.
         if (type == Type.error) {
-            XMPPError error = getError();
-            if (error != null) {
-                buf.append(error.toXML());
-            }
+            appendErrorIfExists(buf, enclosingXmlEnvironment);
         }
-        // Add packet extensions, if any are defined.
-        buf.append(getExtensionsXML());
-        buf.closeElement("message");
+
+        // Add extension elements, if any are defined.
+        buf.append(getExtensions(), enclosingXmlEnvironment);
+
+        buf.closeElement(ELEMENT);
         return buf;
     }
 
-
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-
-        Message message = (Message) o;
-
-        if(!super.equals(message)) { return false; }
-        if (bodies.size() != message.bodies.size() || !bodies.containsAll(message.bodies)) {
-            return false;
-        }
-        if (language != null ? !language.equals(message.language) : message.language != null) {
-            return false;
-        }
-        if (subjects.size() != message.subjects.size() || !subjects.containsAll(message.subjects)) {
-            return false;
-        }
-        if (thread != null ? !thread.equals(message.thread) : message.thread != null) {
-            return false;
-        }
-        return type == message.type;
-
-    }
-
-    public int hashCode() {
-        int result;
-        result = (type != null ? type.hashCode() : 0);
-        result = 31 * result + subjects.hashCode();
-        result = 31 * result + (thread != null ? thread.hashCode() : 0);
-        result = 31 * result + (language != null ? language.hashCode() : 0);
-        result = 31 * result + bodies.hashCode();
-        return result;
+    /**
+     * Creates and returns a copy of this message stanza.
+     * <p>
+     * This does not perform a deep clone, as extension elements are shared between the new and old
+     * instance.
+     * </p>
+     * @return a clone of this message.
+     */
+    @Override
+    public Message clone() {
+        return new Message(this);
     }
 
     /**
      * Represents a message subject, its language and the content of the subject.
      */
-    public static class Subject {
+    public static final class Subject implements ExtensionElement {
 
-        private String subject;
-        private String language;
+        public static final String ELEMENT = "subject";
+        public static final String NAMESPACE = StreamOpen.CLIENT_NAMESPACE;
+
+        private final String subject;
+        private final String language;
 
         private Subject(String language, String subject) {
-            if (language == null) {
-                throw new NullPointerException("Language cannot be null.");
-            }
             if (subject == null) {
                 throw new NullPointerException("Subject cannot be null.");
             }
@@ -532,14 +562,18 @@ public class Message extends Packet {
         }
 
 
+        @Override
         public int hashCode() {
             final int prime = 31;
             int result = 1;
-            result = prime * result + this.language.hashCode();
+            if (language != null) {
+                result = prime * result + this.language.hashCode();
+            }
             result = prime * result + this.subject.hashCode();
             return result;
         }
 
+        @Override
         public boolean equals(Object obj) {
             if (this == obj) {
                 return true;
@@ -554,32 +588,74 @@ public class Message extends Packet {
             // simplified comparison because language and subject are always set
             return this.language.equals(other.language) && this.subject.equals(other.subject);
         }
-        
+
+        @Override
+        public String getElementName() {
+            return ELEMENT;
+        }
+
+        @Override
+        public String getNamespace() {
+            return NAMESPACE;
+        }
+
+        @Override
+        public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
+            XmlStringBuilder xml = new XmlStringBuilder();
+            xml.halfOpenElement(getElementName()).optXmlLangAttribute(getLanguage()).rightAngleBracket();
+            xml.escape(subject);
+            xml.closeElement(getElementName());
+            return xml;
+        }
+
     }
 
     /**
      * Represents a message body, its language and the content of the message.
      */
-    public static class Body {
+    public static final class Body implements ExtensionElement {
 
-        private String message;
-        private String language;
+        public static final String ELEMENT = "body";
+        public static final String NAMESPACE = StreamOpen.CLIENT_NAMESPACE;
 
-        private Body(String language, String message) {
-            if (language == null) {
-                throw new NullPointerException("Language cannot be null.");
+        enum BodyElementNamespace {
+            client(StreamOpen.CLIENT_NAMESPACE),
+            server(StreamOpen.SERVER_NAMESPACE),
+            ;
+
+            private final String xmlNamespace;
+
+            BodyElementNamespace(String xmlNamespace) {
+                this.xmlNamespace = xmlNamespace;
             }
+
+            public String getNamespace() {
+                return xmlNamespace;
+            }
+        }
+
+        private final String message;
+        private final String language;
+        private final BodyElementNamespace namespace;
+
+        public Body(String language, String message) {
+            this(language, message, BodyElementNamespace.client);
+        }
+
+        public Body(String language, String message, BodyElementNamespace namespace) {
             if (message == null) {
                 throw new NullPointerException("Message cannot be null.");
             }
             this.language = language;
             this.message = message;
+            this.namespace = Objects.requireNonNull(namespace);
         }
 
         /**
-         * Returns the language of this message body.
+         * Returns the language of this message body or {@code null} if the body extension element does not explicitly
+         * set a language, but instead inherits it from the outer element (usually a {@link Message} stanza).
          *
-         * @return the language of this message body.
+         * @return the language of this message body or {@code null}.
          */
         public String getLanguage() {
             return language;
@@ -594,14 +670,18 @@ public class Message extends Packet {
             return message;
         }
 
+        @Override
         public int hashCode() {
             final int prime = 31;
             int result = 1;
-            result = prime * result + this.language.hashCode();
+            if (language != null) {
+                result = prime * result + this.language.hashCode();
+            }
             result = prime * result + this.message.hashCode();
             return result;
         }
 
+        @Override
         public boolean equals(Object obj) {
             if (this == obj) {
                 return true;
@@ -614,9 +694,28 @@ public class Message extends Packet {
             }
             Body other = (Body) obj;
             // simplified comparison because language and message are always set
-            return this.language.equals(other.language) && this.message.equals(other.message);
+            return Objects.equals(this.language, other.language) && this.message.equals(other.message);
         }
-        
+
+        @Override
+        public String getElementName() {
+            return ELEMENT;
+        }
+
+        @Override
+        public String getNamespace() {
+            return namespace.xmlNamespace;
+        }
+
+        @Override
+        public XmlStringBuilder toXML(XmlEnvironment enclosingXmlEnvironment) {
+            XmlStringBuilder xml = new XmlStringBuilder(this, enclosingXmlEnvironment);
+            xml.optXmlLangAttribute(getLanguage()).rightAngleBracket();
+            xml.escape(message);
+            xml.closeElement(getElementName());
+            return xml;
+        }
+
     }
 
     /**
@@ -652,7 +751,7 @@ public class Message extends Packet {
         /**
          * Converts a String into the corresponding types. Valid String values that can be converted
          * to types are: "normal", "chat", "groupchat", "headline" and "error".
-         * 
+         *
          * @param string the String value to covert.
          * @return the corresponding Type.
          * @throws IllegalArgumentException when not able to parse the string parameter

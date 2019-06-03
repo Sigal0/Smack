@@ -17,19 +17,27 @@
 
 package org.jivesoftware.smackx.muc;
 
+import org.jivesoftware.smack.packet.Message;
+
+import org.jivesoftware.smackx.muc.packet.MUCUser;
+
+import org.jxmpp.jid.EntityBareJid;
+
 /**
  * A listener that is fired anytime an invitee declines or rejects an invitation.
- * 
+ *
  * @author Gaston Dombiak
  */
 public interface InvitationRejectionListener {
 
     /**
      * Called when the invitee declines the invitation.
-     * 
+     *
      * @param invitee the invitee that declined the invitation. (e.g. hecate@shakespeare.lit).
      * @param reason the reason why the invitee declined the invitation.
+     * @param message the message used to decline the invitation.
+     * @param rejection the raw decline found in the message.
      */
-    public abstract void invitationDeclined(String invitee, String reason);
-    
+    void invitationDeclined(EntityBareJid invitee, String reason, Message message, MUCUser.Decline rejection);
+
 }

@@ -16,40 +16,46 @@
  */
 package org.jivesoftware.smackx.pubsub.provider;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
+import java.io.IOException;
+
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.ExtensionElementProvider;
+import org.jivesoftware.smack.util.ParserUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
 import org.jivesoftware.smackx.pubsub.Subscription;
-import org.xmlpull.v1.XmlPullParser;
+
+import org.jxmpp.jid.Jid;
 
 /**
- * Parses the <b>subscription</b> element out of the pubsub IQ message from 
+ * Parses the <b>subscription</b> element out of the PubSub IQ message from
  * the server as specified in the <a href="http://xmpp.org/extensions/xep-0060.html#schemas-pubsub">subscription schema</a>.
- * 
+ *
  * @author Robin Collier
  */
-public class SubscriptionProvider implements PacketExtensionProvider
-{
-	public PacketExtension parseExtension(XmlPullParser parser) throws Exception
-	{
-		String jid = parser.getAttributeValue(null, "jid");
-		String nodeId = parser.getAttributeValue(null, "node");
-		String subId = parser.getAttributeValue(null, "subid");
-		String state = parser.getAttributeValue(null, "subscription");
-		boolean isRequired = false;
+public class SubscriptionProvider extends ExtensionElementProvider<Subscription> {
+    @Override
+    public Subscription parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment)
+                    throws XmlPullParserException, IOException {
+        Jid jid = ParserUtils.getJidAttribute(parser);
+        String nodeId = parser.getAttributeValue(null, "node");
+        String subId = parser.getAttributeValue(null, "subid");
+        String state = parser.getAttributeValue(null, "subscription");
+        boolean isRequired = false;
 
-		int tag = parser.next();
-		
-		if ((tag == XmlPullParser.START_TAG) && parser.getName().equals("subscribe-options"))
-		{
-			tag = parser.next();
-			
-			if ((tag == XmlPullParser.START_TAG) && parser.getName().equals("required"))
-				isRequired = true;
-			
-			while (parser.next() != XmlPullParser.END_TAG && parser.getName() != "subscribe-options");
-		}
-		while (parser.getEventType() != XmlPullParser.END_TAG) parser.next();
-		return new Subscription(jid, nodeId, subId, (state == null ? null : Subscription.State.valueOf(state)), isRequired);
-	}
+        XmlPullParser.Event tag = parser.next();
+
+        if ((tag == XmlPullParser.Event.START_ELEMENT) && parser.getName().equals("subscribe-options")) {
+            tag = parser.next();
+
+            if ((tag == XmlPullParser.Event.START_ELEMENT) && parser.getName().equals("required"))
+                isRequired = true;
+
+            while (tag != XmlPullParser.Event.END_ELEMENT && !parser.getName().equals("subscribe-options")) tag = parser.next();
+        }
+        while (parser.getEventType() != XmlPullParser.Event.END_ELEMENT) parser.next();
+        return new Subscription(jid, nodeId, subId, (state == null ? null : Subscription.State.valueOf(state)), isRequired);
+    }
 
 }

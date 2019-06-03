@@ -17,62 +17,76 @@
 
 package org.jivesoftware.smackx.workgroup.packet;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
-import org.xmlpull.v1.XmlPullParser;
+import java.io.IOException;
+
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.ExtensionElementProvider;
+import org.jivesoftware.smack.util.ParserUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
+import org.jxmpp.jid.EntityBareJid;
 
 /**
- * A packet extension that contains information about the user and agent in a
- * workgroup chat. The packet extension is attached to group chat invitations.
+ * A stanza extension that contains information about the user and agent in a
+ * workgroup chat. The stanza extension is attached to group chat invitations.
  */
-public class WorkgroupInformation implements PacketExtension {
+public class WorkgroupInformation implements ExtensionElement {
 
     /**
-     * Element name of the packet extension.
+     * Element name of the stanza extension.
      */
     public static final String ELEMENT_NAME = "workgroup";
 
     /**
-     * Namespace of the packet extension.
+     * Namespace of the stanza extension.
      */
     public static final String NAMESPACE = "http://jabber.org/protocol/workgroup";
 
-    private String workgroupJID;
+    private final EntityBareJid workgroupJID;
 
-    public WorkgroupInformation(String workgroupJID){
+    public WorkgroupInformation(EntityBareJid workgroupJID) {
         this.workgroupJID = workgroupJID;
     }
 
-    public String getWorkgroupJID() {
+    public EntityBareJid getWorkgroupJID() {
         return workgroupJID;
     }
 
+    @Override
     public String getElementName() {
         return ELEMENT_NAME;
     }
 
+    @Override
     public String getNamespace() {
         return NAMESPACE;
     }
 
-    public String toXML() {
+    @Override
+    public String toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
         StringBuilder buf = new StringBuilder();
 
         buf.append('<').append(ELEMENT_NAME);
-        buf.append(" jid=\"").append(getWorkgroupJID()).append("\"");
+        buf.append(" jid=\"").append(getWorkgroupJID()).append('"');
         buf.append(" xmlns=\"").append(NAMESPACE).append("\" />");
 
         return buf.toString();
     }
 
-    public static class Provider implements PacketExtensionProvider {
+    public static class Provider extends ExtensionElementProvider<WorkgroupInformation> {
 
         /**
-         * PacketExtensionProvider implementation
+         * PacketExtensionProvider implementation.
+         * @throws IOException
+         * @throws XmlPullParserException
          */
-        public PacketExtension parseExtension (XmlPullParser parser)
-            throws Exception {
-            String workgroupJID = parser.getAttributeValue("", "jid");
+        @Override
+        public WorkgroupInformation parse(XmlPullParser parser,
+                        int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException,
+                        IOException {
+            EntityBareJid workgroupJID = ParserUtils.getBareJidAttribute(parser);
 
             // since this is a start and end tag, and we arrive on the start, this should guarantee
             //      we leave on the end

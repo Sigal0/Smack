@@ -16,19 +16,21 @@
  */
 package org.jivesoftware.smackx.bytestreams.ibb.provider;
 
-import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
 import org.jivesoftware.smack.provider.IQProvider;
+import org.jivesoftware.smack.xml.XmlPullParser;
+
 import org.jivesoftware.smackx.bytestreams.ibb.packet.Close;
-import org.xmlpull.v1.XmlPullParser;
 
 /**
  * Parses a close In-Band Bytestream packet.
- * 
+ *
  * @author Henning Staib
  */
-public class CloseIQProvider implements IQProvider {
+public class CloseIQProvider extends IQProvider<Close> {
 
-    public IQ parseIQ(XmlPullParser parser) throws Exception {
+    @Override
+    public Close parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) {
         String sid = parser.getAttributeValue("", "sid");
         return new Close(sid);
     }

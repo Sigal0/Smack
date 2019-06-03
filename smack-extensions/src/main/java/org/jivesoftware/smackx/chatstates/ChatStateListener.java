@@ -1,6 +1,6 @@
 /**
  *
- * Copyright 2003-2007 Jive Software.
+ * Copyright 2003-2007 Jive Software, 2018 Paul Schaub.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,21 +17,23 @@
 
 package org.jivesoftware.smackx.chatstates;
 
-import org.jivesoftware.smack.Chat;
-import org.jivesoftware.smack.MessageListener;
+import org.jivesoftware.smack.chat2.Chat;
+import org.jivesoftware.smack.packet.Message;
 
 /**
  * Events for when the state of a user in a chat changes.
  *
  * @author Alexander Wenckus
+ * @author Paul Schaub
  */
-public interface ChatStateListener extends MessageListener {
+public interface ChatStateListener {
 
     /**
      * Fired when the state of a chat with another user changes.
      *
      * @param chat the chat in which the state has changed.
      * @param state the new state of the participant.
+     * @param message the message carrying the chat state.
      */
-    void stateChanged(Chat chat, ChatState state);
+    void stateChanged(Chat chat, ChatState state, Message message);
 }

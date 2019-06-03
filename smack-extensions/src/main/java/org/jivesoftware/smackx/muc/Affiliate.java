@@ -17,8 +17,10 @@
 
 package org.jivesoftware.smackx.muc;
 
-import org.jivesoftware.smackx.muc.packet.MUCAdmin;
-import org.jivesoftware.smackx.muc.packet.MUCOwner;
+import org.jivesoftware.smackx.muc.packet.MUCItem;
+
+import org.jxmpp.jid.Jid;
+import org.jxmpp.jid.parts.Resourcepart;
 
 /**
  * Represents an affiliation of a user to a given room. The affiliate's information will always have
@@ -29,23 +31,14 @@ import org.jivesoftware.smackx.muc.packet.MUCOwner;
  */
 public class Affiliate {
     // Fields that must have a value
-    private String jid;
-    private String affiliation;
+    private final Jid jid;
+    private final MUCAffiliation affiliation;
 
     // Fields that may have a value
-    private String role;
-    private String nick;
+    private final MUCRole role;
+    private final Resourcepart nick;
 
-    Affiliate(MUCOwner.Item item) {
-        super();
-        this.jid = item.getJid();
-        this.affiliation = item.getAffiliation();
-        this.role = item.getRole();
-        this.nick = item.getNick();
-    }
-
-    Affiliate(MUCAdmin.Item item) {
-        super();
+    Affiliate(MUCItem item) {
         this.jid = item.getJid();
         this.affiliation = item.getAffiliation();
         this.role = item.getRole();
@@ -57,7 +50,7 @@ public class Affiliate {
      *
      * @return the bare JID of the affiliated user.
      */
-    public String getJid() {
+    public Jid getJid() {
         return jid;
     }
 
@@ -67,18 +60,18 @@ public class Affiliate {
      *
      * @return the affiliation of the afffiliated user.
      */
-    public String getAffiliation() {
+    public MUCAffiliation getAffiliation() {
         return affiliation;
     }
 
     /**
      * Returns the current role of the affiliated user if the user is currently in the room.
-     * If the user is not present in the room then the answer will be null.
+     * If the user is not present in the room then the answer will be 'none'.
      *
      * @return the current role of the affiliated user in the room or null if the user is not in
      *         the room.
      */
-    public String getRole() {
+    public MUCRole getRole() {
         return role;
     }
 
@@ -89,7 +82,7 @@ public class Affiliate {
      * @return the current nickname of the affiliated user in the room or null if the user is not in
      *         the room.
      */
-    public String getNick() {
+    public Resourcepart getNick() {
         return nick;
     }
 }

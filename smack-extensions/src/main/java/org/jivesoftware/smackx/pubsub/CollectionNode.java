@@ -16,13 +16,10 @@
  */
 package org.jivesoftware.smackx.pubsub;
 
-import org.jivesoftware.smack.XMPPConnection;
+public class CollectionNode extends Node {
 
-public class CollectionNode extends Node
-{
-	CollectionNode(XMPPConnection connection, String nodeId)
-	{
-		super(connection, nodeId);
-	}
+    CollectionNode(PubSubManager pubSubManager, String nodeId) {
+        super(pubSubManager, nodeId);
+    }
 
 }

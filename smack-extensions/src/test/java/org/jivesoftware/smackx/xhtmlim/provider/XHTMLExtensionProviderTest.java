@@ -16,40 +16,41 @@
  */
 package org.jivesoftware.smackx.xhtmlim.provider;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.util.PacketParserUtils;
-import org.jivesoftware.smackx.xhtmlim.packet.XHTMLExtension;
-import org.junit.Test;
-import org.xmlpull.v1.XmlPullParser;
-import org.xmlpull.v1.XmlPullParserException;
-
-import java.io.IOException;
-
 import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.hamcrest.CoreMatchers.is;
-import static org.junit.Assert.assertEquals;
+import static org.jivesoftware.smack.test.util.CharSequenceEquals.equalsCharSequence;
 import static org.junit.Assert.assertThat;
 
+import java.io.IOException;
+import java.io.InputStream;
+
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.util.PacketParserUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
+import org.jivesoftware.smackx.xhtmlim.packet.XHTMLExtension;
+
+import org.junit.Test;
 
 public class XHTMLExtensionProviderTest {
     public static final String XHTML_EXTENSION_SAMPLE_RESOURCE_NAME = "xhtml.xml";
 
     @Test
     public void parsesWell() throws IOException, XmlPullParserException {
-        XmlPullParser parser = PacketParserUtils.newXmppParser();
-        parser.setInput(getClass().getResourceAsStream(XHTML_EXTENSION_SAMPLE_RESOURCE_NAME), "UTF-8");
+        InputStream inputStream = getClass().getResourceAsStream(XHTML_EXTENSION_SAMPLE_RESOURCE_NAME);
+        XmlPullParser parser = PacketParserUtils.getParserFor(inputStream);
         parser.next();
 
         XHTMLExtensionProvider provider = new XHTMLExtensionProvider();
-        PacketExtension extension = provider.parseExtension(parser);
+        ExtensionElement extension = provider.parse(parser, parser.getDepth(), null);
 
-        assertThat(extension, is(instanceOf(XHTMLExtension.class)));
+        assertThat(extension, instanceOf(XHTMLExtension.class));
         XHTMLExtension attachmentsInfo = (XHTMLExtension) extension;
 
-        assertEquals(sampleXhtml(), attachmentsInfo.getBodies().get(0));
+        assertThat(sampleXhtml(), equalsCharSequence(attachmentsInfo.getBodies().get(0)));
     }
 
-    private String sampleXhtml() {
+    private static String sampleXhtml() {
         return "<body xmlns='http://www.w3.org/1999/xhtml'>" +
                 "<span style='color: rgb(0, 0, 0); font-family: sans-serif, &apos;trebuchet ms&apos;" +
                 ", &apos;lucida grande&apos;, &apos;lucida sans unicode&apos;, arial, helvetica, " +

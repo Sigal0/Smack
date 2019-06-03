@@ -21,7 +21,7 @@ import org.jivesoftware.smack.test.SmackTestCase;
 import org.jivesoftware.smack.util.StringUtils;
 
 /**
- * Includes set of login tests. 
+ * Includes set of login tests.
  *
  * @author Gaston Dombiak
  */
@@ -29,35 +29,6 @@ public class LoginTest extends SmackTestCase {
 
     public LoginTest(String arg0) {
         super(arg0);
-    }
-
-    /**
-     * Check that the server is returning the correct error when trying to login using an invalid
-     * (i.e. non-existent) user.
-     */
-    public void testInvalidLogin() {
-        try {
-            XMPPTCPConnection connection = createConnection();
-            connection.connect();
-            try {
-                // Login with an invalid user
-                connection.login("invaliduser" , "invalidpass");
-                connection.disconnect();
-                fail("Invalid user was able to log into the server");
-            }
-            catch (XMPPException e) {
-                if (e.getXMPPError() != null) {
-                    assertEquals("Incorrect error code while login with an invalid user", 401,
-                            e.getXMPPError().getCode());
-                }
-            }
-            // Wait here while trying tests with exodus
-            //Thread.sleep(300);
-        }
-        catch (Exception e) {
-            e.printStackTrace();
-            fail(e.getMessage());
-        }
     }
 
     /**
@@ -113,7 +84,7 @@ public class LoginTest extends SmackTestCase {
             config.setSASLAuthenticationEnabled(false);
             XMPPTCPConnection conn2 = new XMPPConnection(config);
             conn2.connect();
-            
+
             try {
                 // Try to login anonymously
                 conn1.loginAnonymously();
@@ -149,7 +120,7 @@ public class LoginTest extends SmackTestCase {
                 conn.getAccountManager().createAccount("user_1", "user_1", getAccountCreationParameters());
             } catch (XMPPException e) {
                 // Do nothing if the account already exists
-                if (e.getXMPPError().getCode() != 409) {
+                if (e.getStanzaError().getCode() != 409) {
                     throw e;
                 }
                 // Else recreate the connection, ins case the server closed it as
@@ -170,8 +141,8 @@ public class LoginTest extends SmackTestCase {
             }
 
         } catch (XMPPException e) {
-            if (e.getXMPPError() != null) {
-                assertEquals("Wrong error code returned", 406, e.getXMPPError().getCode());
+            if (e.getStanzaError() != null) {
+                assertEquals("Wrong error code returned", 406, e.getStanzaError().getCode());
             } else {
                 fail(e.getMessage());
             }

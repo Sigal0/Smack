@@ -17,28 +17,35 @@
 
 package org.jivesoftware.smackx.workgroup.packet;
 
-import org.jivesoftware.smackx.workgroup.agent.WorkgroupQueue;
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
-import org.xmlpull.v1.XmlPullParser;
-
+import java.io.IOException;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-public class QueueOverview implements PacketExtension {
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.parsing.SmackParsingException;
+import org.jivesoftware.smack.parsing.SmackParsingException.SmackTextParseException;
+import org.jivesoftware.smack.provider.ExtensionElementProvider;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
+import org.jivesoftware.smackx.workgroup.agent.WorkgroupQueue;
+
+public class QueueOverview implements ExtensionElement {
 
     /**
-     * Element name of the packet extension.
+     * Element name of the stanza extension.
      */
     public static String ELEMENT_NAME = "notify-queue";
 
     /**
-     * Namespace of the packet extension.
+     * Namespace of the stanza extension.
      */
     public static String NAMESPACE = "http://jabber.org/protocol/workgroup";
 
     private static final String DATE_FORMAT = "yyyyMMdd'T'HH:mm:ss";
-    private SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
+    private final SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
 
     private int averageWaitTime;
     private Date oldestEntry;
@@ -84,17 +91,20 @@ public class QueueOverview implements PacketExtension {
         this.status = status;
     }
 
+    @Override
     public String getElementName () {
         return ELEMENT_NAME;
     }
 
+    @Override
     public String getNamespace () {
         return NAMESPACE;
     }
 
-    public String toXML () {
+    @Override
+    public String toXML(XmlEnvironment enclosingEnvironment) {
         StringBuilder buf = new StringBuilder();
-        buf.append("<").append(ELEMENT_NAME).append(" xmlns=\"").append(NAMESPACE).append("\">");
+        buf.append('<').append(ELEMENT_NAME).append(" xmlns=\"").append(NAMESPACE).append("\">");
 
         if (userCount != -1) {
             buf.append("<count>").append(userCount).append("</count>");
@@ -108,26 +118,23 @@ public class QueueOverview implements PacketExtension {
         if (status != null) {
             buf.append("<status>").append(status).append("</status>");
         }
-        buf.append("</").append(ELEMENT_NAME).append(">");
+        buf.append("</").append(ELEMENT_NAME).append('>');
 
         return buf.toString();
     }
 
-    public static class Provider implements PacketExtensionProvider {
+    public static class Provider extends ExtensionElementProvider<QueueOverview> {
 
-        public PacketExtension parseExtension (XmlPullParser parser) throws Exception {
-            int eventType = parser.getEventType();
-            QueueOverview queueOverview = new QueueOverview();            
+        @Override
+        public QueueOverview parse(XmlPullParser parser,
+                        int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException,
+                        IOException, SmackTextParseException {
+            QueueOverview queueOverview = new QueueOverview();
             SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
 
-            if (eventType != XmlPullParser.START_TAG) {
-                // throw exception
-            }
-
-            eventType = parser.next();
-            while ((eventType != XmlPullParser.END_TAG)
-                         || (!ELEMENT_NAME.equals(parser.getName())))
-            {
+            XmlPullParser.Event eventType = parser.next();
+            while (eventType != XmlPullParser.Event.END_ELEMENT
+                         || !ELEMENT_NAME.equals(parser.getName())) {
                 if ("count".equals(parser.getName())) {
                     queueOverview.setUserCount(Integer.parseInt(parser.nextText()));
                 }
@@ -135,7 +142,11 @@ public class QueueOverview implements PacketExtension {
                     queueOverview.setAverageWaitTime(Integer.parseInt(parser.nextText()));
                 }
                 else if ("oldest".equals(parser.getName())) {
-                    queueOverview.setOldestEntry((dateFormat.parse(parser.nextText())));                    
+                    try {
+                        queueOverview.setOldestEntry(dateFormat.parse(parser.nextText()));
+                    } catch (ParseException e) {
+                        throw new SmackParsingException.SmackTextParseException(e);
+                    }
                 }
                 else if ("status".equals(parser.getName())) {
                     queueOverview.setStatus(WorkgroupQueue.Status.fromString(parser.nextText()));
@@ -143,12 +154,12 @@ public class QueueOverview implements PacketExtension {
 
                 eventType = parser.next();
 
-                if (eventType != XmlPullParser.END_TAG) {
+                if (eventType != XmlPullParser.Event.END_ELEMENT) {
                     // throw exception
                 }
             }
 
-            if (eventType != XmlPullParser.END_TAG) {
+            if (eventType != XmlPullParser.Event.END_ELEMENT) {
                 // throw exception
             }
 

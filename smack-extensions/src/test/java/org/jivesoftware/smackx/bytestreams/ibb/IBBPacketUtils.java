@@ -16,54 +16,46 @@
  */
 package org.jivesoftware.smackx.bytestreams.ibb;
 
+import org.jivesoftware.smack.packet.EmptyResultIQ;
+import org.jivesoftware.smack.packet.ErrorIQ;
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.XMPPError;
+import org.jivesoftware.smack.packet.StanzaError;
+
+import org.jxmpp.jid.Jid;
 
 /**
  * Utility methods to create packets.
- * 
+ *
  * @author Henning Staib
  */
 public class IBBPacketUtils {
 
     /**
      * Returns an error IQ.
-     * 
+     *
      * @param from the senders JID
      * @param to the recipients JID
-     * @param xmppError the XMPP error
+     * @param condition the XMPP error condition
      * @return an error IQ
      */
-    public static IQ createErrorIQ(String from, String to, XMPPError xmppError) {
-        IQ errorIQ = new IQ() {
-
-            public String getChildElementXML() {
-                return null;
-            }
-
-        };
+    public static IQ createErrorIQ(Jid from, Jid to, StanzaError.Condition condition) {
+        StanzaError.Builder xmppError = StanzaError.getBuilder(condition);
+        IQ errorIQ = new ErrorIQ(xmppError);
         errorIQ.setType(IQ.Type.error);
         errorIQ.setFrom(from);
         errorIQ.setTo(to);
-        errorIQ.setError(xmppError);
         return errorIQ;
     }
 
     /**
      * Returns a result IQ.
-     * 
+     *
      * @param from the senders JID
      * @param to the recipients JID
      * @return a result IQ
      */
-    public static IQ createResultIQ(String from, String to) {
-        IQ result = new IQ() {
-
-            public String getChildElementXML() {
-                return null;
-            }
-
-        };
+    public static IQ createResultIQ(Jid from, Jid to) {
+        IQ result = new EmptyResultIQ();
         result.setType(IQ.Type.result);
         result.setFrom(from);
         result.setTo(to);

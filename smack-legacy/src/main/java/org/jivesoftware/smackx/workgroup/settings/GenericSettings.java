@@ -17,17 +17,20 @@
 
 package org.jivesoftware.smackx.workgroup.settings;
 
-import org.jivesoftware.smackx.workgroup.util.ModelUtil;
-import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.provider.IQProvider;
-import org.xmlpull.v1.XmlPullParser;
-
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.IQProvider;
+import org.jivesoftware.smack.util.StringUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
 public class GenericSettings extends IQ {
 
-    private Map<String, String> map = new HashMap<String, String>();
+    private Map<String, String> map = new HashMap<>();
 
     private String query;
 
@@ -49,56 +52,50 @@ public class GenericSettings extends IQ {
 
 
     /**
-     * Element name of the packet extension.
+     * Element name of the stanza extension.
      */
     public static final String ELEMENT_NAME = "generic-metadata";
 
     /**
-     * Namespace of the packet extension.
+     * Namespace of the stanza extension.
      */
     public static final String NAMESPACE = "http://jivesoftware.com/protocol/workgroup";
 
-    public String getChildElementXML() {
-        StringBuilder buf = new StringBuilder();
-
-        buf.append("<").append(ELEMENT_NAME).append(" xmlns=");
-        buf.append('"');
-        buf.append(NAMESPACE);
-        buf.append('"');
-        buf.append(">");
-        if (ModelUtil.hasLength(getQuery())) {
-            buf.append("<query>" + getQuery() + "</query>");
-        }
-        buf.append("</").append(ELEMENT_NAME).append("> ");
-        return buf.toString();
+    public GenericSettings() {
+        super(ELEMENT_NAME, NAMESPACE);
     }
 
+    @Override
+    protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder buf) {
+        buf.append('>');
+        if (StringUtils.isNotEmpty(getQuery())) {
+            buf.append("<query>" + getQuery() + "</query>");
+        }
+        return buf;
+    }
 
     /**
-     * Packet extension provider for SoundSetting Packets.
+     * Stanza extension provider for SoundSetting Packets.
      */
-    public static class InternalProvider implements IQProvider {
+    public static class InternalProvider extends IQProvider<GenericSettings> {
 
-        public IQ parseIQ(XmlPullParser parser) throws Exception {
-            if (parser.getEventType() != XmlPullParser.START_TAG) {
-                throw new IllegalStateException("Parser not in proper position, or bad XML.");
-            }
-
+        @Override
+        public GenericSettings parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException {
             GenericSettings setting = new GenericSettings();
 
             boolean done = false;
 
 
             while (!done) {
-                int eventType = parser.next();
-                if ((eventType == XmlPullParser.START_TAG) && ("entry".equals(parser.getName()))) {
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT && "entry".equals(parser.getName())) {
                     eventType = parser.next();
                     String name = parser.nextText();
                     eventType = parser.next();
                     String value = parser.nextText();
                     setting.getMap().put(name, value);
                 }
-                else if (eventType == XmlPullParser.END_TAG && ELEMENT_NAME.equals(parser.getName())) {
+                else if (eventType == XmlPullParser.Event.END_ELEMENT && ELEMENT_NAME.equals(parser.getName())) {
                     done = true;
                 }
             }

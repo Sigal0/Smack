@@ -17,43 +17,50 @@
 
 package org.jivesoftware.smackx.workgroup.packet;
 
+import java.io.IOException;
+
 import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
 import org.jivesoftware.smack.provider.IQProvider;
-import org.xmlpull.v1.XmlPullParser;
+import org.jivesoftware.smack.util.ParserUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
+import org.jxmpp.jid.Jid;
 
 /**
  * An IQProvider class which has savvy about the offer-revoke tag.<br>
  *
  * @author loki der quaeler
  */
-public class OfferRevokeProvider implements IQProvider {
+public class OfferRevokeProvider extends IQProvider<IQ> {
 
-    public IQ parseIQ (XmlPullParser parser) throws Exception {
+    @Override
+    public OfferRevokePacket parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException {
         // The parser will be positioned on the opening IQ tag, so get the JID attribute.
-        String userJID = parser.getAttributeValue("", "jid");
+        Jid userJID = ParserUtils.getJidAttribute(parser);
         // Default the userID to the JID.
-        String userID = userJID;
+        Jid userID = userJID;
         String reason = null;
         String sessionID = null;
         boolean done = false;
 
         while (!done) {
-            int eventType = parser.next();
+            XmlPullParser.Event eventType = parser.next();
 
-            if ((eventType == XmlPullParser.START_TAG) && parser.getName().equals("reason")) {
+            if ((eventType == XmlPullParser.Event.START_ELEMENT) && parser.getName().equals("reason")) {
                 reason = parser.nextText();
             }
-            else if ((eventType == XmlPullParser.START_TAG)
+            else if ((eventType == XmlPullParser.Event.START_ELEMENT)
                          && parser.getName().equals(SessionID.ELEMENT_NAME)) {
                 sessionID = parser.getAttributeValue("", "id");
             }
-            else if ((eventType == XmlPullParser.START_TAG)
+            else if ((eventType == XmlPullParser.Event.START_ELEMENT)
                          && parser.getName().equals(UserID.ELEMENT_NAME)) {
-                userID = parser.getAttributeValue("", "id");
+                userID = ParserUtils.getJidAttribute(parser, "id");
             }
-            else if ((eventType == XmlPullParser.END_TAG) && parser.getName().equals(
-                    "offer-revoke"))
-            {
+            else if ((eventType == XmlPullParser.Event.END_ELEMENT) && parser.getName().equals(
+                    "offer-revoke")) {
                 done = true;
             }
         }
@@ -61,25 +68,28 @@ public class OfferRevokeProvider implements IQProvider {
         return new OfferRevokePacket(userJID, userID, reason, sessionID);
     }
 
-    public class OfferRevokePacket extends IQ {
+    public static class OfferRevokePacket extends IQ {
 
-        private String userJID;
-        private String userID;
-        private String sessionID;
-        private String reason;
+        public static final String ELEMENT = "offer-revoke";
+        public static final String NAMESPACE = "http://jabber.org/protocol/workgroup";
+        private final Jid userJID;
+        private final Jid userID;
+        private final String sessionID;
+        private final String reason;
 
-        public OfferRevokePacket (String userJID, String userID, String cause, String sessionID) {
+        public OfferRevokePacket (Jid userJID, Jid userID, String cause, String sessionID) {
+            super(ELEMENT, NAMESPACE);
             this.userJID = userJID;
             this.userID = userID;
             this.reason = cause;
             this.sessionID = sessionID;
         }
 
-        public String getUserJID() {
+        public Jid getUserJID() {
             return userJID;
         }
 
-        public String getUserID() {
+        public Jid getUserID() {
             return this.userID;
         }
 
@@ -91,9 +101,9 @@ public class OfferRevokeProvider implements IQProvider {
             return this.sessionID;
         }
 
-        public String getChildElementXML () {
-            StringBuilder buf = new StringBuilder();
-            buf.append("<offer-revoke xmlns=\"http://jabber.org/protocol/workgroup\" jid=\"").append(userID).append("\">");
+        @Override
+        protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder buf) {
+            buf.append(" jid=\"").append(userID).append("\">");
             if (reason != null) {
                 buf.append("<reason>").append(reason).append("</reason>");
             }
@@ -103,8 +113,7 @@ public class OfferRevokeProvider implements IQProvider {
             if (userID != null) {
                 buf.append(new UserID(userID).toXML());
             }
-            buf.append("</offer-revoke>");
-            return buf.toString();
+            return buf;
         }
     }
 }

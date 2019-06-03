@@ -1,6 +1,6 @@
 /**
  *
- * Copyright 2013 Georg Lukas
+ * Copyright 2013-2014 Georg Lukas
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,40 +16,76 @@
  */
 package org.jivesoftware.smackx.forward.provider;
 
-import org.jivesoftware.smack.packet.Packet;
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
+import java.io.IOException;
+import java.util.logging.Logger;
+
+import org.jivesoftware.smack.packet.Message;
+import org.jivesoftware.smack.packet.Stanza;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.parsing.SmackParsingException;
+import org.jivesoftware.smack.provider.ExtensionElementProvider;
 import org.jivesoftware.smack.util.PacketParserUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
 import org.jivesoftware.smackx.delay.packet.DelayInformation;
-import org.jivesoftware.smackx.forward.Forwarded;
-import org.xmlpull.v1.XmlPullParser;
+import org.jivesoftware.smackx.delay.provider.DelayInformationProvider;
+import org.jivesoftware.smackx.forward.packet.Forwarded;
 
 /**
- * This class implements the {@link PacketExtensionProvider} to parse
- * forwarded messages from a packet.  It will return a {@link Forwarded} packet extension.
+ * This class implements the {@link ExtensionElementProvider} to parse
+ * forwarded messages from a packet.  It will return a {@link Forwarded} stanza extension.
  *
  * @author Georg Lukas
  */
-public class ForwardedProvider implements PacketExtensionProvider {
-    public PacketExtension parseExtension(XmlPullParser parser) throws Exception {
-        DelayInformation di = null;
-        Packet packet = null;
+public class ForwardedProvider extends ExtensionElementProvider<Forwarded> {
 
-        boolean done = false;
-        while (!done) {
-            int eventType = parser.next();
-            if (eventType == XmlPullParser.START_TAG) {
-                if (parser.getName().equals("delay"))
-                    di = (DelayInformation)PacketParserUtils.parsePacketExtension(parser.getName(), parser.getNamespace(), parser);
-                else if (parser.getName().equals("message"))
+    public static final ForwardedProvider INSTANCE = new ForwardedProvider();
+
+    private static final Logger LOGGER = Logger.getLogger(ForwardedProvider.class.getName());
+
+    @Override
+    public Forwarded parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException, SmackParsingException {
+        DelayInformation di = null;
+        Stanza packet = null;
+
+        outerloop: while (true) {
+            XmlPullParser.Event eventType = parser.next();
+            switch (eventType) {
+            case START_ELEMENT:
+                String name = parser.getName();
+                String namespace = parser.getNamespace();
+                switch (name) {
+                case DelayInformation.ELEMENT:
+                    if (DelayInformation.NAMESPACE.equals(namespace)) {
+                        di = DelayInformationProvider.INSTANCE.parse(parser, parser.getDepth(), null);
+                    } else {
+                        LOGGER.warning("Namespace '" + namespace + "' does not match expected namespace '"
+                                        + DelayInformation.NAMESPACE + "'");
+                    }
+                    break;
+                case Message.ELEMENT:
                     packet = PacketParserUtils.parseMessage(parser);
-                else throw new Exception("Unsupported forwarded packet type: " + parser.getName());
+                    break;
+                default:
+                    LOGGER.warning("Unsupported forwarded packet type: " + name);
+                }
+                break;
+            case END_ELEMENT:
+                if (parser.getDepth() == initialDepth) {
+                    break outerloop;
+                }
+                break;
+            default:
+                // Catch all for incomplete switch (MissingCasesInEnumSwitch) statement.
+                break;
             }
-            else if (eventType == XmlPullParser.END_TAG && parser.getName().equals(Forwarded.ELEMENT_NAME))
-                done = true;
         }
-        if (packet == null)
-            throw new Exception("forwarded extension must contain a packet");
+
+        if (packet == null) {
+            // TODO: Should be SmackParseException.
+            throw new IOException("forwarded extension must contain a packet");
+        }
         return new Forwarded(di, packet);
     }
 }

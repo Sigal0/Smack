@@ -17,12 +17,16 @@
 
 package org.jivesoftware.smackx.workgroup.settings;
 
-import org.jivesoftware.smackx.workgroup.util.ModelUtil;
-import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.provider.IQProvider;
-import org.xmlpull.v1.XmlPullParser;
+import java.io.IOException;
 
-public class OfflineSettings extends IQ {
+import org.jivesoftware.smack.packet.SimpleIQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.IQProvider;
+import org.jivesoftware.smack.util.StringUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
+public class OfflineSettings extends SimpleIQ {
     private String redirectURL;
 
     private String offlineText;
@@ -30,7 +34,7 @@ public class OfflineSettings extends IQ {
     private String subject;
 
     public String getRedirectURL() {
-        if (!ModelUtil.hasLength(redirectURL)) {
+        if (!StringUtils.isNotEmpty(redirectURL)) {
             return "";
         }
         return redirectURL;
@@ -41,7 +45,7 @@ public class OfflineSettings extends IQ {
     }
 
     public String getOfflineText() {
-        if (!ModelUtil.hasLength(offlineText)) {
+        if (!StringUtils.isNotEmpty(offlineText)) {
             return "";
         }
         return offlineText;
@@ -52,7 +56,7 @@ public class OfflineSettings extends IQ {
     }
 
     public String getEmailAddress() {
-        if (!ModelUtil.hasLength(emailAddress)) {
+        if (!StringUtils.isNotEmpty(emailAddress)) {
             return "";
         }
         return emailAddress;
@@ -63,7 +67,7 @@ public class OfflineSettings extends IQ {
     }
 
     public String getSubject() {
-        if (!ModelUtil.hasLength(subject)) {
+        if (!StringUtils.isNotEmpty(subject)) {
             return "";
         }
         return subject;
@@ -74,47 +78,36 @@ public class OfflineSettings extends IQ {
     }
 
     public boolean redirects() {
-        return (ModelUtil.hasLength(getRedirectURL()));
+        return (StringUtils.isNotEmpty(getRedirectURL()));
     }
 
-    public boolean isConfigured(){
-        return ModelUtil.hasLength(getEmailAddress()) &&
-               ModelUtil.hasLength(getSubject()) &&
-               ModelUtil.hasLength(getOfflineText());
+    public boolean isConfigured() {
+        return StringUtils.isNotEmpty(getEmailAddress()) &&
+               StringUtils.isNotEmpty(getSubject()) &&
+               StringUtils.isNotEmpty(getOfflineText());
     }
 
     /**
-     * Element name of the packet extension.
+     * Element name of the stanza extension.
      */
     public static final String ELEMENT_NAME = "offline-settings";
 
     /**
-     * Namespace of the packet extension.
+     * Namespace of the stanza extension.
      */
     public static final String NAMESPACE = "http://jivesoftware.com/protocol/workgroup";
 
-    public String getChildElementXML() {
-        StringBuilder buf = new StringBuilder();
-
-        buf.append("<").append(ELEMENT_NAME).append(" xmlns=");
-        buf.append('"');
-        buf.append(NAMESPACE);
-        buf.append('"');
-        buf.append("></").append(ELEMENT_NAME).append("> ");
-        return buf.toString();
+    public OfflineSettings() {
+        super(ELEMENT_NAME, NAMESPACE);
     }
 
-
     /**
-     * Packet extension provider for AgentStatusRequest packets.
+     * Stanza extension provider for AgentStatusRequest packets.
      */
-    public static class InternalProvider implements IQProvider {
+    public static class InternalProvider extends IQProvider<OfflineSettings> {
 
-        public IQ parseIQ(XmlPullParser parser) throws Exception {
-            if (parser.getEventType() != XmlPullParser.START_TAG) {
-                throw new IllegalStateException("Parser not in proper position, or bad XML.");
-            }
-
+        @Override
+        public OfflineSettings parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException {
             OfflineSettings offlineSettings = new OfflineSettings();
 
             boolean done = false;
@@ -124,20 +117,20 @@ public class OfflineSettings extends IQ {
             String emailAddress = null;
 
             while (!done) {
-                int eventType = parser.next();
-                if ((eventType == XmlPullParser.START_TAG) && ("redirectPage".equals(parser.getName()))) {
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT && "redirectPage".equals(parser.getName())) {
                     redirectPage = parser.nextText();
                 }
-                else if ((eventType == XmlPullParser.START_TAG) && ("subject".equals(parser.getName()))) {
+                else if (eventType == XmlPullParser.Event.START_ELEMENT && "subject".equals(parser.getName())) {
                     subject = parser.nextText();
                 }
-                else if ((eventType == XmlPullParser.START_TAG) && ("offlineText".equals(parser.getName()))) {
+                else if (eventType == XmlPullParser.Event.START_ELEMENT && "offlineText".equals(parser.getName())) {
                     offlineText = parser.nextText();
                 }
-                else if ((eventType == XmlPullParser.START_TAG) && ("emailAddress".equals(parser.getName()))) {
+                else if (eventType == XmlPullParser.Event.START_ELEMENT && "emailAddress".equals(parser.getName())) {
                     emailAddress = parser.nextText();
                 }
-                else if (eventType == XmlPullParser.END_TAG && "offline-settings".equals(parser.getName())) {
+                else if (eventType == XmlPullParser.Event.END_ELEMENT && "offline-settings".equals(parser.getName())) {
                     done = true;
                 }
             }

@@ -20,11 +20,12 @@ import java.io.IOException;
 import java.io.Reader;
 import java.io.StringReader;
 
-import org.jivesoftware.smack.util.PacketParserUtils;
-import org.xmlpull.v1.XmlPullParser;
-import org.xmlpull.v1.XmlPullParserException;
+import org.jivesoftware.smack.xml.SmackXmlParser;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
 
-final public class TestUtils {
+// TODO: Remove this class and replace it with SmackTestUtil.
+public final class TestUtils {
     private TestUtils() {
     }
 
@@ -40,22 +41,28 @@ final public class TestUtils {
         return getParser(stanza, "presence");
     }
 
+    public static XmlPullParser getParser(String string) {
+        return getParser(string, null);
+    }
+
     public static XmlPullParser getParser(String string, String startTag) {
         return getParser(new StringReader(string), startTag);
     }
 
-    public static XmlPullParser getParser(Reader reader, String startTag) {
+    private static XmlPullParser getParser(Reader reader, String startTag) {
         XmlPullParser parser;
         try {
-            parser = PacketParserUtils.newXmppParser();
-            parser.setInput(reader);
+            parser = SmackXmlParser.newXmlParser(reader);
             if (startTag == null) {
+                while (parser.getEventType() != XmlPullParser.Event.START_ELEMENT) {
+                    parser.next();
+                }
                 return parser;
             }
             boolean found = false;
 
             while (!found) {
-                if ((parser.next() == XmlPullParser.START_TAG) && parser.getName().equals(startTag))
+                if ((parser.next() == XmlPullParser.Event.START_ELEMENT) && parser.getName().equals(startTag))
                     found = true;
             }
 

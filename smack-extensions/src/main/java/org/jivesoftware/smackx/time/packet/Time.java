@@ -16,14 +16,14 @@
  */
 package org.jivesoftware.smackx.time.packet;
 
-import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.Packet;
-import org.jxmpp.util.XmppDateTime;
-
 import java.util.Calendar;
 import java.util.Date;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import org.jivesoftware.smack.packet.IQ;
+
+import org.jxmpp.util.XmppDateTime;
 
 /**
  * A Time IQ packet, which is used by XMPP clients to exchange their respective local
@@ -43,6 +43,7 @@ public class Time extends IQ {
     private String tzo;
 
     public Time() {
+        super(ELEMENT, NAMESPACE);
         setType(Type.get);
     }
 
@@ -53,6 +54,7 @@ public class Time extends IQ {
      * @param cal the time value.
      */
     public Time(Calendar cal) {
+        super(ELEMENT, NAMESPACE);
         tzo = XmppDateTime.asString(cal.getTimeZone());
         // Convert local time to the UTC time.
         utc = XmppDateTime.formatXEP0082Date(cal.getTime());
@@ -121,21 +123,23 @@ public class Time extends IQ {
         this.tzo = tzo;
     }
 
-    public static Time createResponse(Packet request) {
+    public static Time createResponse(IQ request) {
         Time time = new Time(Calendar.getInstance());
         time.setType(Type.result);
         time.setTo(request.getFrom());
         return time;
     }
 
-    public String getChildElementXML() {
-        StringBuilder buf = new StringBuilder();
-        buf.append("<" + ELEMENT +  " xmlns='" + NAMESPACE + "'>");
+    @Override
+    protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder buf) {
         if (utc != null) {
+            buf.rightAngleBracket();
             buf.append("<utc>").append(utc).append("</utc>");
             buf.append("<tzo>").append(tzo).append("</tzo>");
+        } else {
+            buf.setEmptyElement();
         }
-        buf.append("</" + ELEMENT + ">");
-        return buf.toString();
+
+        return buf;
     }
 }

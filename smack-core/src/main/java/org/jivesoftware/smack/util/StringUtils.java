@@ -1,6 +1,6 @@
 /**
  *
- * Copyright 2003-2007 Jive Software.
+ * Copyright 2003-2007 Jive Software, 2016-2019 Florian Schmaus.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,19 +17,36 @@
 
 package org.jivesoftware.smack.util;
 
-import java.io.UnsupportedEncodingException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.Random;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * A collection of utility methods for String objects.
  */
 public class StringUtils {
-    private static final Logger LOGGER = Logger.getLogger(StringUtils.class.getName());
+
+    public static final String MD5 = "MD5";
+    public static final String SHA1 = "SHA-1";
+
+    /**
+     * Deprecated, do not use.
+     *
+     * @deprecated use StandardCharsets.UTF_8 instead.
+     */
+    // TODO: Remove in Smack 4.5.
+    @Deprecated
+    public static final String UTF8 = "UTF-8";
+
+    /**
+     * Deprecated, do not use.
+     *
+     * @deprecated use StandardCharsets.US_ASCII instead.
+     */
+    // TODO: Remove in Smack 4.5.
+    @Deprecated
+    public static final String USASCII = "US-ASCII";
 
     public static final String QUOTE_ENCODE = "&quot;";
     public static final String APOS_ENCODE = "&apos;";
@@ -37,49 +54,157 @@ public class StringUtils {
     public static final String LT_ENCODE = "&lt;";
     public static final String GT_ENCODE = "&gt;";
 
+    public static final char[] HEX_CHARS = "0123456789abcdef".toCharArray();
+
     /**
-     * Escapes all necessary characters in the String so that it can be used
+     * Escape <code>input</code> for XML.
+     *
+     * @param input the input to escape.
+     * @return the XML escaped variant of <code>input</code>.
+     */
+    public static CharSequence escapeForXml(CharSequence input) {
+        return escapeForXml(input, XmlEscapeMode.safe);
+    }
+
+    /**
+     * Escape <code>input</code> for XML.
+     *
+     * @param input the input to escape.
+     * @return the XML escaped variant of <code>input</code>.
+     * @since 4.2
+     */
+    public static CharSequence escapeForXmlAttribute(CharSequence input) {
+        return escapeForXml(input, XmlEscapeMode.forAttribute);
+    }
+
+    /**
+     * Escape <code>input</code> for XML.
+     * <p>
+     * This is an optimized variant of {@link #escapeForXmlAttribute(CharSequence)} for XML where the
+     * XML attribute is quoted using ''' (Apos).
+     * </p>
+     *
+     * @param input the input to escape.
+     * @return the XML escaped variant of <code>input</code>.
+     * @since 4.2
+     */
+    public static CharSequence escapeForXmlAttributeApos(CharSequence input) {
+        return escapeForXml(input, XmlEscapeMode.forAttributeApos);
+    }
+
+    /**
+     * Escape <code>input</code> for XML.
+     *
+     * @param input the input to escape.
+     * @return the XML escaped variant of <code>input</code>.
+     * @since 4.2
+     */
+    public static CharSequence escapeForXmlText(CharSequence input) {
+        return escapeForXml(input, XmlEscapeMode.forText);
+    }
+
+    private enum XmlEscapeMode {
+        safe,
+        forAttribute,
+        forAttributeApos,
+        forText,
+        ;
+    }
+
+    /**
+     * Escapes all necessary characters in the CharSequence so that it can be used
      * in an XML doc.
      *
-     * @param string the string to escape.
+     * @param input the CharSequence to escape.
      * @return the string with appropriate characters escaped.
      */
-    public static CharSequence escapeForXML(final String string) {
-        if (string == null) {
+    private static CharSequence escapeForXml(final CharSequence input, final XmlEscapeMode xmlEscapeMode) {
+        if (input == null) {
             return null;
         }
-        final char[] input = string.toCharArray();
-        final int len = input.length;
-        final StringBuilder out = new StringBuilder((int)(len*1.3));
+        final int len = input.length();
+        final StringBuilder out = new StringBuilder((int) (len * 1.3));
         CharSequence toAppend;
         char ch;
         int last = 0;
         int i = 0;
         while (i < len) {
             toAppend = null;
-            ch = input[i];
-            switch(ch) {
-            case '<':
-                toAppend = LT_ENCODE;
+            ch = input.charAt(i);
+            switch (xmlEscapeMode) {
+            case safe:
+                switch (ch) {
+                case '<':
+                    toAppend = LT_ENCODE;
+                    break;
+                case '>':
+                    toAppend = GT_ENCODE;
+                    break;
+                case '&':
+                    toAppend = AMP_ENCODE;
+                    break;
+                case '"':
+                    toAppend = QUOTE_ENCODE;
+                    break;
+                case '\'':
+                    toAppend = APOS_ENCODE;
+                    break;
+                default:
+                    break;
+                }
                 break;
-            case '>':
-                toAppend = GT_ENCODE;
+            case forAttribute:
+                // No need to escape '>' for attributes.
+                switch (ch) {
+                case '<':
+                    toAppend = LT_ENCODE;
+                    break;
+                case '&':
+                    toAppend = AMP_ENCODE;
+                    break;
+                case '"':
+                    toAppend = QUOTE_ENCODE;
+                    break;
+                case '\'':
+                    toAppend = APOS_ENCODE;
+                    break;
+                default:
+                    break;
+                }
                 break;
-            case '&':
-                toAppend = AMP_ENCODE;
+            case forAttributeApos:
+                // No need to escape '>' and '"' for attributes using '\'' as quote.
+                switch (ch) {
+                case '<':
+                    toAppend = LT_ENCODE;
+                    break;
+                case '&':
+                    toAppend = AMP_ENCODE;
+                    break;
+                case '\'':
+                    toAppend = APOS_ENCODE;
+                    break;
+                default:
+                    break;
+                }
                 break;
-            case '"':
-                toAppend = QUOTE_ENCODE;
-                break;
-            case '\'':
-                toAppend = APOS_ENCODE;
-                break;
-            default:
+            case forText:
+                // No need to escape '"', '\'', and '>' for text.
+                switch (ch) {
+                case '<':
+                    toAppend = LT_ENCODE;
+                    break;
+                case '&':
+                    toAppend = AMP_ENCODE;
+                    break;
+                default:
+                    break;
+                }
                 break;
             }
             if (toAppend != null) {
                 if (i > last) {
-                    out.append(input, last, i - last);
+                    out.append(input, last, i);
                 }
                 out.append(toAppend);
                 last = ++i;
@@ -88,18 +213,13 @@ public class StringUtils {
             }
         }
         if (last == 0) {
-            return string;
+            return input;
         }
         if (i > last) {
-            out.append(input, last, i - last);
+            out.append(input, last, i);
         }
         return out;
     }
-
-    /**
-     * Used by the hash method.
-     */
-    private static MessageDigest digest = null;
 
     /**
      * Hashes a String using the SHA-1 algorithm and returns the result as a
@@ -116,24 +236,11 @@ public class StringUtils {
      *
      * @param data the String to compute the hash of.
      * @return a hashed version of the passed-in String
+     * @deprecated use {@link org.jivesoftware.smack.util.SHA1#hex(String)} instead.
      */
-    public synchronized static String hash(String data) {
-        if (digest == null) {
-            try {
-                digest = MessageDigest.getInstance("SHA-1");
-            }
-            catch (NoSuchAlgorithmException nsae) {
-                LOGGER.log(Level.SEVERE, "Failed to load the SHA-1 MessageDigest. Smack will be unable to function normally.", nsae);
-            }
-        }
-        // Now, compute hash.
-        try {
-            digest.update(data.getBytes("UTF-8"));
-        }
-        catch (UnsupportedEncodingException e) {
-            LOGGER.log(Level.SEVERE, "Error computing hash", e);
-        }
-        return encodeHex(digest.digest());
+    @Deprecated
+    public static synchronized String hash(String data) {
+        return org.jivesoftware.smack.util.SHA1.hex(data);
     }
 
     /**
@@ -143,94 +250,18 @@ public class StringUtils {
      * @return generated hex string.
      */
     public static String encodeHex(byte[] bytes) {
-        StringBuilder hex = new StringBuilder(bytes.length * 2);
-
-        for (byte aByte : bytes) {
-            if (((int) aByte & 0xff) < 0x10) {
-                hex.append("0");
-            }
-            hex.append(Integer.toString((int) aByte & 0xff, 16));
+        char[] hexChars = new char[bytes.length * 2];
+        for (int j = 0; j < bytes.length; j++) {
+            int v = bytes[j] & 0xFF;
+            hexChars[j * 2] = HEX_CHARS[v >>> 4];
+            hexChars[j * 2 + 1] = HEX_CHARS[v & 0x0F];
         }
-
-        return hex.toString();
+        return new String(hexChars);
     }
 
-    /**
-     * Encodes a String as a base64 String.
-     *
-     * @param data a String to encode.
-     * @return a base64 encoded String.
-     */
-    public static String encodeBase64(String data) {
-        byte [] bytes = null;
-        try {
-            bytes = data.getBytes("ISO-8859-1");
-        }
-        catch (UnsupportedEncodingException uee) {
-            throw new IllegalStateException(uee);
-        }
-        return encodeBase64(bytes);
+    public static byte[] toUtf8Bytes(String string) {
+        return string.getBytes(StandardCharsets.UTF_8);
     }
-
-    /**
-     * Encodes a byte array into a base64 String.
-     *
-     * @param data a byte array to encode.
-     * @return a base64 encode String.
-     */
-    public static String encodeBase64(byte[] data) {
-        return encodeBase64(data, false);
-    }
-
-    /**
-     * Encodes a byte array into a bse64 String.
-     *
-     * @param data The byte arry to encode.
-     * @param lineBreaks True if the encoding should contain line breaks and false if it should not.
-     * @return A base64 encoded String.
-     */
-    public static String encodeBase64(byte[] data, boolean lineBreaks) {
-        return encodeBase64(data, 0, data.length, lineBreaks);
-    }
-
-    /**
-     * Encodes a byte array into a bse64 String.
-     *
-     * @param data The byte arry to encode.
-     * @param offset the offset of the bytearray to begin encoding at.
-     * @param len the length of bytes to encode.
-     * @param lineBreaks True if the encoding should contain line breaks and false if it should not.
-     * @return A base64 encoded String.
-     */
-    public static String encodeBase64(byte[] data, int offset, int len, boolean lineBreaks) {
-        return Base64.encodeBytes(data, offset, len, (lineBreaks ?  Base64.NO_OPTIONS : Base64.DONT_BREAK_LINES));
-    }
-
-    /**
-     * Decodes a base64 String.
-     * Unlike Base64.decode() this method does not try to detect and decompress a gzip-compressed input.
-     *
-     * @param data a base64 encoded String to decode.
-     * @return the decoded String.
-     */
-    public static byte[] decodeBase64(String data) {
-        byte[] bytes;
-        try {
-            bytes = data.getBytes("UTF-8");
-        } catch (java.io.UnsupportedEncodingException uee) {
-            bytes = data.getBytes();
-        }
-
-        bytes = Base64.decode(bytes, 0, bytes.length, Base64.NO_OPTIONS);
-        return bytes;
-    }
-
-    /**
-     * Pseudo-random number generator object for use with randomString().
-     * The Random class is not considered to be cryptographically secure, so
-     * only use these random Strings for low to medium security applications.
-     */
-    private static Random randGen = new Random();
 
     /**
      * Array of numbers and letters of mixed case. Numbers appear in the list
@@ -238,8 +269,8 @@ public class StringUtils {
      * We can use the array to get a random number or letter by picking a random
      * array index.
      */
-    private static char[] numbersAndLetters = ("0123456789abcdefghijklmnopqrstuvwxyz" +
-                    "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ").toCharArray();
+    private static final char[] numbersAndLetters = ("0123456789abcdefghijklmnopqrstuvwxyz" +
+                    "ABCDEFGHIJKLMNOPQRSTUVWXYZ").toCharArray();
 
     /**
      * Returns a random String of numbers and letters (lower and upper case)
@@ -254,20 +285,39 @@ public class StringUtils {
      * @param length the desired length of the random String to return.
      * @return a random String of numbers and letters of the specified length.
      */
-    public static String randomString(int length) {
-        if (length < 1) {
-            return null;
+    public static String insecureRandomString(int length) {
+        return randomString(length, RandomUtil.RANDOM.get());
+    }
+
+    public static String randomString(final int length) {
+        return randomString(length, RandomUtil.SECURE_RANDOM.get());
+    }
+
+    public static String randomString(final int length, Random random) {
+        if (length == 0) {
+            return "";
         }
-        // Create a char buffer to put random letters and numbers in.
-        char [] randBuffer = new char[length];
-        for (int i=0; i<randBuffer.length; i++) {
-            randBuffer[i] = numbersAndLetters[randGen.nextInt(71)];
+
+        byte[] randomBytes = new byte[length];
+        random.nextBytes(randomBytes);
+        char[] randomChars = new char[length];
+        for (int i = 0; i < length; i++) {
+            randomChars[i] = getPrintableChar(randomBytes[i]);
         }
-        return new String(randBuffer);
+        return new String(randomChars);
+    }
+
+    private static char getPrintableChar(byte indexByte) {
+        assert (numbersAndLetters.length < Byte.MAX_VALUE * 2);
+
+        // Convert indexByte as it where an unsigned byte by promoting it to int
+        // and masking it with 0xff. Yields results from 0 - 254.
+        int index = indexByte & 0xff;
+        return numbersAndLetters[index % numbersAndLetters.length];
     }
 
     /**
-     * Returns true if CharSequence is not null and is not empty, false otherwise
+     * Returns true if CharSequence is not null and is not empty, false otherwise.
      * Examples:
      *    isNotEmpty(null) - false
      *    isNotEmpty("") - false
@@ -282,24 +332,158 @@ public class StringUtils {
     }
 
     /**
-     * Returns true if the given CharSequence is not null or empty.
+     * Returns true if the given CharSequence is null or empty.
      *
      * @param cs
-     * @return true if the given CharSequence is not null or empty
+     * @return true if the given CharSequence is null or empty
      */
     public static boolean isNullOrEmpty(CharSequence cs) {
-        return cs == null || cs.length() == 0;
+        return cs == null || isEmpty(cs);
     }
 
-    public static String collectionToString(Collection<String> collection) {
-        StringBuilder sb = new StringBuilder();
-        for (String s : collection) {
-            sb.append(s);
-            sb.append(" ");
+    /**
+     * Returns true if all given CharSequences are not empty.
+     *
+     * @param css the CharSequences to test.
+     * @return true if all given CharSequences are not empty.
+     */
+    public static boolean isNotEmpty(CharSequence... css) {
+        for (CharSequence cs : css) {
+            if (StringUtils.isNullOrEmpty(cs)) {
+                return false;
+            }
         }
-        String res = sb.toString();
-        // Remove the trailing whitespace
-        res = res.substring(0, res.length() - 1);
-        return res;
+        return true;
+    }
+
+    /**
+     * Returns true if all given CharSequences are either null or empty.
+     *
+     * @param css the CharSequences to test.
+     * @return true if all given CharSequences are null or empty.
+     */
+    public static boolean isNullOrEmpty(CharSequence... css) {
+        for (CharSequence cs : css) {
+            if (StringUtils.isNotEmpty(cs)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Returns true if the given CharSequence is empty.
+     *
+     * @param cs
+     * @return true if the given CharSequence is empty
+     */
+    public static boolean isEmpty(CharSequence cs) {
+        return cs.length() == 0;
+    }
+
+    /**
+     * Transform a collection of objects to a whitespace delimited String.
+     *
+     * @param collection the collection to transform.
+     * @return a String with all the elements of the collection.
+     */
+    public static String collectionToString(Collection<? extends Object> collection) {
+        return toStringBuilder(collection, " ").toString();
+    }
+
+    /**
+     * Transform a collection of objects to a delimited String.
+     *
+     * @param collection the collection to transform.
+     * @param delimiter the delimiter used to delimit the Strings.
+     * @return a StringBuilder with all the elements of the collection.
+     */
+    public static StringBuilder toStringBuilder(Collection<? extends Object> collection, String delimiter) {
+        StringBuilder sb = new StringBuilder(collection.size() * 20);
+        for (Iterator<? extends Object> it = collection.iterator(); it.hasNext();) {
+            Object cs = it.next();
+            sb.append(cs);
+            if (it.hasNext()) {
+                sb.append(delimiter);
+            }
+        }
+        return sb;
+    }
+
+    public static String returnIfNotEmptyTrimmed(String string) {
+        if (string == null)
+            return null;
+        String trimmedString = string.trim();
+        if (trimmedString.length() > 0) {
+            return trimmedString;
+        } else {
+            return null;
+        }
+    }
+
+    public static boolean nullSafeCharSequenceEquals(CharSequence csOne, CharSequence csTwo) {
+        return nullSafeCharSequenceComparator(csOne, csTwo) == 0;
+    }
+
+    public static int nullSafeCharSequenceComparator(CharSequence csOne, CharSequence csTwo) {
+        if (csOne == null ^ csTwo == null) {
+            return (csOne == null) ? -1 : 1;
+        }
+        if (csOne == null && csTwo == null) {
+            return 0;
+        }
+        return csOne.toString().compareTo(csTwo.toString());
+    }
+
+    /**
+     * Require a {@link CharSequence} to be neither null, nor empty.
+     *
+     * @deprecated use {@link #requireNotNullNorEmpty(CharSequence, String)} instead.
+     * @param cs CharSequence
+     * @param message error message
+     * @param <CS> CharSequence type
+     * @return cs
+     */
+    @Deprecated
+    public static <CS extends CharSequence> CS requireNotNullOrEmpty(CS cs, String message) {
+        return requireNotNullNorEmpty(cs, message);
+    }
+
+    /**
+     * Require a {@link CharSequence} to be neither null, nor empty.
+     *
+     * @param cs CharSequence
+     * @param message error message
+     * @param <CS> CharSequence type
+     * @return cs
+     */
+    public static <CS extends CharSequence> CS requireNotNullNorEmpty(CS cs, String message) {
+        if (isNullOrEmpty(cs)) {
+            throw new IllegalArgumentException(message);
+        }
+        return cs;
+    }
+
+    public static <CS extends CharSequence> CS requireNullOrNotEmpty(CS cs, String message) {
+        if (cs == null) {
+            return null;
+        }
+        if (cs.toString().isEmpty()) {
+            throw new IllegalArgumentException(message);
+        }
+        return cs;
+    }
+
+    /**
+     * Return the String representation of the given char sequence if it is not null.
+     *
+     * @param cs the char sequence or null.
+     * @return the String representation of <code>cs</code> or null.
+     */
+    public static String maybeToString(CharSequence cs) {
+        if (cs == null) {
+            return null;
+        }
+        return cs.toString();
     }
 }

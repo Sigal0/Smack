@@ -17,14 +17,20 @@
 
 package org.jivesoftware.smackx.workgroup.packet;
 
-import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.provider.IQProvider;
-import org.xmlpull.v1.XmlPullParser;
-
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+
+import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.IQProvider;
+import org.jivesoftware.smack.util.ParserUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
+import org.jxmpp.jid.Jid;
 
 /**
  * Represents a request for getting the jid of the workgroups where an agent can work or could
@@ -35,8 +41,12 @@ import java.util.List;
  */
 public class AgentWorkgroups extends IQ {
 
-    private String agentJID;
+    private Jid agentJID;
     private List<String> workgroups;
+
+    private AgentWorkgroups() {
+        super("workgroups", "http://jabber.org/protocol/workgroup");
+    }
 
     /**
      * Creates an AgentWorkgroups request for the given agent. This IQ will be sent and an answer
@@ -44,9 +54,10 @@ public class AgentWorkgroups extends IQ {
      *
      * @param agentJID the id of the agent to get his workgroups.
      */
-    public AgentWorkgroups(String agentJID) {
+    public AgentWorkgroups(Jid agentJID) {
+        this();
         this.agentJID = agentJID;
-        this.workgroups = new ArrayList<String>();
+        this.workgroups = new ArrayList<>();
     }
 
     /**
@@ -56,12 +67,13 @@ public class AgentWorkgroups extends IQ {
      * @param agentJID the id of the agent that can work in the list of workgroups.
      * @param workgroups the list of workgroup JIDs where the agent can work.
      */
-    public AgentWorkgroups(String agentJID, List<String> workgroups) {
+    public AgentWorkgroups(Jid agentJID, List<String> workgroups) {
+        this();
         this.agentJID = agentJID;
         this.workgroups = workgroups;
     }
 
-    public String getAgentJID() {
+    public Jid getAgentJID() {
         return agentJID;
     }
 
@@ -74,21 +86,16 @@ public class AgentWorkgroups extends IQ {
         return Collections.unmodifiableList(workgroups);
     }
 
-    public String getChildElementXML() {
-        StringBuilder buf = new StringBuilder();
+    @Override
+    protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder buf) {
+        buf.attribute("jid", agentJID).rightAngleBracket();
 
-        buf.append("<workgroups xmlns=\"http://jabber.org/protocol/workgroup\" jid=\"")
-                .append(agentJID)
-                .append("\">");
-
-        for (Iterator<String> it=workgroups.iterator(); it.hasNext();) {
+        for (Iterator<String> it = workgroups.iterator(); it.hasNext();) {
             String workgroupJID = it.next();
             buf.append("<workgroup jid=\"" + workgroupJID + "\"/>");
         }
 
-        buf.append("</workgroups>");
-
-        return buf.toString();
+        return buf;
     }
 
     /**
@@ -96,25 +103,22 @@ public class AgentWorkgroups extends IQ {
      *
      * @author Gaston Dombiak
      */
-    public static class Provider implements IQProvider {
+    public static class Provider extends IQProvider<AgentWorkgroups> {
 
-        public Provider() {
-            super();
-        }
-
-        public IQ parseIQ(XmlPullParser parser) throws Exception {
-            String agentJID = parser.getAttributeValue("", "jid");
-            List<String> workgroups = new ArrayList<String>();
+        @Override
+        public AgentWorkgroups parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException {
+            final Jid agentJID = ParserUtils.getJidAttribute(parser);
+            List<String> workgroups = new ArrayList<>();
 
             boolean done = false;
             while (!done) {
-                int eventType = parser.next();
-                if (eventType == XmlPullParser.START_TAG) {
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT) {
                     if (parser.getName().equals("workgroup")) {
                         workgroups.add(parser.getAttributeValue("", "jid"));
                     }
                 }
-                else if (eventType == XmlPullParser.END_TAG) {
+                else if (eventType == XmlPullParser.Event.END_ELEMENT) {
                     if (parser.getName().equals("workgroups")) {
                         done = true;
                     }

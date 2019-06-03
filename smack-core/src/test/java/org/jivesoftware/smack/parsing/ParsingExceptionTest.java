@@ -16,26 +16,30 @@
  */
 package org.jivesoftware.smack.parsing;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.jivesoftware.smack.test.util.CharSequenceEquals.equalsCharSequence;
+import static org.junit.Assert.assertThat;
 
-import org.jivesoftware.smack.SmackException;
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
+import java.io.IOException;
+
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.ExtensionElementProvider;
 import org.jivesoftware.smack.provider.ProviderManager;
 import org.jivesoftware.smack.test.util.TestUtils;
 import org.jivesoftware.smack.util.PacketParserUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import org.xmlpull.v1.XmlPullParser;
 
 public class ParsingExceptionTest {
 
-    private final static String EXTENSION2 =
+    private static final String EXTENSION2 =
     "<extension2 xmlns='namespace'>" +
         "<bar node='testNode'>" +
             "<i id='testid1'>" +
+              "text content" +
             "</i>" +
         "</bar>" +
      "</extension2>";
@@ -52,10 +56,9 @@ public class ParsingExceptionTest {
 
     @Test
     public void consumeUnparsedInput() throws Exception {
-        final String MESSAGE_EXCEPTION_ELEMENT = 
+        final String MESSAGE_EXCEPTION_ELEMENT =
                         "<" + ThrowException.ELEMENT + " xmlns='" + ThrowException.NAMESPACE + "'>" +
-                            "<nothingInHere>" +
-                            "</nothingInHere>" +
+                            "<nothingInHere/>" +
                         "</" + ThrowException.ELEMENT + ">";
         XmlPullParser parser = TestUtils.getMessageParser(
                 "<message from='user@server.example' to='francisco@denmark.lit' id='foo'>" +
@@ -63,23 +66,22 @@ public class ParsingExceptionTest {
                     EXTENSION2 +
                 "</message>");
         int parserDepth = parser.getDepth();
-        String content = null;
+        CharSequence content = null;
         try {
             PacketParserUtils.parseMessage(parser);
         } catch (Exception e) {
-            content = PacketParserUtils.parseContentDepth(parser, parserDepth);
+            content = PacketParserUtils.parseContentDepth(parser, parserDepth, false);
         }
-        assertNotNull(content);
-        assertEquals(MESSAGE_EXCEPTION_ELEMENT + EXTENSION2 + "</message>", content);
+        assertThat(MESSAGE_EXCEPTION_ELEMENT + EXTENSION2 + "</message>", equalsCharSequence(content));
     }
 
-    static class ThrowException implements PacketExtensionProvider {
+    static class ThrowException extends ExtensionElementProvider<ExtensionElement> {
         public static final String ELEMENT = "exception";
         public static final String NAMESPACE = "http://smack.jivesoftware.org/exception";
 
         @Override
-        public PacketExtension parseExtension(XmlPullParser parser) throws Exception {
-            throw new SmackException("Test Exception");
+        public ExtensionElement parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws IOException {
+            throw new IOException("Test Exception");
         }
 
     }

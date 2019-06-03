@@ -17,21 +17,32 @@
 
 package org.jivesoftware.smackx.workgroup.packet;
 
-import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.provider.IQProvider;
-import org.xmlpull.v1.XmlPullParser;
-
+import java.io.IOException;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.TimeZone;
+
+import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.parsing.SmackParsingException;
+import org.jivesoftware.smack.parsing.SmackParsingException.SmackTextParseException;
+import org.jivesoftware.smack.provider.IQProvider;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
 
 /**
- * Packet used for requesting information about occupants of a room or for retrieving information
+ * Stanza used for requesting information about occupants of a room or for retrieving information
  * such information.
  *
  * @author Gaston Dombiak
  */
 public class OccupantsInfo extends IQ {
 
+    @SuppressWarnings("DateFormatConstant")
     private static final SimpleDateFormat UTC_FORMAT = new SimpleDateFormat("yyyyMMdd'T'HH:mm:ss");
 
     static {
@@ -39,21 +50,22 @@ public class OccupantsInfo extends IQ {
     }
 
     /**
-     * Element name of the packet extension.
+     * Element name of the stanza extension.
      */
     public static final String ELEMENT_NAME = "occupants-info";
 
     /**
-     * Namespace of the packet extension.
+     * Namespace of the stanza extension.
      */
     public static final String NAMESPACE = "http://jivesoftware.com/protocol/workgroup";
 
-    private String roomID;
+    private final String roomID;
     private final Set<OccupantInfo> occupants;
 
     public OccupantsInfo(String roomID) {
+        super(ELEMENT_NAME, NAMESPACE);
         this.roomID = roomID;
-        this.occupants = new HashSet<OccupantInfo>();
+        this.occupants = new HashSet<>();
     }
 
     public String getRoomID() {
@@ -68,10 +80,9 @@ public class OccupantsInfo extends IQ {
         return Collections.unmodifiableSet(occupants);
     }
 
-    public String getChildElementXML() {
-        StringBuilder buf = new StringBuilder();
-        buf.append("<").append(ELEMENT_NAME).append(" xmlns=\"").append(NAMESPACE);
-        buf.append("\" roomID=\"").append(roomID).append("\">");
+    @Override
+    protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder buf) {
+        buf.append(" roomID=\"").append(roomID).append("\">");
         synchronized (occupants) {
             for (OccupantInfo occupant : occupants) {
                 buf.append("<occupant>");
@@ -85,20 +96,21 @@ public class OccupantsInfo extends IQ {
                 buf.append("</name>");
                 // Add the date when the occupant joined the room
                 buf.append("<joined>");
-                buf.append(UTC_FORMAT.format(occupant.getJoined()));
+                synchronized (UTC_FORMAT) {
+                    buf.append(UTC_FORMAT.format(occupant.getJoined()));
+                }
                 buf.append("</joined>");
                 buf.append("</occupant>");
             }
         }
-        buf.append("</").append(ELEMENT_NAME).append("> ");
-        return buf.toString();
+        return buf;
     }
 
     public static class OccupantInfo {
 
-        private String jid;
-        private String nickname;
-        private Date joined;
+        private final String jid;
+        private final String nickname;
+        private final Date joined;
 
         public OccupantInfo(String jid, String nickname, Date joined) {
             this.jid = jid;
@@ -120,23 +132,21 @@ public class OccupantsInfo extends IQ {
     }
 
     /**
-     * Packet extension provider for AgentStatusRequest packets.
+     * Stanza extension provider for AgentStatusRequest packets.
      */
-    public static class Provider implements IQProvider {
+    public static class Provider extends IQProvider<OccupantsInfo> {
 
-        public IQ parseIQ(XmlPullParser parser) throws Exception {
-            if (parser.getEventType() != XmlPullParser.START_TAG) {
-                throw new IllegalStateException("Parser not in proper position, or bad XML.");
-            }
+        @Override
+        public OccupantsInfo parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException, SmackTextParseException {
             OccupantsInfo occupantsInfo = new OccupantsInfo(parser.getAttributeValue("", "roomID"));
 
             boolean done = false;
             while (!done) {
-                int eventType = parser.next();
-                if ((eventType == XmlPullParser.START_TAG) &&
-                        ("occupant".equals(parser.getName()))) {
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT &&
+                        "occupant".equals(parser.getName())) {
                     occupantsInfo.occupants.add(parseOccupantInfo(parser));
-                } else if (eventType == XmlPullParser.END_TAG &&
+                } else if (eventType == XmlPullParser.Event.END_ELEMENT &&
                         ELEMENT_NAME.equals(parser.getName())) {
                     done = true;
                 }
@@ -144,23 +154,29 @@ public class OccupantsInfo extends IQ {
             return occupantsInfo;
         }
 
-        private OccupantInfo parseOccupantInfo(XmlPullParser parser) throws Exception {
+        private OccupantInfo parseOccupantInfo(XmlPullParser parser) throws XmlPullParserException, IOException, SmackTextParseException {
 
             boolean done = false;
             String jid = null;
             String nickname = null;
             Date joined = null;
             while (!done) {
-                int eventType = parser.next();
-                if ((eventType == XmlPullParser.START_TAG) && ("jid".equals(parser.getName()))) {
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT && "jid".equals(parser.getName())) {
                     jid = parser.nextText();
-                } else if ((eventType == XmlPullParser.START_TAG) &&
-                        ("nickname".equals(parser.getName()))) {
+                } else if (eventType == XmlPullParser.Event.START_ELEMENT &&
+                        "nickname".equals(parser.getName())) {
                     nickname = parser.nextText();
-                } else if ((eventType == XmlPullParser.START_TAG) &&
-                        ("joined".equals(parser.getName()))) {
-                    joined = UTC_FORMAT.parse(parser.nextText());
-                } else if (eventType == XmlPullParser.END_TAG &&
+                } else if (eventType == XmlPullParser.Event.START_ELEMENT &&
+                        "joined".equals(parser.getName())) {
+                        synchronized (UTC_FORMAT) {
+                        try {
+                            joined = UTC_FORMAT.parse(parser.nextText());
+                        } catch (ParseException e) {
+                            throw new SmackParsingException.SmackTextParseException(e);
+                        }
+                        }
+                } else if (eventType == XmlPullParser.Event.END_ELEMENT &&
                         "occupant".equals(parser.getName())) {
                     done = true;
                 }

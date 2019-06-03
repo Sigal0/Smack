@@ -18,46 +18,40 @@ package org.jivesoftware.smackx.pubsub;
 
 /**
  * Represents a request to subscribe to a node.
- * 
+ *
  * @author Robin Collier
  */
-public class SubscribeExtension extends NodeExtension
-{
-	protected String jid;
-	
-	public SubscribeExtension(String subscribeJid)
-	{
-		super(PubSubElementType.SUBSCRIBE);
-		jid = subscribeJid;
-	}
-	
-	public SubscribeExtension(String subscribeJid, String nodeId)
-	{
-		super(PubSubElementType.SUBSCRIBE, nodeId);
-		jid = subscribeJid;
-	}
+public class SubscribeExtension extends NodeExtension {
+    protected String jid;
 
-	public String getJid()
-	{
-		return jid;
-	}
+    public SubscribeExtension(String subscribeJid) {
+        super(PubSubElementType.SUBSCRIBE);
+        jid = subscribeJid;
+    }
 
-	@Override
-	public String toXML()
-	{
-		StringBuilder builder = new StringBuilder("<");
-		builder.append(getElementName());
-		
-		if (getNode() != null)
-		{
-			builder.append(" node='");
-			builder.append(getNode());
-			builder.append("'");
-		}
-		builder.append(" jid='");
-		builder.append(getJid());
-		builder.append("'/>");
-		
-		return builder.toString();
-	}
+    public SubscribeExtension(String subscribeJid, String nodeId) {
+        super(PubSubElementType.SUBSCRIBE, nodeId);
+        jid = subscribeJid;
+    }
+
+    public String getJid() {
+        return jid;
+    }
+
+    @Override
+    public String toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
+        StringBuilder builder = new StringBuilder("<");
+        builder.append(getElementName());
+
+        if (getNode() != null) {
+            builder.append(" node='");
+            builder.append(getNode());
+            builder.append('\'');
+        }
+        builder.append(" jid='");
+        builder.append(getJid());
+        builder.append("'/>");
+
+        return builder.toString();
+    }
 }

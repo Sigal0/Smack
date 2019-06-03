@@ -16,34 +16,33 @@
  */
 package org.jivesoftware.smack;
 
+import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.Message;
-import org.jivesoftware.smack.packet.Packet;
 import org.jivesoftware.smack.packet.IQ.Type;
+import org.jivesoftware.smack.packet.Message;
+import org.jivesoftware.smack.packet.Stanza;
 
 /**
- * 
+ * A threaded dummy connection.
  * @author Robin Collier
  *
  */
 public class ThreadedDummyConnection extends DummyConnection {
-    private BlockingQueue<IQ> replyQ = new ArrayBlockingQueue<IQ>(1);
-    private BlockingQueue<Packet> messageQ = new LinkedBlockingQueue<Packet>(5);
+    private static final Logger LOGGER = Logger.getLogger(ThreadedDummyConnection.class.getName());
+
+    private final BlockingQueue<IQ> replyQ = new ArrayBlockingQueue<>(1);
+    private final BlockingQueue<Stanza> messageQ = new LinkedBlockingQueue<>(5);
     private volatile boolean timeout = false;
 
     @Override
-    public void sendPacket(Packet packet) {
-        try {
-            super.sendPacket(packet);
-        }
-        catch (NotConnectedException e) {
-            e.printStackTrace();
-        }
+    protected void sendStanzaInternal(Stanza packet) {
+        super.sendStanzaInternal(packet);
 
         if (packet instanceof IQ && !timeout) {
             timeout = false;
@@ -56,24 +55,25 @@ public class ThreadedDummyConnection extends DummyConnection {
                 replyPacket = IQ.createResultIQ((IQ) packet);
                 replyQ.add(replyPacket);
             }
-            replyPacket.setPacketID(packet.getPacketID());
-            replyPacket.setFrom(packet.getTo());
+            replyPacket.setStanzaId(packet.getStanzaId());
             replyPacket.setTo(packet.getFrom());
-            replyPacket.setType(Type.result);
+            if (replyPacket.getType() == null) {
+                replyPacket.setType(Type.result);
+            }
 
             new ProcessQueue(replyQ).start();
         }
     }
 
     /**
-     * Calling this method will cause the next sendPacket call with an IQ packet to timeout.
-     * This is accomplished by simply stopping the auto creating of the reply packet 
-     * or processing one that was entered via {@link #processPacket(Packet)}.
+     * Calling this method will cause the next sendStanza call with an IQ stanza to timeout.
+     * This is accomplished by simply stopping the auto creating of the reply stanza
+     * or processing one that was entered via {@link #processStanza(Stanza)}.
      */
     public void setTimeout() {
         timeout = true;
     }
-    
+
     public void addMessage(Message msgToProcess) {
         messageQ.add(msgToProcess);
     }
@@ -86,24 +86,30 @@ public class ThreadedDummyConnection extends DummyConnection {
         if (!messageQ.isEmpty())
             new ProcessQueue(messageQ).start();
         else
-            System.out.println("No messages to process");
+            LOGGER.warning("No messages to process");
     }
 
     class ProcessQueue extends Thread {
-        private BlockingQueue<? extends Packet> processQ;
+        private BlockingQueue<? extends Stanza> processQ;
 
-        ProcessQueue(BlockingQueue<? extends Packet> queue) {
+        ProcessQueue(BlockingQueue<? extends Stanza> queue) {
             processQ = queue;
         }
 
         @Override
         public void run() {
             try {
-                processPacket(processQ.take());
+                processStanza(processQ.take());
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                LOGGER.log(Level.WARNING, "exception", e);
             }
         }
-    };
+    }
+
+    public static ThreadedDummyConnection newInstance() throws SmackException, IOException, XMPPException, InterruptedException {
+        ThreadedDummyConnection threadedDummyConnection = new ThreadedDummyConnection();
+        threadedDummyConnection.connect();
+        return threadedDummyConnection;
+    }
 
 }

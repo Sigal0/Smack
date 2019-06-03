@@ -16,17 +16,21 @@
  */
 package org.jivesoftware.smackx.workgroup.settings;
 
-import org.jivesoftware.smackx.workgroup.util.ModelUtil;
-import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.provider.IQProvider;
-import org.xmlpull.v1.XmlPullParser;
+import java.io.IOException;
 
-public class SearchSettings extends IQ {
+import org.jivesoftware.smack.packet.SimpleIQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.IQProvider;
+import org.jivesoftware.smack.util.StringUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
+public class SearchSettings extends SimpleIQ {
     private String forumsLocation;
     private String kbLocation;
 
     public boolean isSearchEnabled() {
-        return ModelUtil.hasLength(getForumsLocation()) && ModelUtil.hasLength(getKbLocation());
+        return StringUtils.isNotEmpty(getForumsLocation()) && StringUtils.isNotEmpty(getKbLocation());
     }
 
     public String getForumsLocation() {
@@ -45,47 +49,36 @@ public class SearchSettings extends IQ {
         this.kbLocation = kbLocation;
     }
 
-    public boolean hasKB(){
-        return ModelUtil.hasLength(getKbLocation());
+    public boolean hasKB() {
+        return StringUtils.isNotEmpty(getKbLocation());
     }
 
-    public boolean hasForums(){
-        return ModelUtil.hasLength(getForumsLocation());
+    public boolean hasForums() {
+        return StringUtils.isNotEmpty(getForumsLocation());
     }
 
 
     /**
-     * Element name of the packet extension.
+     * Element name of the stanza extension.
      */
     public static final String ELEMENT_NAME = "search-settings";
 
     /**
-     * Namespace of the packet extension.
+     * Namespace of the stanza extension.
      */
     public static final String NAMESPACE = "http://jivesoftware.com/protocol/workgroup";
 
-    public String getChildElementXML() {
-        StringBuilder buf = new StringBuilder();
-
-        buf.append("<").append(ELEMENT_NAME).append(" xmlns=");
-        buf.append('"');
-        buf.append(NAMESPACE);
-        buf.append('"');
-        buf.append("></").append(ELEMENT_NAME).append("> ");
-        return buf.toString();
+    public SearchSettings() {
+        super(ELEMENT_NAME, NAMESPACE);
     }
 
-
     /**
-     * Packet extension provider for AgentStatusRequest packets.
+     * Stanza extension provider for AgentStatusRequest packets.
      */
-    public static class InternalProvider implements IQProvider {
+    public static class InternalProvider extends IQProvider<SearchSettings> {
 
-        public IQ parseIQ(XmlPullParser parser) throws Exception {
-            if (parser.getEventType() != XmlPullParser.START_TAG) {
-                throw new IllegalStateException("Parser not in proper position, or bad XML.");
-            }
-
+        @Override
+        public SearchSettings parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException {
             SearchSettings settings = new SearchSettings();
 
             boolean done = false;
@@ -93,14 +86,14 @@ public class SearchSettings extends IQ {
             String forums = null;
 
             while (!done) {
-                int eventType = parser.next();
-                if ((eventType == XmlPullParser.START_TAG) && ("forums".equals(parser.getName()))) {
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT && "forums".equals(parser.getName())) {
                     forums = parser.nextText();
                 }
-                else if ((eventType == XmlPullParser.START_TAG) && ("kb".equals(parser.getName()))) {
+                else if ((eventType == XmlPullParser.Event.START_ELEMENT) && "kb".equals(parser.getName())) {
                     kb = parser.nextText();
                 }
-                else if (eventType == XmlPullParser.END_TAG && "search-settings".equals(parser.getName())) {
+                else if (eventType == XmlPullParser.Event.END_ELEMENT && "search-settings".equals(parser.getName())) {
                     done = true;
                 }
             }

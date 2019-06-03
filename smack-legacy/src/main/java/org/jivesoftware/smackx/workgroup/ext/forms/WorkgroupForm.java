@@ -17,32 +17,30 @@
 
 package org.jivesoftware.smackx.workgroup.ext.forms;
 
-import org.jivesoftware.smack.packet.IQ;
+import java.io.IOException;
+
+import org.jivesoftware.smack.packet.SimpleIQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.parsing.SmackParsingException;
 import org.jivesoftware.smack.provider.IQProvider;
 import org.jivesoftware.smack.util.PacketParserUtils;
-import org.xmlpull.v1.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
 
-public class WorkgroupForm extends IQ {
+public class WorkgroupForm extends SimpleIQ {
 
     /**
-     * Element name of the packet extension.
+     * Element name of the stanza extension.
      */
     public static final String ELEMENT_NAME = "workgroup-form";
 
     /**
-     * Namespace of the packet extension.
+     * Namespace of the stanza extension.
      */
     public static final String NAMESPACE = "http://jivesoftware.com/protocol/workgroup";
 
-    public String getChildElementXML() {
-        StringBuilder buf = new StringBuilder();
-
-        buf.append("<").append(ELEMENT_NAME).append(" xmlns=\"").append(NAMESPACE).append("\">");
-        // Add packet extensions, if any are defined.
-        buf.append(getExtensionsXML());
-        buf.append("</").append(ELEMENT_NAME).append("> ");
-
-        return buf.toString();
+    public WorkgroupForm() {
+        super(ELEMENT_NAME, NAMESPACE);
     }
 
     /**
@@ -50,24 +48,20 @@ public class WorkgroupForm extends IQ {
      *
      * @author Derek DeMoro
      */
-    public static class InternalProvider implements IQProvider {
+    public static class InternalProvider extends IQProvider<WorkgroupForm> {
 
-        public InternalProvider() {
-            super();
-        }
-
-        public IQ parseIQ(XmlPullParser parser) throws Exception {
+        @Override
+        public WorkgroupForm parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException, SmackParsingException {
             WorkgroupForm answer = new WorkgroupForm();
 
             boolean done = false;
             while (!done) {
-                int eventType = parser.next();
-                if (eventType == XmlPullParser.START_TAG) {
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT) {
                     // Parse the packet extension
-                    answer.addExtension(PacketParserUtils.parsePacketExtension(parser.getName(),
-                            parser.getNamespace(), parser));
+                    PacketParserUtils.addExtensionElement(answer, parser, xmlEnvironment);
                 }
-                else if (eventType == XmlPullParser.END_TAG) {
+                else if (eventType == XmlPullParser.Event.END_ELEMENT) {
                     if (parser.getName().equals(ELEMENT_NAME)) {
                         done = true;
                     }

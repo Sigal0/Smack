@@ -26,7 +26,7 @@ import org.jivesoftware.smackx.bytestreams.BytestreamSession;
 
 /**
  * Socks5BytestreamSession class represents a SOCKS5 Bytestream session.
- * 
+ *
  * @author Henning Staib
  */
 public class Socks5BytestreamSession implements BytestreamSession {
@@ -37,7 +37,7 @@ public class Socks5BytestreamSession implements BytestreamSession {
     /* flag to indicate if this session is a direct or mediated connection */
     private final boolean isDirect;
 
-    protected Socks5BytestreamSession(Socket socket, boolean isDirect) {
+    public Socks5BytestreamSession(Socket socket, boolean isDirect) {
         this.socket = socket;
         this.isDirect = isDirect;
     }
@@ -45,7 +45,7 @@ public class Socks5BytestreamSession implements BytestreamSession {
     /**
      * Returns <code>true</code> if the session is established through a direct connection between
      * the initiator and target, <code>false</code> if the session is mediated over a SOCKS proxy.
-     * 
+     *
      * @return <code>true</code> if session is a direct connection, <code>false</code> if session is
      *         mediated over a SOCKS5 proxy
      */
@@ -56,7 +56,7 @@ public class Socks5BytestreamSession implements BytestreamSession {
     /**
      * Returns <code>true</code> if the session is mediated over a SOCKS proxy, <code>false</code>
      * if this session is established through a direct connection between the initiator and target.
-     * 
+     *
      * @return <code>true</code> if session is mediated over a SOCKS5 proxy, <code>false</code> if
      *         session is a direct connection
      */
@@ -64,14 +64,17 @@ public class Socks5BytestreamSession implements BytestreamSession {
         return !this.isDirect;
     }
 
+    @Override
     public InputStream getInputStream() throws IOException {
         return this.socket.getInputStream();
     }
 
+    @Override
     public OutputStream getOutputStream() throws IOException {
         return this.socket.getOutputStream();
     }
 
+    @Override
     public int getReadTimeout() throws IOException {
         try {
             return this.socket.getSoTimeout();
@@ -81,6 +84,7 @@ public class Socks5BytestreamSession implements BytestreamSession {
         }
     }
 
+    @Override
     public void setReadTimeout(int timeout) throws IOException {
         try {
             this.socket.setSoTimeout(timeout);
@@ -90,6 +94,7 @@ public class Socks5BytestreamSession implements BytestreamSession {
         }
     }
 
+    @Override
     public void close() throws IOException {
         this.socket.close();
     }

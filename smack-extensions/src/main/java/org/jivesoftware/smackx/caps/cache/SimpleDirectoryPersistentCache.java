@@ -1,6 +1,6 @@
 /**
  *
- * Copyright © 2011-2014 Florian Schmaus
+ * Copyright © 2011-2019 Florian Schmaus
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,50 +25,51 @@ import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import org.jivesoftware.smack.util.Base32Encoder;
 import org.jivesoftware.smack.util.PacketParserUtils;
-import org.jivesoftware.smack.util.StringEncoder;
+import org.jivesoftware.smack.util.stringencoder.Base32;
+import org.jivesoftware.smack.util.stringencoder.StringEncoder;
+
 import org.jivesoftware.smackx.disco.packet.DiscoverInfo;
 
 /**
  * Simple implementation of an EntityCapsPersistentCache that uses a directory
  * to store the Caps information for every known node. Every node is represented
  * by a file.
- * 
+ *
  * @author Florian Schmaus
- * 
+ *
  */
 public class SimpleDirectoryPersistentCache implements EntityCapsPersistentCache {
     private static final Logger LOGGER = Logger.getLogger(SimpleDirectoryPersistentCache.class.getName());
-    
-    private File cacheDir;
-    private StringEncoder filenameEncoder;
+
+    private final File cacheDir;
+    private final StringEncoder<String> filenameEncoder;
 
     /**
      * Creates a new SimpleDirectoryPersistentCache Object. Make sure that the
      * cacheDir exists and that it's an directory.
      * <p>
-     * Default filename encoder {@link Base32Encoder}, as this will work on all 
-     * file systems, both case sensitive and case insensitive.  It does however 
+     * Default filename encoder {@link Base32}, as this will work on all
+     * file systems, both case sensitive and case insensitive.  It does however
      * produce longer filenames.
-     * 
+     *
      * @param cacheDir
      */
     public SimpleDirectoryPersistentCache(File cacheDir) {
-        this(cacheDir, Base32Encoder.getInstance());
+        this(cacheDir, Base32.getStringEncoder());
     }
 
     /**
      * Creates a new SimpleDirectoryPersistentCache Object. Make sure that the
      * cacheDir exists and that it's an directory.
-     * 
+     *
      * If your cacheDir is case insensitive then make sure to set the
-     * StringEncoder to {@link Base32Encoder} (which is the default).
-     * 
+     * StringEncoder to {@link Base32} (which is the default).
+     *
      * @param cacheDir The directory where the cache will be stored.
      * @param filenameEncoder Encodes the node string into a filename.
      */
-    public SimpleDirectoryPersistentCache(File cacheDir, StringEncoder filenameEncoder) {
+    public SimpleDirectoryPersistentCache(File cacheDir, StringEncoder<String> filenameEncoder) {
         if (!cacheDir.exists())
             throw new IllegalStateException("Cache directory \"" + cacheDir + "\" does not exist");
         if (!cacheDir.isDirectory())
@@ -107,54 +108,48 @@ public class SimpleDirectoryPersistentCache implements EntityCapsPersistentCache
 
     private File getFileFor(String nodeVer) {
         String filename = filenameEncoder.encode(nodeVer);
-        File nodeFile = new File(cacheDir, filename);
-        return nodeFile;
+        return new File(cacheDir, filename);
     }
 
     @Override
     public void emptyCache() {
         File[] files = cacheDir.listFiles();
+        if (files == null) {
+            return;
+        }
         for (File f : files) {
             f.delete();
         }
     }
 
     /**
-     * Writes the DiscoverInfo packet to an file
-     * 
+     * Writes the DiscoverInfo stanza to an file
+     *
      * @param file
      * @param info
      * @throws IOException
      */
     private static void writeInfoToFile(File file, DiscoverInfo info) throws IOException {
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-        try {
+        try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(file))) {
             dos.writeUTF(info.toXML().toString());
-        } finally {
-            dos.close();
         }
     }
 
     /**
-     * Tries to restore an DiscoverInfo packet from a file.
-     * 
+     * Tries to restore an DiscoverInfo stanza from a file.
+     *
      * @param file
      * @return the restored DiscoverInfo
      * @throws Exception
      */
     private static DiscoverInfo restoreInfoFromFile(File file) throws Exception {
-        DataInputStream dis = new DataInputStream(new FileInputStream(file));
-        String fileContent = null;
-        try {
+        String fileContent;
+        try (DataInputStream dis = new DataInputStream(new FileInputStream(file))) {
             fileContent = dis.readUTF();
-        } finally {
-            dis.close();
         }
         if (fileContent == null) {
             return null;
         }
-        DiscoverInfo info = (DiscoverInfo) PacketParserUtils.parseStanza(fileContent);
-
-        return info;
+        return PacketParserUtils.parseStanza(fileContent);
     }
 }

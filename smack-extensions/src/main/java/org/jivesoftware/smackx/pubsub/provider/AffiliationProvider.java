@@ -16,25 +16,54 @@
  */
 package org.jivesoftware.smackx.pubsub.provider;
 
-import java.util.List;
-import java.util.Map;
+import java.io.IOException;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.EmbeddedExtensionProvider;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.ExtensionElementProvider;
+import org.jivesoftware.smack.util.ParserUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+
 import org.jivesoftware.smackx.pubsub.Affiliation;
+import org.jivesoftware.smackx.pubsub.Affiliation.AffiliationNamespace;
+
+import org.jxmpp.jid.BareJid;
 
 /**
  * Parses the affiliation element out of the reply stanza from the server
  * as specified in the <a href="http://xmpp.org/extensions/xep-0060.html#schemas-pubsub">affiliation schema</a>.
- * 
+ *
  * @author Robin Collier
  */
-public class AffiliationProvider extends EmbeddedExtensionProvider
-{
-	@Override
-	protected PacketExtension createReturnExtension(String currentElement, String currentNamespace, Map<String, String> attributeMap, List<? extends PacketExtension> content)
-	{
-		return new Affiliation(attributeMap.get("node"), Affiliation.Type.valueOf(attributeMap.get("affiliation")));
-	}
+public class AffiliationProvider extends ExtensionElementProvider<Affiliation> {
+
+    @Override
+    public Affiliation parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws IOException {
+        String node = parser.getAttributeValue(null, "node");
+        BareJid jid = ParserUtils.getBareJidAttribute(parser);
+        String namespaceString = parser.getNamespace();
+        AffiliationNamespace namespace = AffiliationNamespace.fromXmlns(namespaceString);
+
+        String affiliationString = parser.getAttributeValue(null, "affiliation");
+        Affiliation.Type affiliationType = null;
+        if (affiliationString != null) {
+            affiliationType = Affiliation.Type.valueOf(affiliationString);
+        }
+        Affiliation affiliation;
+        if (node != null && jid == null) {
+            // affiliationType may be empty
+            affiliation = new Affiliation(node, affiliationType, namespace);
+        }
+        else if (node == null && jid != null) {
+            affiliation = new Affiliation(jid, affiliationType, namespace);
+        }
+        else {
+            // TODO: Should be SmackParsingException.
+            throw new IOException("Invalid affililation. Either one of 'node' or 'jid' must be set"
+                    + ". Node: " + node
+                    + ". Jid: " + jid
+                    + '.');
+        }
+        return affiliation;
+    }
 
 }

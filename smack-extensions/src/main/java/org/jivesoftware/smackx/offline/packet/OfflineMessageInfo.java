@@ -17,9 +17,13 @@
 
 package org.jivesoftware.smackx.offline.packet;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
-import org.xmlpull.v1.XmlPullParser;
+import java.io.IOException;
+
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.ExtensionElementProvider;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
 
 /**
  * OfflineMessageInfo is an extension included in the retrieved offline messages requested by
@@ -29,7 +33,7 @@ import org.xmlpull.v1.XmlPullParser;
  *
  * @author Gaston Dombiak
  */
-public class OfflineMessageInfo implements PacketExtension {
+public class OfflineMessageInfo implements ExtensionElement {
 
     private String node = null;
 
@@ -37,8 +41,9 @@ public class OfflineMessageInfo implements PacketExtension {
     * Returns the XML element name of the extension sub-packet root element.
     * Always returns "offline"
     *
-    * @return the XML element name of the packet extension.
+    * @return the XML element name of the stanza extension.
     */
+    @Override
     public String getElementName() {
         return "offline";
     }
@@ -47,8 +52,9 @@ public class OfflineMessageInfo implements PacketExtension {
      * Returns the XML namespace of the extension sub-packet root element.
      * According the specification the namespace is always "http://jabber.org/protocol/offline"
      *
-     * @return the XML namespace of the packet extension.
+     * @return the XML namespace of the stanza extension.
      */
+    @Override
     public String getNamespace() {
         return "http://jabber.org/protocol/offline";
     }
@@ -75,43 +81,39 @@ public class OfflineMessageInfo implements PacketExtension {
         this.node = node;
     }
 
-    public String toXML() {
+    @Override
+    public String toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
         StringBuilder buf = new StringBuilder();
-        buf.append("<").append(getElementName()).append(" xmlns=\"").append(getNamespace()).append(
+        buf.append('<').append(getElementName()).append(" xmlns=\"").append(getNamespace()).append(
             "\">");
         if (getNode() != null)
             buf.append("<item node=\"").append(getNode()).append("\"/>");
-        buf.append("</").append(getElementName()).append(">");
+        buf.append("</").append(getElementName()).append('>');
         return buf.toString();
     }
 
-    public static class Provider implements PacketExtensionProvider {
+    public static class Provider extends ExtensionElementProvider<OfflineMessageInfo> {
 
         /**
-         * Creates a new Provider.
-         * ProviderManager requires that every PacketExtensionProvider has a public,
-         * no-argument constructor
-         */
-        public Provider() {
-        }
-
-        /**
-         * Parses a OfflineMessageInfo packet (extension sub-packet).
+         * Parses a OfflineMessageInfo stanza (extension sub-packet).
          *
          * @param parser the XML parser, positioned at the starting element of the extension.
          * @return a PacketExtension.
-         * @throws Exception if a parsing error occurs.
+         * @throws IOException
+         * @throws XmlPullParserException
          */
-        public PacketExtension parseExtension(XmlPullParser parser)
-            throws Exception {
+        @Override
+        public OfflineMessageInfo parse(XmlPullParser parser,
+                        int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException,
+                        IOException {
             OfflineMessageInfo info = new OfflineMessageInfo();
             boolean done = false;
             while (!done) {
-                int eventType = parser.next();
-                if (eventType == XmlPullParser.START_TAG) {
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT) {
                     if (parser.getName().equals("item"))
                         info.setNode(parser.getAttributeValue("", "node"));
-                } else if (eventType == XmlPullParser.END_TAG) {
+                } else if (eventType == XmlPullParser.Event.END_ELEMENT) {
                     if (parser.getName().equals("offline")) {
                         done = true;
                     }

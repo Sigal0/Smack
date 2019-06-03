@@ -17,29 +17,35 @@
 
 package org.jivesoftware.smackx.muc.provider;
 
-import org.jivesoftware.smack.packet.IQ;
+import java.io.IOException;
+
+import org.jivesoftware.smack.packet.XmlEnvironment;
 import org.jivesoftware.smack.provider.IQProvider;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
 import org.jivesoftware.smackx.muc.packet.MUCAdmin;
-import org.xmlpull.v1.XmlPullParser;
 
 /**
  * The MUCAdminProvider parses MUCAdmin packets. (@see MUCAdmin)
- * 
+ *
  * @author Gaston Dombiak
  */
-public class MUCAdminProvider implements IQProvider {
+public class MUCAdminProvider extends IQProvider<MUCAdmin> {
 
-    public IQ parseIQ(XmlPullParser parser) throws Exception {
+    @Override
+    public MUCAdmin parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment)
+                    throws XmlPullParserException, IOException {
         MUCAdmin mucAdmin = new MUCAdmin();
         boolean done = false;
         while (!done) {
-            int eventType = parser.next();
-            if (eventType == XmlPullParser.START_TAG) {
+            XmlPullParser.Event eventType = parser.next();
+            if (eventType == XmlPullParser.Event.START_ELEMENT) {
                 if (parser.getName().equals("item")) {
-                    mucAdmin.addItem(parseItem(parser));
+                    mucAdmin.addItem(MUCParserUtils.parseItem(parser));
                 }
             }
-            else if (eventType == XmlPullParser.END_TAG) {
+            else if (eventType == XmlPullParser.Event.END_ELEMENT) {
                 if (parser.getName().equals("query")) {
                     done = true;
                 }
@@ -47,32 +53,5 @@ public class MUCAdminProvider implements IQProvider {
         }
 
         return mucAdmin;
-    }
-
-    private MUCAdmin.Item parseItem(XmlPullParser parser) throws Exception {
-        boolean done = false;
-        MUCAdmin.Item item =
-            new MUCAdmin.Item(
-                parser.getAttributeValue("", "affiliation"),
-                parser.getAttributeValue("", "role"));
-        item.setNick(parser.getAttributeValue("", "nick"));
-        item.setJid(parser.getAttributeValue("", "jid"));
-        while (!done) {
-            int eventType = parser.next();
-            if (eventType == XmlPullParser.START_TAG) {
-                if (parser.getName().equals("actor")) {
-                    item.setActor(parser.getAttributeValue("", "jid"));
-                }
-                if (parser.getName().equals("reason")) {
-                    item.setReason(parser.nextText());
-                }
-            }
-            else if (eventType == XmlPullParser.END_TAG) {
-                if (parser.getName().equals("item")) {
-                    done = true;
-                }
-            }
-        }
-        return item;
     }
 }

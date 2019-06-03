@@ -16,23 +16,24 @@
  */
 package org.jivesoftware.smackx.bytestreams.ibb.packet;
 
-import static org.custommonkey.xmlunit.XMLAssert.assertXMLEqual;
+import static org.jivesoftware.smack.test.util.XmlUnitUtils.assertXmlSimilar;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Properties;
 
-import org.jivesoftware.smackx.bytestreams.ibb.packet.DataPacketExtension;
-import org.junit.Test;
+import org.jivesoftware.smackx.InitExtensions;
 
 import com.jamesmurty.utils.XMLBuilder;
+import org.junit.Test;
 
 /**
  * Test for the DataPacketExtension class.
- * 
+ *
  * @author Henning Staib
  */
-public class DataPacketExtensionTest {
+public class DataPacketExtensionTest extends InitExtensions {
 
     @Test(expected = IllegalArgumentException.class)
     public void shouldNotInstantiateWithInvalidArgument1() {
@@ -74,11 +75,11 @@ public class DataPacketExtensionTest {
         assertNull(data.getDecodedData());
 
         // invalid Base64 character
-        data = new DataPacketExtension("sessionID", 0, new String(new byte[] { 123 }));
+        data = new DataPacketExtension("sessionID", 0, new String(new byte[] { 123 }, StandardCharsets.UTF_8));
         assertNull(data.getDecodedData());
     }
-    
-    private static Properties outputProperties = new Properties();
+
+    private static final Properties outputProperties = new Properties();
     {
         outputProperties.put(javax.xml.transform.OutputKeys.OMIT_XML_DECLARATION, "yes");
     }
@@ -93,7 +94,7 @@ public class DataPacketExtensionTest {
             .asString(outputProperties);
 
         DataPacketExtension data = new DataPacketExtension("i781hf64", 0, "DATA");
-        assertXMLEqual(control, data.toXML().toString());
+        assertXmlSimilar(control, data.toXML().toString());
     }
 
 }

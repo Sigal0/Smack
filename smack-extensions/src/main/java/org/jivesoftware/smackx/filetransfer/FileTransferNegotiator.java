@@ -27,20 +27,24 @@ import java.util.Random;
 import java.util.WeakHashMap;
 
 import org.jivesoftware.smack.Manager;
+import org.jivesoftware.smack.SmackException.NoResponseException;
 import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.XMPPConnection;
-import org.jivesoftware.smack.PacketCollector;
 import org.jivesoftware.smack.XMPPException.XMPPErrorException;
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.Packet;
-import org.jivesoftware.smack.packet.XMPPError;
+import org.jivesoftware.smack.packet.Stanza;
+import org.jivesoftware.smack.packet.StanzaError;
+
 import org.jivesoftware.smackx.bytestreams.ibb.packet.DataPacketExtension;
 import org.jivesoftware.smackx.bytestreams.socks5.packet.Bytestream;
 import org.jivesoftware.smackx.disco.ServiceDiscoveryManager;
+import org.jivesoftware.smackx.filetransfer.FileTransferException.NoAcceptableTransferMechanisms;
+import org.jivesoftware.smackx.filetransfer.FileTransferException.NoStreamMethodsOfferedException;
 import org.jivesoftware.smackx.si.packet.StreamInitiation;
-import org.jivesoftware.smackx.xdata.Form;
 import org.jivesoftware.smackx.xdata.FormField;
 import org.jivesoftware.smackx.xdata.packet.DataForm;
+
+import org.jxmpp.jid.Jid;
 
 /**
  * Manages the negotiation of file transfers according to XEP-0096. If a file is
@@ -50,13 +54,13 @@ import org.jivesoftware.smackx.xdata.packet.DataForm;
  * @author Alexander Wenckus
  * @see <a href="http://xmpp.org/extensions/xep-0096.html">XEP-0096: SI File Transfer</a>
  */
-public class FileTransferNegotiator extends Manager {
+public final class FileTransferNegotiator extends Manager {
 
     public static final String SI_NAMESPACE = "http://jabber.org/protocol/si";
     public static final String SI_PROFILE_FILE_TRANSFER_NAMESPACE = "http://jabber.org/protocol/si/profile/file-transfer";
     private static final String[] NAMESPACE = { SI_NAMESPACE, SI_PROFILE_FILE_TRANSFER_NAMESPACE };
 
-    private static final Map<XMPPConnection, FileTransferNegotiator> INSTANCES = new WeakHashMap<XMPPConnection, FileTransferNegotiator>();
+    private static final Map<XMPPConnection, FileTransferNegotiator> INSTANCES = new WeakHashMap<>();
 
     private static final String STREAM_INIT_PREFIX = "jsi_";
 
@@ -101,7 +105,7 @@ public class FileTransferNegotiator extends Manager {
         ServiceDiscoveryManager manager = ServiceDiscoveryManager
                 .getInstanceFor(connection);
 
-        List<String> namespaces = new ArrayList<String>();
+        List<String> namespaces = new ArrayList<>();
         namespaces.addAll(Arrays.asList(NAMESPACE));
         namespaces.add(DataPacketExtension.NAMESPACE);
         if (!IBB_ONLY) {
@@ -128,7 +132,7 @@ public class FileTransferNegotiator extends Manager {
         ServiceDiscoveryManager manager = ServiceDiscoveryManager
                 .getInstanceFor(connection);
 
-        List<String> namespaces = new ArrayList<String>();
+        List<String> namespaces = new ArrayList<>();
         namespaces.addAll(Arrays.asList(NAMESPACE));
         namespaces.add(DataPacketExtension.NAMESPACE);
         if (!IBB_ONLY) {
@@ -149,7 +153,7 @@ public class FileTransferNegotiator extends Manager {
      * @return Returns a collection of the supported transfer protocols.
      */
     public static Collection<String> getSupportedProtocols() {
-        List<String> protocols = new ArrayList<String>();
+        List<String> protocols = new ArrayList<>();
         protocols.add(DataPacketExtension.NAMESPACE);
         if (!IBB_ONLY) {
             protocols.add(Bytestream.NAMESPACE);
@@ -176,33 +180,34 @@ public class FileTransferNegotiator extends Manager {
      *
      * @param request The related file transfer request.
      * @return The file transfer object that handles the transfer
-     * @throws XMPPErrorException If there are either no stream methods contained in the packet, or
+     * @throws NoStreamMethodsOfferedException If there are either no stream methods contained in the packet, or
      *                       there is not an appropriate stream method.
-     * @throws NotConnectedException 
+     * @throws NotConnectedException
+     * @throws NoAcceptableTransferMechanisms
+     * @throws InterruptedException
      */
     public StreamNegotiator selectStreamNegotiator(
-            FileTransferRequest request) throws XMPPErrorException, NotConnectedException {
+            FileTransferRequest request) throws NotConnectedException, NoStreamMethodsOfferedException, NoAcceptableTransferMechanisms, InterruptedException {
         StreamInitiation si = request.getStreamInitiation();
         FormField streamMethodField = getStreamMethodField(si
                 .getFeatureNegotiationForm());
 
         if (streamMethodField == null) {
-            String errorMessage = "No stream methods contained in packet.";
-            XMPPError error = new XMPPError(XMPPError.Condition.bad_request, errorMessage);
+            String errorMessage = "No stream methods contained in stanza.";
+            StanzaError.Builder error = StanzaError.from(StanzaError.Condition.bad_request, errorMessage);
             IQ iqPacket = IQ.createErrorResponse(si, error);
-            connection().sendPacket(iqPacket);
-            throw new XMPPErrorException(errorMessage, error);
+            connection().sendStanza(iqPacket);
+            throw new FileTransferException.NoStreamMethodsOfferedException();
         }
 
         // select the appropriate protocol
-
         StreamNegotiator selectedStreamNegotiator;
         try {
             selectedStreamNegotiator = getNegotiator(streamMethodField);
         }
-        catch (XMPPErrorException e) {
-            IQ iqPacket = IQ.createErrorResponse(si, e.getXMPPError());
-            connection().sendPacket(iqPacket);
+        catch (NoAcceptableTransferMechanisms e) {
+            IQ iqPacket = IQ.createErrorResponse(si, StanzaError.from(StanzaError.Condition.bad_request, "No acceptable transfer mechanism"));
+            connection().sendStanza(iqPacket);
             throw e;
         }
 
@@ -211,17 +216,12 @@ public class FileTransferNegotiator extends Manager {
         return selectedStreamNegotiator;
     }
 
-    private FormField getStreamMethodField(DataForm form) {
-        for (FormField field : form.getFields()) {
-            if (field.getVariable().equals(STREAM_DATA_FIELD_NAME)) {
-                return field;
-            }
-        }
-        return null;
+    private static FormField getStreamMethodField(DataForm form) {
+        return form.getField(STREAM_DATA_FIELD_NAME);
     }
 
     private StreamNegotiator getNegotiator(final FormField field)
-            throws XMPPErrorException {
+            throws NoAcceptableTransferMechanisms {
         String variable;
         boolean isByteStream = false;
         boolean isIBB = false;
@@ -236,12 +236,10 @@ public class FileTransferNegotiator extends Manager {
         }
 
         if (!isByteStream && !isIBB) {
-            XMPPError error = new XMPPError(XMPPError.Condition.bad_request,
-                    "No acceptable transfer mechanism");
-            throw new XMPPErrorException(error);
+            throw new FileTransferException.NoAcceptableTransferMechanisms();
         }
 
-        if (isByteStream && isIBB) { 
+        if (isByteStream && isIBB) {
             return new FaultTolerantNegotiator(connection(),
                     byteStreamTransferManager,
                     inbandTransferManager);
@@ -255,26 +253,14 @@ public class FileTransferNegotiator extends Manager {
     }
 
     /**
-     * Reject a stream initiation request from a remote user.
-     *
-     * @param si The Stream Initiation request to reject.
-     * @throws NotConnectedException 
-     */
-    public void rejectStream(final StreamInitiation si) throws NotConnectedException {
-        XMPPError error = new XMPPError(XMPPError.Condition.forbidden, "Offer Declined");
-        IQ iqPacket = IQ.createErrorResponse(si, error);
-        connection().sendPacket(iqPacket);
-    }
-
-    /**
      * Returns a new, unique, stream ID to identify a file transfer.
      *
      * @return Returns a new, unique, stream ID to identify a file transfer.
      */
-    public String getNextStreamID() {
+    public static String getNextStreamID() {
         StringBuilder buffer = new StringBuilder();
         buffer.append(STREAM_INIT_PREFIX);
-        buffer.append(Math.abs(randomGenerator.nextLong()));
+        buffer.append(randomGenerator.nextInt(Integer.MAX_VALUE) + randomGenerator.nextInt(Integer.MAX_VALUE));
 
         return buffer.toString();
     }
@@ -283,19 +269,20 @@ public class FileTransferNegotiator extends Manager {
      * Send a request to another user to send them a file. The other user has
      * the option of, accepting, rejecting, or not responding to a received file
      * transfer request.
-     * <p/>
-     * If they accept, the packet will contain the other user's chosen stream
+     * <p>
+     * If they accept, the stanza will contain the other user's chosen stream
      * type to send the file across. The two choices this implementation
      * provides to the other user for file transfer are <a
      * href="http://www.xmpp.org/extensions/jep-0065.html">SOCKS5 Bytestreams</a>,
      * which is the preferred method of transfer, and <a
      * href="http://www.xmpp.org/extensions/jep-0047.html">In-Band Bytestreams</a>,
      * which is the fallback mechanism.
-     * <p/>
+     * </p>
+     * <p>
      * The other user may choose to decline the file request if they do not
      * desire the file, their client does not support XEP-0096, or if there are
      * no acceptable means to transfer the file.
-     * <p/>
+     * </p>
      * Finally, if the other user does not respond this method will return null
      * after the specified timeout.
      *
@@ -309,11 +296,14 @@ public class FileTransferNegotiator extends Manager {
      *                        user to respond. If they do not respond in time, this
      * @return Returns the stream negotiator selected by the peer.
      * @throws XMPPErrorException Thrown if there is an error negotiating the file transfer.
-     * @throws NotConnectedException 
+     * @throws NotConnectedException
+     * @throws NoResponseException
+     * @throws NoAcceptableTransferMechanisms
+     * @throws InterruptedException
      */
-    public StreamNegotiator negotiateOutgoingTransfer(final String userID,
+    public StreamNegotiator negotiateOutgoingTransfer(final Jid userID,
             final String streamID, final String fileName, final long size,
-            final String desc, int responseTimeout) throws XMPPErrorException, NotConnectedException {
+            final String desc, int responseTimeout) throws XMPPErrorException, NotConnectedException, NoResponseException, NoAcceptableTransferMechanisms, InterruptedException {
         StreamInitiation si = new StreamInitiation();
         si.setSessionID(streamID);
         si.setMimeType(URLConnection.guessContentTypeFromName(fileName));
@@ -328,9 +318,8 @@ public class FileTransferNegotiator extends Manager {
         si.setTo(userID);
         si.setType(IQ.Type.set);
 
-        PacketCollector collector = connection().createPacketCollectorAndSend(si);
-        Packet siResponse = collector.nextResult(responseTimeout);
-        collector.cancel();
+        Stanza siResponse = connection().createStanzaCollectorAndSend(si).nextResultOrThrow(
+                        responseTimeout);
 
         if (siResponse instanceof IQ) {
             IQ iqResponse = (IQ) siResponse;
@@ -341,7 +330,7 @@ public class FileTransferNegotiator extends Manager {
 
             }
             else {
-                throw new XMPPErrorException(iqResponse.getError());
+                throw new XMPPErrorException(iqResponse, iqResponse.getError());
             }
         }
         else {
@@ -349,23 +338,21 @@ public class FileTransferNegotiator extends Manager {
         }
     }
 
-    private StreamNegotiator getOutgoingNegotiator(final FormField field)
-            throws XMPPErrorException {
+    private StreamNegotiator getOutgoingNegotiator(final FormField field) throws NoAcceptableTransferMechanisms {
         boolean isByteStream = false;
         boolean isIBB = false;
-        for (String variable : field.getValues()) {
-            if (variable.equals(Bytestream.NAMESPACE) && !IBB_ONLY) {
+        for (CharSequence variable : field.getValues()) {
+            String variableString = variable.toString();
+            if (variableString.equals(Bytestream.NAMESPACE) && !IBB_ONLY) {
                 isByteStream = true;
             }
-            else if (variable.equals(DataPacketExtension.NAMESPACE)) {
+            else if (variableString.equals(DataPacketExtension.NAMESPACE)) {
                 isIBB = true;
             }
         }
 
         if (!isByteStream && !isIBB) {
-            XMPPError error = new XMPPError(XMPPError.Condition.bad_request,
-                    "No acceptable transfer mechanism");
-            throw new XMPPErrorException(error);
+            throw new FileTransferException.NoAcceptableTransferMechanisms();
         }
 
         if (isByteStream && isIBB) {
@@ -380,10 +367,10 @@ public class FileTransferNegotiator extends Manager {
         }
     }
 
-    private DataForm createDefaultInitiationForm() {
-        DataForm form = new DataForm(Form.TYPE_FORM);
+    private static DataForm createDefaultInitiationForm() {
+        DataForm form = new DataForm(DataForm.Type.form);
         FormField field = new FormField(STREAM_DATA_FIELD_NAME);
-        field.setType(FormField.TYPE_LIST_SINGLE);
+        field.setType(FormField.Type.list_single);
         if (!IBB_ONLY) {
             field.addOption(new FormField.Option(Bytestream.NAMESPACE));
         }

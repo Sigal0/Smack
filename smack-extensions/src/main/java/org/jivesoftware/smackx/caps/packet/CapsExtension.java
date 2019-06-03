@@ -16,11 +16,16 @@
  */
 package org.jivesoftware.smackx.caps.packet;
 
-import org.jivesoftware.smack.packet.PacketExtension;
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.packet.Stanza;
 import org.jivesoftware.smack.util.XmlStringBuilder;
-import org.jivesoftware.smackx.caps.EntityCapsManager;
 
-public class CapsExtension implements PacketExtension {
+/**
+ * A XEP-0115 Entity Capabilities extension.
+ */
+public class CapsExtension implements ExtensionElement {
+    public static final String NAMESPACE = "http://jabber.org/protocol/caps";
+    public static final String ELEMENT = "c";
 
     private final String node, ver, hash;
 
@@ -30,12 +35,14 @@ public class CapsExtension implements PacketExtension {
         this.hash = hash;
     }
 
+    @Override
     public String getElementName() {
-        return EntityCapsManager.ELEMENT;
+        return ELEMENT;
     }
 
+    @Override
     public String getNamespace() {
-        return EntityCapsManager.NAMESPACE;
+        return NAMESPACE;
     }
 
     public String getNode() {
@@ -50,17 +57,26 @@ public class CapsExtension implements PacketExtension {
         return hash;
     }
 
-    /*
-     *  <c xmlns='http://jabber.org/protocol/caps'
-     *  hash='sha-1'
-     *  node='http://code.google.com/p/exodus'
-     *  ver='QgayPKawpkPSDYmwT/WM94uAlu0='/>
+    /**
+     * {@inheritDoc}.
+     *
+     * <pre>
+     *  &lt;c xmlns='http://jabber.org/protocol/caps'
+     *     hash='sha-1'
+     *     node='http://code.google.com/p/exodus'
+     *     ver='QgayPKawpkPSDYmwT/WM94uAlu0='/&gt;
+     * </pre>
      *
      */
-    public CharSequence toXML() {
+    @Override
+    public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
         XmlStringBuilder xml = new XmlStringBuilder(this);
         xml.attribute("hash", hash).attribute("node", node).attribute("ver", ver);
         xml.closeEmptyElement();
         return xml;
+    }
+
+    public static CapsExtension from(Stanza stanza) {
+        return stanza.getExtension(ELEMENT, NAMESPACE);
     }
 }

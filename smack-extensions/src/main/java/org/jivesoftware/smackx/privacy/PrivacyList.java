@@ -16,12 +16,12 @@
  */
 package org.jivesoftware.smackx.privacy;
 
-import org.jivesoftware.smackx.privacy.packet.PrivacyItem;
-
 import java.util.List;
 
+import org.jivesoftware.smackx.privacy.packet.PrivacyItem;
+
 /**
- * A privacy list represents a list of contacts that is a read only class used to represent a set of allowed or blocked communications. 
+ * A privacy list represents a list of contacts that is a read only class used to represent a set of allowed or blocked communications.
  * Basically it can:<ul>
  *
  *      <li>Handle many {@link org.jivesoftware.smackx.privacy.packet.PrivacyItem}.</li>
@@ -31,7 +31,7 @@ import java.util.List;
  *
  * {@link PrivacyItem Privacy Items} can handle different kind of blocking communications based on JID, group,
  * subscription type or globally.
- * 
+ *
  * @author Francisco Vives
  */
 public class PrivacyList {
@@ -44,7 +44,7 @@ public class PrivacyList {
     private final String listName;
     /** Holds the list of {@link PrivacyItem} */
     private final List<PrivacyItem> items;
-    
+
     protected PrivacyList(boolean isActiveList, boolean isDefaultList,
             String listName, List<PrivacyItem> privacyItems) {
         super();
@@ -70,4 +70,8 @@ public class PrivacyList {
         return items;
     }
 
+    @Override
+    public String toString() {
+        return "Privacy List: " + listName + "(active:" + isActiveList + ", default:" + isDefaultList + ")";
+    }
 }

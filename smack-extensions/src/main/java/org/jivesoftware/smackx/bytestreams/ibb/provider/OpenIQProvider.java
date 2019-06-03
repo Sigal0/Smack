@@ -16,33 +16,39 @@
  */
 package org.jivesoftware.smackx.bytestreams.ibb.provider;
 
+import java.io.IOException;
 import java.util.Locale;
 
-import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
 import org.jivesoftware.smack.provider.IQProvider;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
 import org.jivesoftware.smackx.bytestreams.ibb.InBandBytestreamManager.StanzaType;
 import org.jivesoftware.smackx.bytestreams.ibb.packet.Open;
-import org.xmlpull.v1.XmlPullParser;
 
 /**
  * Parses an In-Band Bytestream open packet.
- * 
+ *
  * @author Henning Staib
  */
-public class OpenIQProvider implements IQProvider {
+public class OpenIQProvider extends IQProvider<Open> {
 
-    public IQ parseIQ(XmlPullParser parser) throws Exception {
+    @Override
+    public Open parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException {
         String sessionID = parser.getAttributeValue("", "sid");
         int blockSize = Integer.parseInt(parser.getAttributeValue("", "block-size"));
 
         String stanzaValue = parser.getAttributeValue("", "stanza");
-        StanzaType stanza = null;
+        StanzaType stanza;
         if (stanzaValue == null) {
             stanza = StanzaType.IQ;
         }
         else {
             stanza = StanzaType.valueOf(stanzaValue.toUpperCase(Locale.US));
         }
+
+        parser.next();
 
         return new Open(sessionID, blockSize, stanza);
     }

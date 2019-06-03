@@ -19,23 +19,22 @@ package org.jivesoftware.smackx.pubsub.provider;
 import java.util.List;
 import java.util.Map;
 
-import org.jivesoftware.smack.packet.PacketExtension;
+import org.jivesoftware.smack.packet.ExtensionElement;
 import org.jivesoftware.smack.provider.EmbeddedExtensionProvider;
+
 import org.jivesoftware.smackx.pubsub.ItemsExtension;
 
 /**
- * Parses the <b>items</b> element out of the message event stanza from 
+ * Parses the <b>items</b> element out of the message event stanza from
  * the server as specified in the <a href="http://xmpp.org/extensions/xep-0060.html#schemas-event">items schema</a>.
- * 
+ *
  * @author Robin Collier
  */
-public class ItemsProvider extends EmbeddedExtensionProvider
-{
+public class ItemsProvider extends EmbeddedExtensionProvider<ItemsExtension> {
 
-	@Override
-	protected PacketExtension createReturnExtension(String currentElement, String currentNamespace, Map<String, String> attributeMap, List<? extends PacketExtension> content)
-	{
+    @Override
+    protected ItemsExtension createReturnExtension(String currentElement, String currentNamespace, Map<String, String> attributeMap, List<? extends ExtensionElement> content) {
         return new ItemsExtension(ItemsExtension.ItemsElementType.items, attributeMap.get("node"), content);
-	}
+    }
 
 }

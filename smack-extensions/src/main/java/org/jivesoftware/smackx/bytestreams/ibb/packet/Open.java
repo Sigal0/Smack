@@ -19,17 +19,18 @@ package org.jivesoftware.smackx.bytestreams.ibb.packet;
 import java.util.Locale;
 
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.util.XmlStringBuilder;
+
 import org.jivesoftware.smackx.bytestreams.ibb.InBandBytestreamManager.StanzaType;
 
 /**
  * Represents a request to open an In-Band Bytestream.
- * 
+ *
  * @author Henning Staib
  */
 public class Open extends IQ {
 
     public static final String ELEMENT = "open";
+    public static final String NAMESPACE = DataPacketExtension.NAMESPACE;
 
     /* unique session ID identifying this In-Band Bytestream */
     private final String sessionID;
@@ -48,12 +49,13 @@ public class Open extends IQ {
      * 65535. A recommended default value is 4096.
      * <p>
      * The data can be sent using IQ stanzas or message stanzas.
-     * 
+     *
      * @param sessionID unique session ID identifying this In-Band Bytestream
      * @param blockSize block size in which the data will be fragmented
      * @param stanza stanza type used to encapsulate the data
      */
     public Open(String sessionID, int blockSize, StanzaType stanza) {
+        super(ELEMENT, NAMESPACE);
         if (sessionID == null || "".equals(sessionID)) {
             throw new IllegalArgumentException("Session ID must not be null or empty");
         }
@@ -75,7 +77,7 @@ public class Open extends IQ {
      * 65535. A recommended default value is 4096.
      * <p>
      * The data will be sent using IQ stanzas.
-     * 
+     *
      * @param sessionID unique session ID identifying this In-Band Bytestream
      * @param blockSize block size in which the data will be fragmented
      */
@@ -85,7 +87,7 @@ public class Open extends IQ {
 
     /**
      * Returns the unique session ID identifying this In-Band Bytestream.
-     * 
+     *
      * @return the unique session ID identifying this In-Band Bytestream
      */
     public String getSessionID() {
@@ -94,7 +96,7 @@ public class Open extends IQ {
 
     /**
      * Returns the block size in which the data will be fragmented.
-     * 
+     *
      * @return the block size in which the data will be fragmented
      */
     public int getBlockSize() {
@@ -103,7 +105,7 @@ public class Open extends IQ {
 
     /**
      * Returns the stanza type used to encapsulate the data.
-     * 
+     *
      * @return the stanza type used to encapsulate the data
      */
     public StanzaType getStanza() {
@@ -111,14 +113,11 @@ public class Open extends IQ {
     }
 
     @Override
-    public XmlStringBuilder getChildElementXML() {
-        XmlStringBuilder xml = new XmlStringBuilder();
-        xml.halfOpenElement(ELEMENT);
-        xml.xmlnsAttribute(DataPacketExtension.NAMESPACE);
+    protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder xml) {
         xml.attribute("block-size", Integer.toString(blockSize));
         xml.attribute("sid", sessionID);
         xml.attribute("stanza", stanza.toString().toLowerCase(Locale.US));
-        xml.closeEmptyElement();
+        xml.setEmptyElement();
         return xml;
     }
 

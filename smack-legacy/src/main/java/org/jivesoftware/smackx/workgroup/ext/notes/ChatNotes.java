@@ -17,26 +17,32 @@
 
 package org.jivesoftware.smackx.workgroup.ext.notes;
 
+import java.io.IOException;
+
 import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
 import org.jivesoftware.smack.provider.IQProvider;
-import org.jivesoftware.smack.util.XmlStringBuilder;
-import org.xmlpull.v1.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
 
 /**
- * IQ packet for retrieving and adding Chat Notes.
+ * IQ stanza for retrieving and adding Chat Notes.
  */
 public class ChatNotes extends IQ {
 
     /**
-     * Element name of the packet extension.
+     * Element name of the stanza extension.
      */
     public static final String ELEMENT_NAME = "chat-notes";
 
     /**
-     * Namespace of the packet extension.
+     * Namespace of the stanza extension.
      */
     public static final String NAMESPACE = "http://jivesoftware.com/protocol/workgroup";
 
+    public ChatNotes() {
+        super(ELEMENT_NAME, NAMESPACE);
+    }
 
     private String sessionID;
     private String notes;
@@ -57,18 +63,17 @@ public class ChatNotes extends IQ {
         this.notes = notes;
     }
 
-    public String getChildElementXML() {
-        XmlStringBuilder buf = new XmlStringBuilder();
+    @Override
+    protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder buf) {
+        buf.rightAngleBracket();
 
-        buf.append("<").append(ELEMENT_NAME).append(" xmlns=\"").append(NAMESPACE).append("\">");
         buf.append("<sessionID>").append(getSessionID()).append("</sessionID>");
 
         if (getNotes() != null) {
             buf.element("notes", getNotes());
         }
-        buf.append("</").append(ELEMENT_NAME).append("> ");
 
-        return buf.toString();
+        return buf;
     }
 
     /**
@@ -76,19 +81,16 @@ public class ChatNotes extends IQ {
      *
      * @author Derek DeMoro
      */
-    public static class Provider implements IQProvider {
+    public static class Provider extends IQProvider<ChatNotes> {
 
-        public Provider() {
-            super();
-        }
-
-        public IQ parseIQ(XmlPullParser parser) throws Exception {
+        @Override
+        public ChatNotes parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException {
             ChatNotes chatNotes = new ChatNotes();
 
             boolean done = false;
             while (!done) {
-                int eventType = parser.next();
-                if (eventType == XmlPullParser.START_TAG) {
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT) {
                     if (parser.getName().equals("sessionID")) {
                         chatNotes.setSessionID(parser.nextText());
                     }
@@ -98,7 +100,7 @@ public class ChatNotes extends IQ {
                         chatNotes.setNotes(note);
                     }
                 }
-                else if (eventType == XmlPullParser.END_TAG) {
+                else if (eventType == XmlPullParser.Event.END_ELEMENT) {
                     if (parser.getName().equals(ELEMENT_NAME)) {
                         done = true;
                     }

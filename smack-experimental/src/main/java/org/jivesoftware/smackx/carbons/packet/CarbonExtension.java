@@ -1,6 +1,6 @@
 /**
  *
- * Copyright 2013 Georg Lukas
+ * Copyright 2013-2014 Georg Lukas
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,29 +16,32 @@
  */
 package org.jivesoftware.smackx.carbons.packet;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smackx.forward.Forwarded;
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.packet.Message;
+import org.jivesoftware.smack.util.XmlStringBuilder;
+
+import org.jivesoftware.smackx.forward.packet.Forwarded;
 
 /**
- * Packet extension for XEP-0280: Message Carbons. The extension
+ * Stanza extension for XEP-0280: Message Carbons. The extension
  * <a href="http://xmpp.org/extensions/xep-0280.html">XEP-0280</a> is
  * meant to synchronize a message flow to multiple presences of a user.
- * 
+ *
  * <p>
- * It accomplishes this by wrapping a {@link Forwarded} packet in a <b>sent</b>
+ * It accomplishes this by wrapping a {@link Forwarded} stanza in a <b>sent</b>
  * or <b>received</b> element
  *
  * @author Georg Lukas
  */
-public class CarbonExtension implements PacketExtension {
-    public static final String NAMESPACE = "urn:xmpp:carbons:2";
+public class CarbonExtension implements ExtensionElement {
+    public static final String NAMESPACE = Carbon.NAMESPACE;
 
-    private Direction dir;
-    private Forwarded fwd;
+    private final Direction dir;
+    private final Forwarded fwd;
 
     /**
      * Construct a Carbon message extension.
-     * 
+     *
      * @param dir Determines if the carbon is being sent/received
      * @param fwd The forwarded message.
      */
@@ -67,7 +70,7 @@ public class CarbonExtension implements PacketExtension {
 
     @Override
     public String getElementName() {
-        return dir.toString();
+        return dir.name();
     }
 
     @Override
@@ -76,42 +79,89 @@ public class CarbonExtension implements PacketExtension {
     }
 
     @Override
-    public String toXML() {
-        StringBuilder buf = new StringBuilder();
-        buf.append("<").append(getElementName()).append(" xmlns=\"")
-                .append(getNamespace()).append("\">");
+    public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
+        XmlStringBuilder xml = new XmlStringBuilder(this);
+        xml.rightAngleBracket();
+        xml.append(fwd.toXML());
+        xml.closeElement(this);
+        return xml;
+    }
 
-        buf.append(fwd.toXML());
+    /**
+     * Obtain a Carbon from a message, if available.
+     * <p>
+     * Only {@link Message} instances can contain a Carbon extensions.
+     * </p>
+     *
+     * @param msg Message object to check for carbons
+     *
+     * @return a Carbon if available, null otherwise.
+     * @deprecated use {@link #from(Message)} instead
+     */
+    @Deprecated
+    public static CarbonExtension getFrom(Message msg) {
+        return from(msg);
+    }
 
-        buf.append("</").append(getElementName()).append(">");
-        return buf.toString();
+    /**
+     * Obtain a Carbon from a message, if available.
+     * <p>
+     * Only {@link Message} instances can contain a Carbon extensions.
+     * </p>
+     *
+     * @param msg Message object to check for carbons
+     *
+     * @return a Carbon if available, null otherwise.
+     */
+    public static CarbonExtension from(Message msg) {
+        CarbonExtension cc = msg.getExtension(Direction.received.name(), NAMESPACE);
+        if (cc == null)
+            cc = msg.getExtension(Direction.sent.name(), NAMESPACE);
+        return cc;
     }
 
     /**
      * Defines the direction of a {@link CarbonExtension} message.
      */
-    public static enum Direction {
+    public enum Direction {
         received,
         sent
     }
 
     /**
-     * Packet extension indicating that a message may not be carbon-copied.  Adding this
-     * extension to any message will disallow that message from being copied. 
+     * Stanza extension indicating that a message may not be carbon-copied.  Adding this
+     * extension to any message will disallow that message from being copied.
      */
-    public static class Private implements PacketExtension {
+    public static final class Private implements ExtensionElement {
+        public static final Private INSTANCE = new Private();
         public static final String ELEMENT = "private";
 
+        private Private() {
+        }
+
+        @Override
         public String getElementName() {
             return ELEMENT;
         }
 
+        @Override
         public String getNamespace() {
-            return CarbonExtension.NAMESPACE;
+            return NAMESPACE;
         }
 
-        public String toXML() {
-            return "<" + ELEMENT + " xmlns=\"" + CarbonExtension.NAMESPACE + "\"/>";
+        @Override
+        public String toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
+            return "<" + ELEMENT + " xmlns='" + NAMESPACE + "'/>";
+        }
+
+        /**
+         * Marks a message "private", so that it will not be carbon-copied, by adding private packet
+         * extension to the message.
+         *
+         * @param message the message to add the private extension to
+         */
+        public static void addTo(Message message) {
+            message.addExtension(INSTANCE);
         }
     }
 }

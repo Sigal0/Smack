@@ -16,19 +16,21 @@
  */
 package org.jivesoftware.smack.filter;
 
-import java.util.Locale;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.Packet;
-import org.jxmpp.util.XmppStringUtils;
+import org.jivesoftware.smack.packet.Stanza;
+
+import org.jxmpp.jid.DomainBareJid;
+import org.jxmpp.jid.EntityFullJid;
+import org.jxmpp.jid.Jid;
 
 /**
  * Filters for packets which are a valid reply to an IQ request.
  * <p>
- * Such a packet must have the same packet id and must be an IQ packet of type
+ * Such a stanza must have the same stanza id and must be an IQ stanza of type
  * <code>RESULT</code> or <code>ERROR</code>. Moreover, it is necessary to check
  * the <code>from</code> address to ignore forged replies.
  * <p>
@@ -48,20 +50,20 @@ import org.jxmpp.util.XmppStringUtils;
  * @author Lars Noschinski
  *
  */
-public class IQReplyFilter implements PacketFilter {
+public class IQReplyFilter implements StanzaFilter {
     private static final Logger LOGGER = Logger.getLogger(IQReplyFilter.class.getName());
 
-    private final PacketFilter iqAndIdFilter;
+    private final StanzaFilter iqAndIdFilter;
     private final OrFilter fromFilter;
-    private final String to;
-    private final String local;
-    private final String server;
+    private final Jid to;
+    private final EntityFullJid local;
+    private final DomainBareJid server;
     private final String packetId;
 
     /**
      * Filters for packets which are a valid reply to an IQ request.
      * <p>
-     * Such a packet must have the same packet id and must be an IQ packet of type
+     * Such a stanza must have the same stanza id and must be an IQ stanza of type
      * <code>RESULT</code> or <code>ERROR</code>. Moreover, it is necessary to check
      * the <code>from</code> address to ignore forged replies.
      * <p>
@@ -79,36 +81,37 @@ public class IQReplyFilter implements PacketFilter {
      * and following discussion in February and March.
      *
      * @param iqPacket An IQ request. Filter for replies to this packet.
+     * @param conn connection.
      */
     public IQReplyFilter(IQ iqPacket, XMPPConnection conn) {
-        to = iqPacket.getTo();
-        if (conn.getUser() == null) {
-            // We have not yet been assigned a username, this can happen if the connection is
-            // in an early stage, i.e. when performing the SASL auth.
-            local = null;
-        } else {
-            local = conn.getUser().toLowerCase(Locale.US);
+        if (!iqPacket.isRequestIQ()) {
+            throw new IllegalArgumentException("IQ must be a request IQ, i.e. of type 'get' or 'set'.");
         }
-        server = conn.getServiceName().toLowerCase(Locale.US);
-        packetId = iqPacket.getPacketID();
+        to = iqPacket.getTo();
+        local = conn.getUser();
+        if (local == null) {
+            throw new IllegalArgumentException("Must have a local (user) JID set. Either you didn't configure one or you where not connected at least once");
+        }
 
-        PacketFilter iqFilter = new OrFilter(IQTypeFilter.ERROR, IQTypeFilter.RESULT);
-        PacketFilter idFilter = new PacketIDFilter(iqPacket);
+        server = conn.getXMPPServiceDomain();
+        packetId = iqPacket.getStanzaId();
+
+        StanzaFilter iqFilter = new OrFilter(IQTypeFilter.ERROR, IQTypeFilter.RESULT);
+        StanzaFilter idFilter = new StanzaIdFilter(iqPacket);
         iqAndIdFilter = new AndFilter(iqFilter, idFilter);
         fromFilter = new OrFilter();
         fromFilter.addFilter(FromMatchesFilter.createFull(to));
         if (to == null) {
-            if (local != null)
-                fromFilter.addFilter(FromMatchesFilter.createBare(local));
+            fromFilter.addFilter(FromMatchesFilter.createBare(local));
             fromFilter.addFilter(FromMatchesFilter.createFull(server));
         }
-        else if (local != null && to.toLowerCase(Locale.US).equals(XmppStringUtils.parseBareAddress(local))) {
+        else if (to.equals(local.asBareJid())) {
             fromFilter.addFilter(FromMatchesFilter.createFull(null));
         }
     }
 
     @Override
-    public boolean accept(Packet packet) {
+    public boolean accept(Stanza packet) {
         // First filter out everything that is not an IQ stanza and does not have the correct ID set.
         if (!iqAndIdFilter.accept(packet))
             return false;
@@ -125,4 +128,12 @@ public class IQReplyFilter implements PacketFilter {
         }
     }
 
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(getClass().getSimpleName());
+        sb.append(": iqAndIdFilter (").append(iqAndIdFilter.toString()).append("), ");
+        sb.append(": fromFilter (").append(fromFilter.toString()).append(')');
+        return sb.toString();
+    }
 }

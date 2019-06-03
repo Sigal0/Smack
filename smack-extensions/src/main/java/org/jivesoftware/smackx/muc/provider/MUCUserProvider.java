@@ -17,156 +17,116 @@
 
 package org.jivesoftware.smackx.muc.provider;
 
+import java.io.IOException;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.ExtensionElementProvider;
+import org.jivesoftware.smack.util.ParserUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
 import org.jivesoftware.smackx.muc.packet.MUCUser;
-import org.xmlpull.v1.XmlPullParser;
+
+import org.jxmpp.jid.EntityBareJid;
+import org.jxmpp.jid.EntityJid;
 
 /**
- * The MUCUserProvider parses packets with extended presence information about 
+ * The MUCUserProvider parses packets with extended presence information about
  * roles and affiliations.
  *
  * @author Gaston Dombiak
  */
-public class MUCUserProvider implements PacketExtensionProvider {
+public class MUCUserProvider extends ExtensionElementProvider<MUCUser> {
 
     /**
-     * Creates a new MUCUserProvider.
-     * ProviderManager requires that every PacketExtensionProvider has a public, no-argument 
-     * constructor
-     */
-    public MUCUserProvider() {
-    }
-
-    /**
-     * Parses a MUCUser packet (extension sub-packet).
+     * Parses a MUCUser stanza (extension sub-packet).
      *
      * @param parser the XML parser, positioned at the starting element of the extension.
      * @return a PacketExtension.
-     * @throws Exception if a parsing error occurs.
+     * @throws IOException
+     * @throws XmlPullParserException
      */
-    public PacketExtension parseExtension(XmlPullParser parser) throws Exception {
+    @Override
+    public MUCUser parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException {
         MUCUser mucUser = new MUCUser();
-        boolean done = false;
-        while (!done) {
-            int eventType = parser.next();
-            if (eventType == XmlPullParser.START_TAG) {
-                if (parser.getName().equals("invite")) {
+        outerloop: while (true) {
+            switch (parser.next()) {
+            case START_ELEMENT:
+                switch (parser.getName()) {
+                case "invite":
                     mucUser.setInvite(parseInvite(parser));
-                }
-                if (parser.getName().equals("item")) {
-                    mucUser.setItem(parseItem(parser));
-                }
-                if (parser.getName().equals("password")) {
+                    break;
+                case "item":
+                    mucUser.setItem(MUCParserUtils.parseItem(parser));
+                    break;
+                case "password":
                     mucUser.setPassword(parser.nextText());
-                }
-                if (parser.getName().equals("status")) {
-                    mucUser.setStatus(new MUCUser.Status(parser.getAttributeValue("", "code")));
-                }
-                if (parser.getName().equals("decline")) {
+                    break;
+                case "status":
+                    String statusString = parser.getAttributeValue("", "code");
+                    mucUser.addStatusCode(MUCUser.Status.create(statusString));
+                    break;
+                case "decline":
                     mucUser.setDecline(parseDecline(parser));
+                    break;
+                case "destroy":
+                    mucUser.setDestroy(MUCParserUtils.parseDestroy(parser));
+                    break;
                 }
-                if (parser.getName().equals("destroy")) {
-                    mucUser.setDestroy(parseDestroy(parser));
+                break;
+            case END_ELEMENT:
+                if (parser.getDepth() == initialDepth) {
+                    break outerloop;
                 }
-            }
-            else if (eventType == XmlPullParser.END_TAG) {
-                if (parser.getName().equals("x")) {
-                    done = true;
-                }
+                break;
+            default:
+                // Catch all for incomplete switch (MissingCasesInEnumSwitch) statement.
+                break;
             }
         }
 
         return mucUser;
     }
 
-    private MUCUser.Item parseItem(XmlPullParser parser) throws Exception {
-        boolean done = false;
-        MUCUser.Item item =
-            new MUCUser.Item(
-                parser.getAttributeValue("", "affiliation"),
-                parser.getAttributeValue("", "role"));
-        item.setNick(parser.getAttributeValue("", "nick"));
-        item.setJid(parser.getAttributeValue("", "jid"));
-        while (!done) {
-            int eventType = parser.next();
-            if (eventType == XmlPullParser.START_TAG) {
-                if (parser.getName().equals("actor")) {
-                    item.setActor(parser.getAttributeValue("", "jid"));
-                }
-                if (parser.getName().equals("reason")) {
-                    item.setReason(parser.nextText());
-                }
-            }
-            else if (eventType == XmlPullParser.END_TAG) {
-                if (parser.getName().equals("item")) {
-                    done = true;
-                }
-            }
-        }
-        return item;
-    }
+    private static MUCUser.Invite parseInvite(XmlPullParser parser) throws XmlPullParserException, IOException {
+        String reason = null;
+        EntityBareJid to = ParserUtils.getBareJidAttribute(parser, "to");
+        EntityJid from = ParserUtils.getEntityJidAttribute(parser, "from");
 
-    private MUCUser.Invite parseInvite(XmlPullParser parser) throws Exception {
-        boolean done = false;
-        MUCUser.Invite invite = new MUCUser.Invite();
-        invite.setFrom(parser.getAttributeValue("", "from"));
-        invite.setTo(parser.getAttributeValue("", "to"));
-        while (!done) {
-            int eventType = parser.next();
-            if (eventType == XmlPullParser.START_TAG) {
+        outerloop: while (true) {
+            XmlPullParser.Event eventType = parser.next();
+            if (eventType == XmlPullParser.Event.START_ELEMENT) {
                 if (parser.getName().equals("reason")) {
-                    invite.setReason(parser.nextText());
+                    reason = parser.nextText();
                 }
             }
-            else if (eventType == XmlPullParser.END_TAG) {
+            else if (eventType == XmlPullParser.Event.END_ELEMENT) {
                 if (parser.getName().equals("invite")) {
-                    done = true;
+                    break outerloop;
                 }
             }
         }
-        return invite;
+        return new MUCUser.Invite(reason, from, to);
     }
 
-    private MUCUser.Decline parseDecline(XmlPullParser parser) throws Exception {
-        boolean done = false;
-        MUCUser.Decline decline = new MUCUser.Decline();
-        decline.setFrom(parser.getAttributeValue("", "from"));
-        decline.setTo(parser.getAttributeValue("", "to"));
-        while (!done) {
-            int eventType = parser.next();
-            if (eventType == XmlPullParser.START_TAG) {
+    private static MUCUser.Decline parseDecline(XmlPullParser parser) throws XmlPullParserException, IOException {
+        String reason = null;
+        EntityBareJid to = ParserUtils.getBareJidAttribute(parser, "to");
+        EntityBareJid from = ParserUtils.getBareJidAttribute(parser, "from");
+
+        outerloop: while (true) {
+            XmlPullParser.Event eventType = parser.next();
+            if (eventType == XmlPullParser.Event.START_ELEMENT) {
                 if (parser.getName().equals("reason")) {
-                    decline.setReason(parser.nextText());
+                    reason = parser.nextText();
                 }
             }
-            else if (eventType == XmlPullParser.END_TAG) {
+            else if (eventType == XmlPullParser.Event.END_ELEMENT) {
                 if (parser.getName().equals("decline")) {
-                    done = true;
+                    break outerloop;
                 }
             }
         }
-        return decline;
-    }
-
-    private MUCUser.Destroy parseDestroy(XmlPullParser parser) throws Exception {
-        boolean done = false;
-        MUCUser.Destroy destroy = new MUCUser.Destroy();
-        destroy.setJid(parser.getAttributeValue("", "jid"));
-        while (!done) {
-            int eventType = parser.next();
-            if (eventType == XmlPullParser.START_TAG) {
-                if (parser.getName().equals("reason")) {
-                    destroy.setReason(parser.nextText());
-                }
-            }
-            else if (eventType == XmlPullParser.END_TAG) {
-                if (parser.getName().equals("destroy")) {
-                    done = true;
-                }
-            }
-        }
-        return destroy;
+        return new MUCUser.Decline(reason, from, to);
     }
 }

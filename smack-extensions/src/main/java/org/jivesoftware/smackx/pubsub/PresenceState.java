@@ -16,13 +16,12 @@
  */
 package org.jivesoftware.smackx.pubsub;
 
-/** 
+/**
  * Defines the possible valid presence states for node subscription via
  * {@link SubscribeForm#getShowValues()}.
- * 
+ *
  * @author Robin Collier
  */
-public enum PresenceState
-{
-	chat, online, away, xa, dnd
+public enum PresenceState {
+    chat, online, away, xa, dnd
 }

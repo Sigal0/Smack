@@ -17,6 +17,8 @@
 
 package org.jivesoftware.smackx.xhtmlim;
 
+import java.util.List;
+
 import org.jivesoftware.smack.ConnectionCreationListener;
 import org.jivesoftware.smack.SmackException.NoResponseException;
 import org.jivesoftware.smack.SmackException.NotConnectedException;
@@ -24,38 +26,39 @@ import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPConnectionRegistry;
 import org.jivesoftware.smack.XMPPException.XMPPErrorException;
 import org.jivesoftware.smack.packet.Message;
+
 import org.jivesoftware.smackx.disco.ServiceDiscoveryManager;
 import org.jivesoftware.smackx.xhtmlim.packet.XHTMLExtension;
 
-import java.util.List;
+import org.jxmpp.jid.Jid;
 
 /**
- * Manages XHTML formatted texts within messages. A XHTMLManager provides a high level access to 
+ * Manages XHTML formatted texts within messages. A XHTMLManager provides a high level access to
  * get and set XHTML bodies to messages, enable and disable XHTML support and check if remote XMPP
- * clients support XHTML.   
- * 
+ * clients support XHTML.
+ *
  * @author Gaston Dombiak
  */
 public class XHTMLManager {
-    // Enable the XHTML support on every established connection
-    // The ServiceDiscoveryManager class should have been already initialized
     static {
         XMPPConnectionRegistry.addConnectionCreationListener(new ConnectionCreationListener() {
+            @Override
             public void connectionCreated(XMPPConnection connection) {
+                // Enable the XHTML support on every established connection
                 XHTMLManager.setServiceEnabled(connection, true);
             }
         });
     }
 
     /**
-     * Returns an Iterator for the XHTML bodies in the message. Returns null if 
+     * Returns an Iterator for the XHTML bodies in the message. Returns null if
      * the message does not contain an XHTML extension.
      *
      * @param message an XHTML message
      * @return an Iterator for the bodies in the message or null if none.
      */
     public static List<CharSequence> getBodies(Message message) {
-        XHTMLExtension xhtmlExtension = (XHTMLExtension) message.getExtension(XHTMLExtension.ELEMENT, XHTMLExtension.NAMESPACE);
+        XHTMLExtension xhtmlExtension = XHTMLExtension.from(message);
         if (xhtmlExtension != null)
             return xhtmlExtension.getBodies();
         else
@@ -66,23 +69,23 @@ public class XHTMLManager {
      * Adds an XHTML body to the message.
      *
      * @param message the message that will receive the XHTML body
-     * @param body the string to add as an XHTML body to the message
+     * @param xhtmlText the string to add as an XHTML body to the message
      */
-    public static void addBody(Message message, String body) {
-        XHTMLExtension xhtmlExtension = (XHTMLExtension) message.getExtension(XHTMLExtension.ELEMENT, XHTMLExtension.NAMESPACE);
+    public static void addBody(Message message, XHTMLText xhtmlText) {
+        XHTMLExtension xhtmlExtension = XHTMLExtension.from(message);
         if (xhtmlExtension == null) {
             // Create an XHTMLExtension and add it to the message
             xhtmlExtension = new XHTMLExtension();
             message.addExtension(xhtmlExtension);
         }
         // Add the required bodies to the message
-        xhtmlExtension.addBody(body);
+        xhtmlExtension.addBody(xhtmlText.toXML());
     }
 
     /**
      * Returns true if the message contains an XHTML extension.
      *
-     * @param message the message to check if contains an XHTML extentsion or not
+     * @param message the message to check if contains an XHTML extension or not
      * @return a boolean indicating whether the message is an XHTML message
      */
     public static boolean isXHTMLMessage(Message message) {
@@ -91,14 +94,14 @@ public class XHTMLManager {
 
     /**
      * Enables or disables the XHTML support on a given connection.<p>
-     *  
+     *
      * Before starting to send XHTML messages to a user, check that the user can handle XHTML
-     * messages. Enable the XHTML support to indicate that this client handles XHTML messages.  
+     * messages. Enable the XHTML support to indicate that this client handles XHTML messages.
      *
      * @param connection the connection where the service will be enabled or disabled
-     * @param enabled indicates if the service will be enabled or disabled 
+     * @param enabled indicates if the service will be enabled or disabled
      */
-    public synchronized static void setServiceEnabled(XMPPConnection connection, boolean enabled) {
+    public static synchronized void setServiceEnabled(XMPPConnection connection, boolean enabled) {
         if (isServiceEnabled(connection) == enabled)
             return;
 
@@ -126,12 +129,13 @@ public class XHTMLManager {
      * @param connection the connection to use to perform the service discovery
      * @param userID the user to check. A fully qualified xmpp ID, e.g. jdoe@example.com
      * @return a boolean indicating whether the specified user handles XHTML messages
-     * @throws XMPPErrorException 
-     * @throws NoResponseException 
-     * @throws NotConnectedException 
+     * @throws XMPPErrorException
+     * @throws NoResponseException
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public static boolean isServiceEnabled(XMPPConnection connection, String userID)
-                    throws NoResponseException, XMPPErrorException, NotConnectedException {
+    public static boolean isServiceEnabled(XMPPConnection connection, Jid userID)
+                    throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
         return ServiceDiscoveryManager.getInstanceFor(connection).supportsFeature(userID, XHTMLExtension.NAMESPACE);
     }
 }

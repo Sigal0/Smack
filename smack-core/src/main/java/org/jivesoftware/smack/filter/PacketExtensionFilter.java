@@ -17,51 +17,63 @@
 
 package org.jivesoftware.smack.filter;
 
-import org.jivesoftware.smack.packet.Packet;
-import org.jivesoftware.smack.packet.PacketExtension;
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.packet.Stanza;
+import org.jivesoftware.smack.util.StringUtils;
 
 /**
- * Filters for packets with a particular type of packet extension.
+ * Filters for packets with a particular type of stanza extension.
  *
  * @author Matt Tucker
+ * @deprecated use {@link StanzaExtensionFilter} instead.
  */
-public class PacketExtensionFilter implements PacketFilter {
+@Deprecated
+public class PacketExtensionFilter implements StanzaFilter {
 
     private final String elementName;
     private final String namespace;
 
     /**
-     * Creates a new packet extension filter. Packets will pass the filter if
-     * they have a packet extension that matches the specified element name
+     * Creates a new stanza extension filter. Packets will pass the filter if
+     * they have a stanza extension that matches the specified element name
      * and namespace.
      *
-     * @param elementName the XML element name of the packet extension.
-     * @param namespace the XML namespace of the packet extension.
+     * @param elementName the XML element name of the stanza extension.
+     * @param namespace the XML namespace of the stanza extension.
      */
     public PacketExtensionFilter(String elementName, String namespace) {
+        StringUtils.requireNotNullNorEmpty(namespace, "namespace must not be null nor empty");
+
         this.elementName = elementName;
         this.namespace = namespace;
     }
 
     /**
-     * Creates a new packet extension filter. Packets will pass the filter if they have a packet
+     * Creates a new stanza extension filter. Packets will pass the filter if they have a packet
      * extension that matches the specified namespace.
      *
-     * @param namespace the XML namespace of the packet extension.
+     * @param namespace the XML namespace of the stanza extension.
      */
     public PacketExtensionFilter(String namespace) {
         this(null, namespace);
     }
 
-    public PacketExtensionFilter(PacketExtension packetExtension) {
+    /**
+     * Creates a new stanza extension filter for the given stanza extension.
+     *
+     * @param packetExtension
+     */
+    public PacketExtensionFilter(ExtensionElement packetExtension) {
         this(packetExtension.getElementName(), packetExtension.getNamespace());
     }
 
-    public PacketExtensionFilter(Class<? extends PacketExtension> packetExtensionClass) throws InstantiationException, IllegalAccessException {
-        this(packetExtensionClass.newInstance());
+    @Override
+    public boolean accept(Stanza packet) {
+        return packet.hasExtension(elementName, namespace);
     }
 
-    public boolean accept(Packet packet) {
-        return packet.getExtension(elementName, namespace) != null;
+    @Override
+    public String toString() {
+        return getClass().getSimpleName() + ": element=" + elementName + " namespace=" + namespace;
     }
 }

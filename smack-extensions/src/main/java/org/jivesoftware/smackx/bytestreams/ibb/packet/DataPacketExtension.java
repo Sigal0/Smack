@@ -16,25 +16,26 @@
  */
 package org.jivesoftware.smackx.bytestreams.ibb.packet;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.util.StringUtils;
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.packet.IQ.IQChildElementXmlStringBuilder;
 import org.jivesoftware.smack.util.XmlStringBuilder;
+import org.jivesoftware.smack.util.stringencoder.Base64;
 
 /**
  * Represents a chunk of data of an In-Band Bytestream within an IQ stanza or a
- * message stanza
- * 
+ * message stanza.
+ *
  * @author Henning Staib
  */
-public class DataPacketExtension implements PacketExtension {
+public class DataPacketExtension implements ExtensionElement {
 
     /**
-     * The element name of the data packet extension.
+     * The element name of the data stanza extension.
      */
-    public final static String ELEMENT = "data";
+    public static final String ELEMENT = "data";
 
     /**
-     * The XMPP namespace of the In-Band Bytestream
+     * The XMPP namespace of the In-Band Bytestream.
      */
     public static final String NAMESPACE = "http://jabber.org/protocol/ibb";
 
@@ -51,9 +52,9 @@ public class DataPacketExtension implements PacketExtension {
 
     /**
      * Creates a new In-Band Bytestream data packet.
-     * 
+     *
      * @param sessionID unique session ID identifying this In-Band Bytestream
-     * @param seq sequence of this packet in regard to the other data packets
+     * @param seq sequence of this stanza in regard to the other data packets
      * @param data the base64 encoded data contained in this packet
      */
     public DataPacketExtension(String sessionID, long seq, String data) {
@@ -73,7 +74,7 @@ public class DataPacketExtension implements PacketExtension {
 
     /**
      * Returns the unique session ID identifying this In-Band Bytestream.
-     * 
+     *
      * @return the unique session ID identifying this In-Band Bytestream
      */
     public String getSessionID() {
@@ -81,9 +82,9 @@ public class DataPacketExtension implements PacketExtension {
     }
 
     /**
-     * Returns the sequence of this packet in regard to the other data packets.
-     * 
-     * @return the sequence of this packet in regard to the other data packets.
+     * Returns the sequence of this stanza in regard to the other data packets.
+     *
+     * @return the sequence of this stanza in regard to the other data packets.
      */
     public long getSeq() {
         return seq;
@@ -91,7 +92,7 @@ public class DataPacketExtension implements PacketExtension {
 
     /**
      * Returns the data contained in this packet.
-     * 
+     *
      * @return the data contained in this packet.
      */
     public String getData() {
@@ -106,7 +107,7 @@ public class DataPacketExtension implements PacketExtension {
      * character(s) of the data. See <a
      * href="http://xmpp.org/extensions/xep-0047.html#sec">XEP-0047</a> Section
      * 6.
-     * 
+     *
      * @return the decoded data
      */
     public byte[] getDecodedData() {
@@ -121,27 +122,32 @@ public class DataPacketExtension implements PacketExtension {
         }
 
         // decodeBase64 will return null if bad characters are included
-        this.decodedData = StringUtils.decodeBase64(data);
+        this.decodedData = Base64.decode(data);
         return this.decodedData;
     }
 
+    @Override
     public String getElementName() {
         return ELEMENT;
     }
 
+    @Override
     public String getNamespace() {
         return NAMESPACE;
     }
 
     @Override
-    public XmlStringBuilder toXML() {
-        XmlStringBuilder xml = new XmlStringBuilder(this);
-        xml.attribute("seq", Long.toString(seq));
-        xml.attribute("sid", sessionID);
-        xml.rightAngelBracket();
-        xml.append(data);
+    public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
+        XmlStringBuilder xml = getIQChildElementBuilder(new IQChildElementXmlStringBuilder(this));
         xml.closeElement(this);
         return xml;
     }
 
+    protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder xml) {
+        xml.attribute("seq", Long.toString(seq));
+        xml.attribute("sid", sessionID);
+        xml.rightAngleBracket();
+        xml.append(data);
+        return xml;
+    }
 }

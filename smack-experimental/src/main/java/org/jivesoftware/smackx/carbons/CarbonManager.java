@@ -1,6 +1,6 @@
 /**
  *
- * Copyright 2013 Georg Lukas
+ * Copyright 2013-2014 Georg Lukas, 2017-2018 Florian Schmaus
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,57 +16,157 @@
  */
 package org.jivesoftware.smackx.carbons;
 
-import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
 import java.util.WeakHashMap;
+import java.util.concurrent.CopyOnWriteArraySet;
 
+import org.jivesoftware.smack.AbstractConnectionListener;
+import org.jivesoftware.smack.AsyncButOrdered;
+import org.jivesoftware.smack.ConnectionCreationListener;
+import org.jivesoftware.smack.Manager;
 import org.jivesoftware.smack.SmackException;
 import org.jivesoftware.smack.SmackException.NoResponseException;
 import org.jivesoftware.smack.SmackException.NotConnectedException;
+import org.jivesoftware.smack.SmackFuture;
+import org.jivesoftware.smack.StanzaListener;
 import org.jivesoftware.smack.XMPPConnection;
-import org.jivesoftware.smack.ConnectionCreationListener;
-import org.jivesoftware.smack.Manager;
-import org.jivesoftware.smack.PacketListener;
 import org.jivesoftware.smack.XMPPConnectionRegistry;
 import org.jivesoftware.smack.XMPPException;
 import org.jivesoftware.smack.XMPPException.XMPPErrorException;
-import org.jivesoftware.smack.filter.IQReplyFilter;
+import org.jivesoftware.smack.filter.AndFilter;
+import org.jivesoftware.smack.filter.FromMatchesFilter;
+import org.jivesoftware.smack.filter.OrFilter;
+import org.jivesoftware.smack.filter.StanzaExtensionFilter;
+import org.jivesoftware.smack.filter.StanzaFilter;
+import org.jivesoftware.smack.filter.StanzaTypeFilter;
 import org.jivesoftware.smack.packet.IQ;
 import org.jivesoftware.smack.packet.Message;
-import org.jivesoftware.smack.packet.Packet;
+import org.jivesoftware.smack.packet.Stanza;
+import org.jivesoftware.smack.util.ExceptionCallback;
+import org.jivesoftware.smack.util.SuccessCallback;
+
+import org.jivesoftware.smackx.carbons.packet.Carbon;
 import org.jivesoftware.smackx.carbons.packet.CarbonExtension;
+import org.jivesoftware.smackx.carbons.packet.CarbonExtension.Direction;
+import org.jivesoftware.smackx.carbons.packet.CarbonExtension.Private;
 import org.jivesoftware.smackx.disco.ServiceDiscoveryManager;
+import org.jivesoftware.smackx.forward.packet.Forwarded;
+
+import org.jxmpp.jid.BareJid;
+import org.jxmpp.jid.EntityFullJid;
 
 /**
- * Packet extension for XEP-0280: Message Carbons. This class implements
- * the manager for registering {@link CarbonExtension} support, enabling and disabling
- * message carbons.
- *
- * You should call enableCarbons() before sending your first undirected
- * presence.
+ * Manager for XEP-0280: Message Carbons. This class implements the manager for registering {@link CarbonExtension}
+ * support, enabling and disabling message carbons, and for {@link CarbonCopyReceivedListener}.
+ * <p>
+ * Note that <b>it is important to match the 'from' attribute of the message wrapping a carbon copy</b>, as otherwise it would
+ * may be possible for others to impersonate users. Smack's CarbonManager takes care of that in
+ * {@link CarbonCopyReceivedListener}s which were registered with
+ * {@link #addCarbonCopyReceivedListener(CarbonCopyReceivedListener)}.
+ * </p>
+ * <p>
+ * You should call enableCarbons() before sending your first undirected presence (aka. the "initial presence").
+ * </p>
  *
  * @author Georg Lukas
+ * @author Florian Schmaus
  */
-public class CarbonManager extends Manager {
+public final class CarbonManager extends Manager {
 
-    private static Map<XMPPConnection, CarbonManager> instances =
-            Collections.synchronizedMap(new WeakHashMap<XMPPConnection, CarbonManager>());
+    private static Map<XMPPConnection, CarbonManager> INSTANCES = new WeakHashMap<XMPPConnection, CarbonManager>();
 
     static {
         XMPPConnectionRegistry.addConnectionCreationListener(new ConnectionCreationListener() {
+            @Override
             public void connectionCreated(XMPPConnection connection) {
                 getInstanceFor(connection);
             }
         });
     }
-    
+
+    private static final StanzaFilter CARBON_EXTENSION_FILTER =
+                    // @formatter:off
+                    new AndFilter(
+                        new OrFilter(
+                            new StanzaExtensionFilter(CarbonExtension.Direction.sent.name(), CarbonExtension.NAMESPACE),
+                            new StanzaExtensionFilter(CarbonExtension.Direction.received.name(), CarbonExtension.NAMESPACE)
+                        ),
+                        StanzaTypeFilter.MESSAGE
+                    );
+                    // @formatter:on
+
+    private final Set<CarbonCopyReceivedListener> listeners = new CopyOnWriteArraySet<>();
+
     private volatile boolean enabled_state = false;
+
+    private final StanzaListener carbonsListener;
+
+    private final AsyncButOrdered<BareJid> carbonsListenerAsyncButOrdered = new AsyncButOrdered<>();
 
     private CarbonManager(XMPPConnection connection) {
         super(connection);
         ServiceDiscoveryManager sdm = ServiceDiscoveryManager.getInstanceFor(connection);
         sdm.addFeature(CarbonExtension.NAMESPACE);
-        instances.put(connection, this);
+
+        carbonsListener = new StanzaListener() {
+            @Override
+            public void processStanza(final Stanza stanza) throws NotConnectedException, InterruptedException {
+                final Message wrappingMessage = (Message) stanza;
+                final CarbonExtension carbonExtension = CarbonExtension.from(wrappingMessage);
+                final Direction direction = carbonExtension.getDirection();
+                final Forwarded forwarded = carbonExtension.getForwarded();
+                final Message carbonCopy = (Message) forwarded.getForwardedStanza();
+                final BareJid from = carbonCopy.getFrom().asBareJid();
+
+                carbonsListenerAsyncButOrdered.performAsyncButOrdered(from, new Runnable() {
+                    @Override
+                    public void run() {
+                        for (CarbonCopyReceivedListener listener : listeners) {
+                            listener.onCarbonCopyReceived(direction, carbonCopy, wrappingMessage);
+                        }
+                    }
+                });
+            }
+        };
+
+        connection.addConnectionListener(new AbstractConnectionListener() {
+            @Override
+            public void connectionClosed() {
+                // Reset the state if the connection was cleanly closed. Note that this is not strictly necessary,
+                // because we also reset in authenticated() if the stream got not resumed, but for maximum correctness,
+                // also reset here.
+                enabled_state = false;
+                boolean removed = connection().removeSyncStanzaListener(carbonsListener);
+                assert (removed);
+            }
+            @Override
+            public void authenticated(XMPPConnection connection, boolean resumed) {
+                if (!resumed) {
+                    // Non-resumed XMPP sessions always start with disabled carbons
+                    enabled_state = false;
+                }
+                addCarbonsListener(connection);
+            }
+        });
+
+        addCarbonsListener(connection);
+    }
+
+    private void addCarbonsListener(XMPPConnection connection) {
+        EntityFullJid localAddress = connection.getUser();
+        if (localAddress == null) {
+            // We where not connected yet and thus we don't know our XMPP address at the moment, which we need to match incoming
+            // carbons securely. Abort here. The ConnectionListener above will eventually setup the carbons listener.
+            return;
+        }
+
+        // XEP-0280 § 11. Security Considerations "Any forwarded copies received by a Carbons-enabled client MUST be
+        // from that user's bare JID; any copies that do not meet this requirement MUST be ignored." Otherwise, if
+        // those copies do not get ignored, malicious users may be able to impersonate other users. That is why the
+        // 'from' matcher is important here.
+        connection.addSyncStanzaListener(carbonsListener, new AndFilter(CARBON_EXTENSION_FILTER,
+                        FromMatchesFilter.createBare(localAddress)));
     }
 
     /**
@@ -77,35 +177,59 @@ public class CarbonManager extends Manager {
      * @return a CarbonManager instance
      */
     public static synchronized CarbonManager getInstanceFor(XMPPConnection connection) {
-        CarbonManager carbonManager = instances.get(connection);
+        CarbonManager carbonManager = INSTANCES.get(connection);
 
         if (carbonManager == null) {
             carbonManager = new CarbonManager(connection);
+            INSTANCES.put(connection, carbonManager);
         }
 
         return carbonManager;
     }
 
-    private IQ carbonsEnabledIQ(final boolean new_state) {
-        IQ setIQ = new IQ() {
-            public String getChildElementXML() {
-                return "<" + (new_state? "enable" : "disable") + " xmlns='" + CarbonExtension.NAMESPACE + "'/>";
-            }
-        };
-        setIQ.setType(IQ.Type.set);
-        return setIQ;
+    private static IQ carbonsEnabledIQ(final boolean new_state) {
+        IQ request;
+        if (new_state) {
+            request = new Carbon.Enable();
+        } else {
+            request = new Carbon.Disable();
+        }
+        return request;
+    }
+
+    /**
+     * Add a carbon copy received listener.
+     *
+     * @param listener the listener to register.
+     * @return <code>true</code> if the filter was not already registered.
+     * @since 4.2
+     */
+    public boolean addCarbonCopyReceivedListener(CarbonCopyReceivedListener listener) {
+        return listeners.add(listener);
+    }
+
+    /**
+     * Remove a carbon copy received listener.
+     *
+     * @param listener the listener to register.
+     * @return <code>true</code> if the filter was registered.
+     * @since 4.2
+     */
+    public boolean removeCarbonCopyReceivedListener(CarbonCopyReceivedListener listener) {
+        return listeners.remove(listener);
     }
 
     /**
      * Returns true if XMPP Carbons are supported by the server.
-     * 
+     *
      * @return true if supported
-     * @throws SmackException if there was no response from the server.
-     * @throws XMPPException 
+     * @throws NotConnectedException
+     * @throws XMPPErrorException
+     * @throws NoResponseException
+     * @throws InterruptedException
      */
-    public boolean isSupportedByServer() throws XMPPException, SmackException {
-        return ServiceDiscoveryManager.getInstanceFor(connection()).supportsFeature(
-                        connection().getServiceName(), CarbonExtension.NAMESPACE);
+    public boolean isSupportedByServer() throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
+        return ServiceDiscoveryManager.getInstanceFor(connection()).serverSupportsFeature(CarbonExtension.NAMESPACE);
     }
 
     /**
@@ -115,22 +239,59 @@ public class CarbonManager extends Manager {
      * You should first check for support using isSupportedByServer().
      *
      * @param new_state whether carbons should be enabled or disabled
-     * @throws NotConnectedException 
+     * @throws NotConnectedException
+     * @throws InterruptedException
+     * @deprecated use {@link #enableCarbonsAsync(ExceptionCallback)} or {@link #disableCarbonsAsync(ExceptionCallback)} instead.
      */
-    public void sendCarbonsEnabled(final boolean new_state) throws NotConnectedException {
-        IQ setIQ = carbonsEnabledIQ(new_state);
+    @Deprecated
+    public void sendCarbonsEnabled(final boolean new_state) throws NotConnectedException, InterruptedException {
+        sendUseCarbons(new_state, null);
+    }
 
-        connection().addPacketListener(new PacketListener() {
-            public void processPacket(Packet packet) {
-                IQ result = (IQ)packet;
-                if (result.getType() == IQ.Type.result) {
-                    enabled_state = new_state;
-                }
-                connection().removePacketListener(this);
+    /**
+     * Enable carbons asynchronously. If an error occurs as result of the attempt to enable carbons, the optional
+     * <code>exceptionCallback</code> will be invoked.
+     * <p>
+     * Note that although this method is asynchronous, it may block if the outgoing stream element queue is full (e.g.
+     * because of a slow network connection). Thus, if the thread performing this operation is interrupted while the
+     * queue is full, an {@link InterruptedException} is thrown.
+     * </p>
+     *
+     * @param exceptionCallback the optional exception callback.
+     * @since 4.2
+     */
+    public void enableCarbonsAsync(ExceptionCallback<Exception> exceptionCallback) {
+        sendUseCarbons(true, exceptionCallback);
+    }
+
+    /**
+     * Disable carbons asynchronously. If an error occurs as result of the attempt to disable carbons, the optional
+     * <code>exceptionCallback</code> will be invoked.
+     * <p>
+     * Note that although this method is asynchronous, it may block if the outgoing stream element queue is full (e.g.
+     * because of a slow network connection). Thus, if the thread performing this operation is interrupted while the
+     * queue is full, an {@link InterruptedException} is thrown.
+     * </p>
+     *
+     * @param exceptionCallback the optional exception callback.
+     * @since 4.2
+     */
+    public void disableCarbonsAsync(ExceptionCallback<Exception> exceptionCallback) {
+        sendUseCarbons(false, exceptionCallback);
+    }
+
+    private void sendUseCarbons(final boolean use, ExceptionCallback<Exception> exceptionCallback) {
+        IQ setIQ = carbonsEnabledIQ(use);
+
+        SmackFuture<IQ, Exception> future = connection().sendIqRequestAsync(setIQ);
+
+        future.onSuccess(new SuccessCallback<IQ>() {
+
+            @Override
+            public void onSuccess(IQ result) {
+                enabled_state = use;
             }
-        }, new IQReplyFilter(setIQ, connection()));
-
-        connection().sendPacket(setIQ);
+        }).onError(exceptionCallback);
     }
 
     /**
@@ -141,69 +302,62 @@ public class CarbonManager extends Manager {
      * You should first check for support using isSupportedByServer().
      *
      * @param new_state whether carbons should be enabled or disabled
-     * @throws XMPPErrorException 
-     * @throws NoResponseException 
-     * @throws NotConnectedException 
+     * @throws XMPPErrorException
+     * @throws NoResponseException
+     * @throws NotConnectedException
+     * @throws InterruptedException
      *
      */
     public synchronized void setCarbonsEnabled(final boolean new_state) throws NoResponseException,
-                    XMPPErrorException, NotConnectedException {
+                    XMPPErrorException, NotConnectedException, InterruptedException {
         if (enabled_state == new_state)
             return;
 
         IQ setIQ = carbonsEnabledIQ(new_state);
 
-        connection().createPacketCollectorAndSend(setIQ).nextResultOrThrow();
+        connection().createStanzaCollectorAndSend(setIQ).nextResultOrThrow();
         enabled_state = new_state;
     }
 
     /**
      * Helper method to enable carbons.
      *
-     * @throws XMPPException 
+     * @throws XMPPException
      * @throws SmackException if there was no response from the server.
+     * @throws InterruptedException
      */
-    public void enableCarbons() throws XMPPException, SmackException {
+    public void enableCarbons() throws XMPPException, SmackException, InterruptedException {
         setCarbonsEnabled(true);
     }
 
     /**
      * Helper method to disable carbons.
      *
-     * @throws XMPPException 
+     * @throws XMPPException
      * @throws SmackException if there was no response from the server.
+     * @throws InterruptedException
      */
-    public void disableCarbons() throws XMPPException, SmackException {
+    public void disableCarbons() throws XMPPException, SmackException, InterruptedException {
         setCarbonsEnabled(false);
     }
 
     /**
      * Check if carbons are enabled on this connection.
+     *
+     * @return true if carbons are enabled, else false.
      */
     public boolean getCarbonsEnabled() {
         return this.enabled_state;
     }
 
     /**
-     * Obtain a Carbon from a message, if available.
-     *
-     * @param msg Message object to check for carbons
-     *
-     * @return a Carbon if available, null otherwise.
-     */
-    public static CarbonExtension getCarbon(Message msg) {
-        CarbonExtension cc = (CarbonExtension)msg.getExtension("received", CarbonExtension.NAMESPACE);
-        if (cc == null)
-            cc = (CarbonExtension)msg.getExtension("sent", CarbonExtension.NAMESPACE);
-        return cc;
-    }
-
-    /**
      * Mark a message as "private", so it will not be carbon-copied.
      *
      * @param msg Message object to mark private
+     * @deprecated use {@link Private#addTo(Message)}
      */
+    @Deprecated
     public static void disableCarbons(Message msg) {
-        msg.addExtension(new CarbonExtension.Private());
+        msg.addExtension(Private.INSTANCE);
     }
 }

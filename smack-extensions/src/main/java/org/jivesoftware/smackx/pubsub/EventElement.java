@@ -19,59 +19,72 @@ package org.jivesoftware.smackx.pubsub;
 import java.util.Arrays;
 import java.util.List;
 
-import org.jivesoftware.smack.packet.PacketExtension;
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.packet.Stanza;
+import org.jivesoftware.smack.util.XmlStringBuilder;
+
 import org.jivesoftware.smackx.pubsub.packet.PubSubNamespace;
 
 /**
- * Represents the top level element of a pubsub event extension.  All types of pubsub events are
- * represented by this class.  The specific type can be found by {@link #getEventType()}.  The 
+ * Represents the top level element of a PubSub event extension.  All types of PubSub events are
+ * represented by this class.  The specific type can be found by {@link #getEventType()}.  The
  * embedded event information, which is specific to the event type, can be retrieved by the {@link #getEvent()}
  * method.
- * 
+ *
  * @author Robin Collier
  */
-public class EventElement implements EmbeddedPacketExtension
-{
-	private EventElementType type;
-	private NodeExtension ext;
-	
-	public EventElement(EventElementType eventType, NodeExtension eventExt)
-	{
-		type = eventType;
-		ext = eventExt;
-	}
-	
-	public EventElementType getEventType()
-	{
-		return type;
-	}
+public class EventElement implements EmbeddedPacketExtension {
+    /**
+     * The constant String "event".
+     */
+    public static final String ELEMENT = "event";
 
-	public List<PacketExtension> getExtensions()
-	{
-		return Arrays.asList(new PacketExtension[]{getEvent()});
-	}
+    /**
+     * The constant String "http://jabber.org/protocol/pubsub#event".
+     */
+    public static final String NAMESPACE = PubSubNamespace.event.getXmlns();
 
-	public NodeExtension getEvent()
-	{
-		return ext;
-	}
+    private final EventElementType type;
+    private final NodeExtension ext;
 
-	public String getElementName()
-	{
-		return "event";
-	}
+    public EventElement(EventElementType eventType, NodeExtension eventExt) {
+        type = eventType;
+        ext = eventExt;
+    }
 
-	public String getNamespace()
-	{
-		return PubSubNamespace.EVENT.getXmlns();
-	}
+    public EventElementType getEventType() {
+        return type;
+    }
 
-	public String toXML()
-	{
-		StringBuilder builder = new StringBuilder("<event xmlns='" + PubSubNamespace.EVENT.getXmlns() + "'>");
+    @Override
+    public List<ExtensionElement> getExtensions() {
+        return Arrays.asList(new ExtensionElement[] {getEvent()});
+    }
 
-		builder.append(ext.toXML());
-		builder.append("</event>");
-		return builder.toString();
-	}
+    public NodeExtension getEvent() {
+        return ext;
+    }
+
+    @Override
+    public String getElementName() {
+        return "event";
+    }
+
+    @Override
+    public String getNamespace() {
+        return PubSubNamespace.event.getXmlns();
+    }
+
+    @Override
+    public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
+        XmlStringBuilder xml = new XmlStringBuilder(this);
+        xml.rightAngleBracket();
+        xml.append(ext.toXML());
+        xml.closeElement(this);
+        return xml;
+    }
+
+    public static EventElement from(Stanza stanza) {
+        return stanza.getExtension(ELEMENT, NAMESPACE);
+    }
 }

@@ -16,35 +16,39 @@
  */
 package org.jivesoftware.smackx.bytestreams.ibb;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.XMPPError;
-import org.jivesoftware.smackx.bytestreams.ibb.InBandBytestreamManager;
-import org.jivesoftware.smackx.bytestreams.ibb.InBandBytestreamRequest;
-import org.jivesoftware.smackx.bytestreams.ibb.InBandBytestreamSession;
+import org.jivesoftware.smack.packet.StanzaError;
+
+import org.jivesoftware.smackx.InitExtensions;
 import org.jivesoftware.smackx.bytestreams.ibb.packet.Open;
+
 import org.junit.Before;
 import org.junit.Test;
+import org.jxmpp.jid.Jid;
+import org.jxmpp.jid.JidTestUtil;
 import org.mockito.ArgumentCaptor;
 
 /**
  * Test for InBandBytestreamRequest.
- * 
+ *
  * @author Henning Staib
  */
-public class InBandBytestreamRequestTest {
+public class InBandBytestreamRequestTest extends InitExtensions {
 
-    String initiatorJID = "initiator@xmpp-server/Smack";
-    String targetJID = "target@xmpp-server/Smack";
-    String sessionID = "session_id";
+    private static final Jid initiatorJID = JidTestUtil.DUMMY_AT_EXAMPLE_ORG_SLASH_DUMMYRESOURCE;
+    private static final Jid targetJID = JidTestUtil.FULL_JID_1_RESOURCE_1;
+    private String sessionID = "session_id";
 
-    XMPPConnection connection;
-    InBandBytestreamManager byteStreamManager;
-    Open initBytestream;
+    private XMPPConnection connection;
+    private InBandBytestreamManager byteStreamManager;
+    private Open initBytestream;
 
     /**
      * Initialize fields used in the tests.
@@ -67,10 +71,11 @@ public class InBandBytestreamRequestTest {
 
     /**
      * Test reject() method.
-     * @throws NotConnectedException 
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
     @Test
-    public void shouldReplyWithErrorIfRequestIsRejected() throws NotConnectedException {
+    public void shouldReplyWithErrorIfRequestIsRejected() throws NotConnectedException, InterruptedException {
         InBandBytestreamRequest ibbRequest = new InBandBytestreamRequest(
                         byteStreamManager, initBytestream);
 
@@ -79,19 +84,19 @@ public class InBandBytestreamRequestTest {
 
         // capture reply to the In-Band Bytestream open request
         ArgumentCaptor<IQ> argument = ArgumentCaptor.forClass(IQ.class);
-        verify(connection).sendPacket(argument.capture());
+        verify(connection).sendStanza(argument.capture());
 
         // assert that reply is the correct error packet
         assertEquals(initiatorJID, argument.getValue().getTo());
         assertEquals(IQ.Type.error, argument.getValue().getType());
-        assertEquals(XMPPError.Condition.no_acceptable.toString(),
+        assertEquals(StanzaError.Condition.not_acceptable,
                         argument.getValue().getError().getCondition());
 
     }
 
     /**
      * Test accept() method.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -104,7 +109,7 @@ public class InBandBytestreamRequestTest {
 
         // capture reply to the In-Band Bytestream open request
         ArgumentCaptor<IQ> argument = ArgumentCaptor.forClass(IQ.class);
-        verify(connection).sendPacket(argument.capture());
+        verify(connection).sendStanza(argument.capture());
 
         // assert that reply is the correct acknowledgment packet
         assertEquals(initiatorJID, argument.getValue().getTo());

@@ -17,8 +17,11 @@
 
 package org.jivesoftware.smackx.bookmarks;
 
+import org.jxmpp.jid.EntityBareJid;
+import org.jxmpp.jid.parts.Resourcepart;
+
 /**
- * Respresents a Conference Room bookmarked on the server using XEP-0048 Bookmark Storage XEP.
+ * Represents a Conference Room bookmarked on the server using XEP-0048 Bookmark Storage XEP.
  *
  * @author Derek DeMoro
  */
@@ -26,19 +29,18 @@ public class BookmarkedConference implements SharedBookmark {
 
     private String name;
     private boolean autoJoin;
-    private final String jid;
+    private final EntityBareJid jid;
 
-    private String nickname;
+    private Resourcepart nickname;
     private String password;
     private boolean isShared;
 
-    protected BookmarkedConference(String jid) {
+    protected BookmarkedConference(EntityBareJid jid) {
         this.jid = jid;
     }
 
-    protected BookmarkedConference(String name, String jid, boolean autoJoin, String nickname,
-            String password)
-    {
+    protected BookmarkedConference(String name, EntityBareJid jid, boolean autoJoin, Resourcepart nickname,
+            String password) {
         this.name = name;
         this.jid = jid;
         this.autoJoin = autoJoin;
@@ -78,7 +80,7 @@ public class BookmarkedConference implements SharedBookmark {
      *
      * @return the full JID of  this conference room.
      */
-    public String getJid() {
+    public EntityBareJid getJid() {
         return jid;
     }
 
@@ -88,11 +90,11 @@ public class BookmarkedConference implements SharedBookmark {
      *
      * @return the nickname to use when joining, null may be returned.
      */
-    public String getNickname() {
+    public Resourcepart getNickname() {
         return nickname;
     }
 
-    protected void setNickname(String nickname) {
+    protected void setNickname(Resourcepart nickname) {
         this.nickname = nickname;
     }
 
@@ -110,18 +112,25 @@ public class BookmarkedConference implements SharedBookmark {
         this.password = password;
     }
 
+    @Override
     public boolean equals(Object obj) {
-        if(obj == null || !(obj instanceof BookmarkedConference)) {
+        if (obj == null || !(obj instanceof BookmarkedConference)) {
             return false;
         }
-        BookmarkedConference conference = (BookmarkedConference)obj;
-        return conference.getJid().equalsIgnoreCase(jid);
+        BookmarkedConference conference = (BookmarkedConference) obj;
+        return conference.getJid().equals(jid);
+    }
+
+    @Override
+    public int hashCode() {
+        return getJid().hashCode();
     }
 
     protected void setShared(boolean isShared) {
         this.isShared = isShared;
     }
 
+    @Override
     public boolean isShared() {
         return isShared;
     }

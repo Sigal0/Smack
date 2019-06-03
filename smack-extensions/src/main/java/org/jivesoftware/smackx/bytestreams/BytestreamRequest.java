@@ -16,53 +16,59 @@
  */
 package org.jivesoftware.smackx.bytestreams;
 
-import org.jivesoftware.smack.SmackException;
-import org.jivesoftware.smack.SmackException.NoResponseException;
 import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.XMPPException.XMPPErrorException;
+
 import org.jivesoftware.smackx.bytestreams.ibb.InBandBytestreamRequest;
 import org.jivesoftware.smackx.bytestreams.socks5.Socks5BytestreamRequest;
+import org.jivesoftware.smackx.bytestreams.socks5.Socks5Exception.CouldNotConnectToAnyProvidedSocks5Host;
+import org.jivesoftware.smackx.bytestreams.socks5.Socks5Exception.NoSocks5StreamHostsProvided;
+
+import org.jxmpp.jid.Jid;
 
 /**
  * BytestreamRequest provides an interface to handle incoming bytestream requests.
  * <p>
  * There are two implementations of the interface. See {@link Socks5BytestreamRequest} and
  * {@link InBandBytestreamRequest}.
- * 
+ *
  * @author Henning Staib
  */
 public interface BytestreamRequest {
 
     /**
      * Returns the sender of the bytestream open request.
-     * 
+     *
      * @return the sender of the bytestream open request
      */
-    public String getFrom();
+    Jid getFrom();
 
     /**
      * Returns the session ID of the bytestream open request.
-     * 
+     *
      * @return the session ID of the bytestream open request
      */
-    public String getSessionID();
+    String getSessionID();
 
     /**
      * Accepts the bytestream open request and returns the session to send/receive data.
-     * 
+     *
      * @return the session to send/receive data
      * @throws XMPPErrorException if an error occurred while accepting the bytestream request
      * @throws InterruptedException if the thread was interrupted while waiting in a blocking
      *         operation
-     * @throws NoResponseException 
-     * @throws SmackException 
+     * @throws NotConnectedException
+     * @throws CouldNotConnectToAnyProvidedSocks5Host
+     * @throws NoSocks5StreamHostsProvided
      */
-    public BytestreamSession accept() throws InterruptedException, NoResponseException, XMPPErrorException, SmackException;
+    BytestreamSession accept() throws InterruptedException, XMPPErrorException, CouldNotConnectToAnyProvidedSocks5Host,
+                    NotConnectedException, NoSocks5StreamHostsProvided;
 
     /**
      * Rejects the bytestream request by sending a reject error to the initiator.
-     * @throws NotConnectedException 
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public void reject() throws NotConnectedException;
+    void reject() throws NotConnectedException, InterruptedException;
 
 }

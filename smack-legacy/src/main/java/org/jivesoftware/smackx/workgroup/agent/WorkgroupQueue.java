@@ -17,9 +17,16 @@
 
 package org.jivesoftware.smackx.workgroup.agent;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Locale;
+import java.util.Set;
 
 import org.jivesoftware.smackx.workgroup.QueueUser;
+
+import org.jxmpp.jid.parts.Resourcepart;
 
 /**
  * A queue in a workgroup, which is a pool of agents that are routed  a specific type of
@@ -27,7 +34,7 @@ import org.jivesoftware.smackx.workgroup.QueueUser;
  */
 public class WorkgroupQueue {
 
-    private String name;
+    private Resourcepart name;
     private Status status = Status.CLOSED;
 
     private int averageWaitTime = -1;
@@ -42,7 +49,7 @@ public class WorkgroupQueue {
      *
      * @param name the name of the queue.
      */
-    WorkgroupQueue(String name) {
+    WorkgroupQueue(Resourcepart name) {
         this.name = name;
     }
 
@@ -51,7 +58,7 @@ public class WorkgroupQueue {
      *
      * @return the name of the queue.
      */
-    public String getName() {
+    public Resourcepart getName() {
         return name;
     }
 
@@ -164,7 +171,7 @@ public class WorkgroupQueue {
      *          chat requests.
      * </ul>
      */
-    public static class Status {
+    public static final class Status {
 
         /**
          * The queue is active and accepting new chat requests.
@@ -215,6 +222,7 @@ public class WorkgroupQueue {
             this.value = value;
         }
 
+        @Override
         public String toString() {
             return value;
         }

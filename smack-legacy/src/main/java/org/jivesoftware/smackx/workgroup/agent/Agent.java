@@ -17,15 +17,19 @@
 
 package org.jivesoftware.smackx.workgroup.agent;
 
-import org.jivesoftware.smackx.workgroup.packet.AgentInfo;
-import org.jivesoftware.smackx.workgroup.packet.AgentWorkgroups;
+import java.util.Collection;
+
 import org.jivesoftware.smack.SmackException.NoResponseException;
 import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException.XMPPErrorException;
 import org.jivesoftware.smack.packet.IQ;
 
-import java.util.Collection;
+import org.jivesoftware.smackx.workgroup.packet.AgentInfo;
+import org.jivesoftware.smackx.workgroup.packet.AgentWorkgroups;
+
+import org.jxmpp.jid.EntityBareJid;
+import org.jxmpp.jid.Jid;
 
 /**
  * The <code>Agent</code> class is used to represent one agent in a Workgroup Queue.
@@ -34,29 +38,29 @@ import java.util.Collection;
  */
 public class Agent {
     private XMPPConnection connection;
-    private String workgroupJID;
+    private final EntityBareJid workgroupJID;
 
-    public static Collection<String> getWorkgroups(String serviceJID, String agentJID, XMPPConnection connection) throws NoResponseException, XMPPErrorException, NotConnectedException {
+    public static Collection<String> getWorkgroups(Jid serviceJID, Jid agentJID, XMPPConnection connection) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
         AgentWorkgroups request = new AgentWorkgroups(agentJID);
         request.setTo(serviceJID);
-        AgentWorkgroups response = (AgentWorkgroups) connection.createPacketCollectorAndSend(request).nextResultOrThrow();
+        AgentWorkgroups response = connection.createStanzaCollectorAndSend(request).nextResultOrThrow();
         return response.getWorkgroups();
     }
 
     /**
      * Constructs an Agent.
      */
-    Agent(XMPPConnection connection, String workgroupJID) {
+    Agent(XMPPConnection connection, EntityBareJid workgroupJID) {
         this.connection = connection;
         this.workgroupJID = workgroupJID;
     }
 
     /**
-     * Return the agents JID
+     * Return the agents JID.
      *
      * @return - the agents JID.
      */
-    public String getUser() {
+    public Jid getUser() {
         return connection.getUser();
     }
 
@@ -64,16 +68,17 @@ public class Agent {
      * Return the agents name.
      *
      * @return - the agents name.
-     * @throws XMPPErrorException 
-     * @throws NoResponseException 
-     * @throws NotConnectedException 
+     * @throws XMPPErrorException
+     * @throws NoResponseException
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public String getName() throws NoResponseException, XMPPErrorException, NotConnectedException {
+    public String getName() throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
         AgentInfo agentInfo = new AgentInfo();
         agentInfo.setType(IQ.Type.get);
         agentInfo.setTo(workgroupJID);
         agentInfo.setFrom(getUser());
-        AgentInfo response = (AgentInfo) connection.createPacketCollectorAndSend(agentInfo).nextResultOrThrow();
+        AgentInfo response = connection.createStanzaCollectorAndSend(agentInfo).nextResultOrThrow();
         return response.getName();
     }
 
@@ -84,16 +89,17 @@ public class Agent {
      * error code.
      *
      * @param newName the new name of the agent.
-     * @throws XMPPErrorException 
-     * @throws NoResponseException 
-     * @throws NotConnectedException 
+     * @throws XMPPErrorException
+     * @throws NoResponseException
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public void setName(String newName) throws NoResponseException, XMPPErrorException, NotConnectedException {
+    public void setName(String newName) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
         AgentInfo agentInfo = new AgentInfo();
         agentInfo.setType(IQ.Type.set);
         agentInfo.setTo(workgroupJID);
         agentInfo.setFrom(getUser());
         agentInfo.setName(newName);
-        connection.createPacketCollectorAndSend(agentInfo).nextResultOrThrow();
+        connection.createStanzaCollectorAndSend(agentInfo).nextResultOrThrow();
     }
 }

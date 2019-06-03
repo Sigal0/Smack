@@ -35,8 +35,8 @@ public class MacroGroup {
     private String title;
 
     public MacroGroup() {
-        macros = new ArrayList<Macro>();
-        macroGroups = new ArrayList<MacroGroup>();
+        macros = new ArrayList<>();
+        macroGroups = new ArrayList<>();
     }
 
     public void addMacro(Macro macro) {
@@ -51,7 +51,7 @@ public class MacroGroup {
         Collection<Macro> col = Collections.unmodifiableList(macros);
         Iterator<Macro> iter = col.iterator();
         while (iter.hasNext()) {
-            Macro macro = (Macro)iter.next();
+            Macro macro = iter.next();
             if (macro.getTitle().equalsIgnoreCase(title)) {
                 return macro;
             }
@@ -68,14 +68,14 @@ public class MacroGroup {
     }
 
     public Macro getMacro(int location) {
-        return (Macro)macros.get(location);
+        return macros.get(location);
     }
 
     public MacroGroup getMacroGroupByTitle(String title) {
         Collection<MacroGroup> col = Collections.unmodifiableList(macroGroups);
         Iterator<MacroGroup> iter = col.iterator();
         while (iter.hasNext()) {
-            MacroGroup group = (MacroGroup)iter.next();
+            MacroGroup group = iter.next();
             if (group.getTitle().equalsIgnoreCase(title)) {
                 return group;
             }
@@ -84,7 +84,7 @@ public class MacroGroup {
     }
 
     public MacroGroup getMacroGroup(int location) {
-        return (MacroGroup)macroGroups.get(location);
+        return macroGroups.get(location);
     }
 
 
@@ -111,31 +111,30 @@ public class MacroGroup {
     public void setTitle(String title) {
         this.title = title;
     }
-    
+
     public String toXML() {
-    	StringBuilder buf = new StringBuilder();
-    	buf.append("<macrogroup>");
-    	buf.append("<title>" +  getTitle() + "</title>");
-    	buf.append("<macros>");
-    	for (Macro macro : getMacros())
-		{
-    		buf.append("<macro>");
-    		buf.append("<title>" + macro.getTitle() + "</title>");
-    		buf.append("<type>" + macro.getType() + "</type>");
-    		buf.append("<description>" + macro.getDescription() + "</description>");
-    		buf.append("<response>" + macro.getResponse() + "</response>");
-    		buf.append("</macro>");
-		}
-    	buf.append("</macros>");
-    	
-    	if (getMacroGroups().size() > 0) {
-    		buf.append("<macroGroups>");
-    		for (MacroGroup groups : getMacroGroups()) {
-    			buf.append(groups.toXML());
-    		}
-    		buf.append("</macroGroups>");
-    	}
-    	buf.append("</macrogroup>");
-    	return buf.toString(); 
+        StringBuilder buf = new StringBuilder();
+        buf.append("<macrogroup>");
+        buf.append("<title>" +  getTitle() + "</title>");
+        buf.append("<macros>");
+        for (Macro macro : getMacros()) {
+            buf.append("<macro>");
+            buf.append("<title>" + macro.getTitle() + "</title>");
+            buf.append("<type>" + macro.getType() + "</type>");
+            buf.append("<description>" + macro.getDescription() + "</description>");
+            buf.append("<response>" + macro.getResponse() + "</response>");
+            buf.append("</macro>");
+        }
+        buf.append("</macros>");
+
+        if (getMacroGroups().size() > 0) {
+            buf.append("<macroGroups>");
+            for (MacroGroup groups : getMacroGroups()) {
+                buf.append(groups.toXML());
+            }
+            buf.append("</macroGroups>");
+        }
+        buf.append("</macrogroup>");
+        return buf.toString();
     }
 }

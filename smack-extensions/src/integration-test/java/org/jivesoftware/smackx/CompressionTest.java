@@ -56,12 +56,12 @@ public class CompressionTest extends SmackTestCase {
         // Request the version of the server
         Version version = new Version();
         version.setType(IQ.Type.get);
-        version.setTo(getServiceName());
+        version.setTo(getXMPPServiceDomain());
 
         // Create a packet collector to listen for a response.
-        PacketCollector collector = connection.createPacketCollector(new PacketIDFilter(version.getPacketID()));
+        StanzaCollector collector = connection.createStanzaCollector(new PacketIDFilter(version.getStanzaId()));
 
-        connection.sendPacket(version);
+        connection.sendStanza(version);
 
         // Wait up to 5 seconds for a result.
         IQ result = (IQ)collector.nextResult(SmackConfiguration.getPacketReplyTimeout());
@@ -84,7 +84,7 @@ public class CompressionTest extends SmackTestCase {
      */
     protected void setUp() throws Exception {
         super.setUp();
-        XMPPTCPConnection setupConnection = new XMPPConnection(getServiceName());
+        XMPPTCPConnection setupConnection = new XMPPConnection(getXMPPServiceDomain());
         setupConnection.connect();
         if (!setupConnection.getAccountManager().supportsAccountCreation())
             fail("Server does not support account creation");
@@ -94,7 +94,7 @@ public class CompressionTest extends SmackTestCase {
             setupConnection.getAccountManager().createAccount("user0", "user0");
         } catch (XMPPException e) {
             // Do nothing if the accout already exists
-            if (e.getXMPPError().getCode() != 409) {
+            if (e.getStanzaError().getCode() != 409) {
                 throw e;
             }
         }

@@ -21,15 +21,14 @@ import java.util.concurrent.Executors;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import org.jivesoftware.smack.PacketListener;
 import org.jivesoftware.smack.SmackException.NotConnectedException;
-import org.jivesoftware.smack.filter.AndFilter;
-import org.jivesoftware.smack.filter.IQTypeFilter;
-import org.jivesoftware.smack.filter.PacketFilter;
-import org.jivesoftware.smack.filter.PacketTypeFilter;
-import org.jivesoftware.smack.packet.Packet;
+import org.jivesoftware.smack.iqrequest.AbstractIqRequestHandler;
+import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.Stanza;
+
 import org.jivesoftware.smackx.bytestreams.BytestreamListener;
 import org.jivesoftware.smackx.bytestreams.ibb.packet.Open;
+import org.jivesoftware.smackx.filetransfer.StreamNegotiator;
 
 
 /**
@@ -41,47 +40,47 @@ import org.jivesoftware.smackx.bytestreams.ibb.packet.Open;
  * All In-Band Bytestream request having a block size greater than the maximum allowed block size
  * for this connection are rejected with an &lt;resource-constraint/&gt; error. The maximum block
  * size can be set by invoking {@link InBandBytestreamManager#setMaximumBlockSize(int)}.
- * 
+ *
  * @author Henning Staib
  */
-class InitiationListener implements PacketListener {
+class InitiationListener extends AbstractIqRequestHandler {
     private static final Logger LOGGER = Logger.getLogger(InitiationListener.class.getName());
 
     /* manager containing the listeners and the XMPP connection */
     private final InBandBytestreamManager manager;
-
-    /* packet filter for all In-Band Bytestream requests */
-    private final PacketFilter initFilter = new AndFilter(new PacketTypeFilter(Open.class),
-                    IQTypeFilter.SET);
 
     /* executor service to process incoming requests concurrently */
     private final ExecutorService initiationListenerExecutor;
 
     /**
      * Constructor.
-     * 
+     *
      * @param manager the In-Band Bytestream manager
      */
     protected InitiationListener(InBandBytestreamManager manager) {
+        super(Open.ELEMENT, Open.NAMESPACE, IQ.Type.set, Mode.async);
         this.manager = manager;
         initiationListenerExecutor = Executors.newCachedThreadPool();
-    }
+     }
 
-    public void processPacket(final Packet packet) {
+    @Override
+    public IQ handleIQRequest(final IQ packet) {
         initiationListenerExecutor.execute(new Runnable() {
 
+            @Override
             public void run() {
                 try {
                     processRequest(packet);
                 }
-                catch (NotConnectedException e) {
+                catch (InterruptedException | NotConnectedException e) {
                     LOGGER.log(Level.WARNING, "proccessRequest", e);
                 }
             }
         });
+        return null;
     }
 
-    private void processRequest(Packet packet) throws NotConnectedException {
+    private void processRequest(Stanza packet) throws NotConnectedException, InterruptedException {
         Open ibbRequest = (Open) packet;
 
         // validate that block size is within allowed range
@@ -89,6 +88,8 @@ class InitiationListener implements PacketListener {
             this.manager.replyResourceConstraintPacket(ibbRequest);
             return;
         }
+
+        StreamNegotiator.signal(ibbRequest.getFrom().toString() + '\t' + ibbRequest.getSessionID(), ibbRequest);
 
         // ignore request if in ignore list
         if (this.manager.getIgnoredBytestreamRequests().remove(ibbRequest.getSessionID()))
@@ -118,15 +119,6 @@ class InitiationListener implements PacketListener {
              */
             this.manager.replyRejectPacket(ibbRequest);
         }
-    }
-
-    /**
-     * Returns the packet filter for In-Band Bytestream open requests.
-     * 
-     * @return the packet filter for In-Band Bytestream open requests
-     */
-    protected PacketFilter getFilter() {
-        return this.initFilter;
     }
 
     /**

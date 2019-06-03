@@ -16,34 +16,38 @@
  */
 package org.jivesoftware.smackx.bytestreams.ibb;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.XMPPError;
-import org.jivesoftware.smackx.bytestreams.ibb.DataListener;
-import org.jivesoftware.smackx.bytestreams.ibb.InBandBytestreamManager;
+import org.jivesoftware.smack.packet.StanzaError;
+
+import org.jivesoftware.smackx.InitExtensions;
 import org.jivesoftware.smackx.bytestreams.ibb.packet.Data;
 import org.jivesoftware.smackx.bytestreams.ibb.packet.DataPacketExtension;
+
 import org.junit.Test;
+import org.jxmpp.jid.Jid;
+import org.jxmpp.jid.JidTestUtil;
 import org.mockito.ArgumentCaptor;
 import org.powermock.reflect.Whitebox;
 
 /**
  * Test for the CloseListener class.
- * 
+ *
  * @author Henning Staib
  */
-public class DataListenerTest {
+public class DataListenerTest extends InitExtensions {
 
-    String initiatorJID = "initiator@xmpp-server/Smack";
-    String targetJID = "target@xmpp-server/Smack";
+    private static final Jid initiatorJID = JidTestUtil.DUMMY_AT_EXAMPLE_ORG_SLASH_DUMMYRESOURCE;
+    private static final Jid targetJID = JidTestUtil.FULL_JID_1_RESOURCE_1;
 
     /**
-     * If a data packet of an unknown session is received it should be replied
+     * If a data stanza of an unknown session is received it should be replied
      * with an &lt;item-not-found/&gt; error.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -64,19 +68,19 @@ public class DataListenerTest {
         data.setFrom(initiatorJID);
         data.setTo(targetJID);
 
-        dataListener.processPacket(data);
+        dataListener.handleIQRequest(data);
 
         // wait because packet is processed in an extra thread
         Thread.sleep(200);
 
         // capture reply to the In-Band Bytestream close request
         ArgumentCaptor<IQ> argument = ArgumentCaptor.forClass(IQ.class);
-        verify(connection).sendPacket(argument.capture());
+        verify(connection).sendStanza(argument.capture());
 
         // assert that reply is the correct error packet
         assertEquals(initiatorJID, argument.getValue().getTo());
         assertEquals(IQ.Type.error, argument.getValue().getType());
-        assertEquals(XMPPError.Condition.item_not_found.toString(),
+        assertEquals(StanzaError.Condition.item_not_found,
                         argument.getValue().getError().getCondition());
 
     }

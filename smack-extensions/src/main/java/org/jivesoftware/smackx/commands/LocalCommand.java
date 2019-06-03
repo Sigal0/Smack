@@ -19,6 +19,8 @@ package org.jivesoftware.smackx.commands;
 
 import org.jivesoftware.smackx.commands.packet.AdHocCommandData;
 
+import org.jxmpp.jid.Jid;
+
 /**
  * Represents a command that can be executed locally from a remote location. This
  * class must be extended to implement an specific ad-hoc command. This class
@@ -29,20 +31,20 @@ import org.jivesoftware.smackx.commands.packet.AdHocCommandData;
  *      <li>Current Stage</li>
  *      <li>Available actions</li>
  *      <li>Default action</li>
- * </ul><p/>
+ * </ul>
  * To implement a new command extend this class and implement all the abstract
  * methods. When implementing the actions remember that they could be invoked
  * several times, and that you must use the current stage number to know what to
  * do.
- * 
+ *
  * @author Gabriel Guardincerri
  */
 public abstract class LocalCommand extends AdHocCommand {
 
     /**
-     * The time stamp of first invokation of the command. Used to implement the session timeout.
+     * The time stamp of first invocation of the command. Used to implement the session timeout.
      */
-    private long creationDate;
+    private final long creationDate;
 
     /**
      * The unique ID of the execution of the command.
@@ -52,23 +54,23 @@ public abstract class LocalCommand extends AdHocCommand {
     /**
      * The full JID of the host of the command.
      */
-    private String ownerJID;
+    private Jid ownerJID;
 
     /**
      * The number of the current stage.
      */
-    private int currenStage;
+    private int currentStage;
 
     public LocalCommand() {
         super();
         this.creationDate = System.currentTimeMillis();
-        currenStage = -1;
+        currentStage = -1;
     }
 
     /**
      * The sessionID is an unique identifier of an execution request. This is
      * automatically handled and should not be called.
-     * 
+     *
      * @param sessionID the unique session id of this execution
      */
     public void setSessionID(String sessionID) {
@@ -78,7 +80,7 @@ public abstract class LocalCommand extends AdHocCommand {
 
     /**
      * Returns the session ID of this execution.
-     * 
+     *
      * @return the unique session id of this execution
      */
     public String getSessionID() {
@@ -88,21 +90,21 @@ public abstract class LocalCommand extends AdHocCommand {
     /**
      * Sets the JID of the command host. This is automatically handled and should
      * not be called.
-     * 
+     *
      * @param ownerJID the JID of the owner.
      */
-    public void setOwnerJID(String ownerJID) {
+    public void setOwnerJID(Jid ownerJID) {
         this.ownerJID = ownerJID;
     }
 
     @Override
-    public String getOwnerJID() {
+    public Jid getOwnerJID() {
         return ownerJID;
     }
 
     /**
      * Returns the date the command was created.
-     * 
+     *
      * @return the date the command was created.
      */
     public long getCreationDate() {
@@ -113,7 +115,7 @@ public abstract class LocalCommand extends AdHocCommand {
      * Returns true if the current stage is the last one. If it is then the
      * execution of some action will complete the execution of the command.
      * Commands that don't have multiple stages can always return <tt>true</tt>.
-     * 
+     *
      * @return true if the command is in the last stage.
      */
     public abstract boolean isLastStage();
@@ -128,7 +130,7 @@ public abstract class LocalCommand extends AdHocCommand {
      * @param jid the JID to check permissions on.
      * @return true if the user has permission to execute this action.
      */
-    public abstract boolean hasPermission(String jid);
+    public abstract boolean hasPermission(Jid jid);
 
     /**
      * Returns the currently executing stage number. The first stage number is
@@ -137,7 +139,7 @@ public abstract class LocalCommand extends AdHocCommand {
      * @return the current stage number.
      */
     public int getCurrentStage() {
-        return currenStage;
+        return currentStage;
     }
 
     @Override
@@ -149,18 +151,18 @@ public abstract class LocalCommand extends AdHocCommand {
     /**
      * Increase the current stage number. This is automatically handled and should
      * not be called.
-     * 
+     *
      */
     void incrementStage() {
-        currenStage++;
+        currentStage++;
     }
 
     /**
      * Decrease the current stage number. This is automatically handled and should
      * not be called.
-     * 
+     *
      */
     void decrementStage() {
-        currenStage--;
+        currentStage--;
     }
 }

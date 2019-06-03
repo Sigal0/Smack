@@ -1,6 +1,6 @@
 /**
  *
- * Copyright 2003-2014 Jive Software.
+ * Copyright 2003-2014 Jive Software, 2017 Florian Schmaus.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,42 +14,35 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.jivesoftware.smack.filter;
 
-import java.util.Locale;
+import org.jivesoftware.smack.packet.Stanza;
 
-import org.jivesoftware.smack.packet.Packet;
-import org.jxmpp.util.XmppStringUtils;
+import org.jxmpp.jid.Jid;
 
 /**
  * Filter for packets where the "from" field exactly matches a specified JID. If the specified
  * address is a bare JID then the filter will match any address whose bare JID matches the
  * specified JID. But if the specified address is a full JID then the filter will only match
- * if the sender of the packet matches the specified resource.
+ * if the sender of the stanza matches the specified resource.
  *
  * @author Gaston Dombiak
  */
-public class FromMatchesFilter implements PacketFilter {
+public final class FromMatchesFilter extends AbstractFromToMatchesFilter {
 
-    private String address;
-    /**
-     * Flag that indicates if the checking will be done against bare JID addresses or full JIDs.
-     */
-    private boolean matchBareJID = false;
+    public static final FromMatchesFilter MATCH_NO_FROM_SET = create(null);
 
     /**
      * Creates a filter matching on the "from" field. The from address must be the same as the
      * filter address. The second parameter specifies whether the full or the bare addresses are
      * compared.
      *
-     * @param address The address to filter for. If <code>null</code> is given, the packet must not
+     * @param address The address to filter for. If <code>null</code> is given, the stanza must not
      *        have a from address.
-     * @param matchBare
+     * @param ignoreResourcepart
      */
-    public FromMatchesFilter(String address, boolean matchBare) {
-        this.address = (address == null) ? null : address.toLowerCase(Locale.US);
-        matchBareJID = matchBare;
+    public FromMatchesFilter(Jid address, boolean ignoreResourcepart) {
+        super(address, ignoreResourcepart);
     }
 
     /**
@@ -57,52 +50,41 @@ public class FromMatchesFilter implements PacketFilter {
      * the filter address with the bare from address. Otherwise, compares the filter address
      * with the full from address.
      *
-     * @param address The address to filter for. If <code>null</code> is given, the packet must not
+     * @param address The address to filter for. If <code>null</code> is given, the stanza must not
      *        have a from address.
+     * @return filter for the "from" address.
      */
-    public static FromMatchesFilter create(String address) {
-        return new FromMatchesFilter(address, "".equals(XmppStringUtils.parseResource(address))) ;
+    public static FromMatchesFilter create(Jid address) {
+        return new FromMatchesFilter(address, address != null ? address.hasNoResource() : false) ;
     }
 
     /**
      * Creates a filter matching on the "from" field. Compares the bare version of from and filter
      * address.
      *
-     * @param address The address to filter for. If <code>null</code> is given, the packet must not
+     * @param address The address to filter for. If <code>null</code> is given, the stanza must not
      *        have a from address.
+     * @return filter matching the "from" address.
      */
-    public static FromMatchesFilter createBare(String address) {
-        address = (address == null) ? null : XmppStringUtils.parseBareAddress(address);
+    public static FromMatchesFilter createBare(Jid address) {
         return new FromMatchesFilter(address, true);
     }
 
-
     /**
-     * Creates a filter matching on the "from" field. Compares the full version of from and filter
+     * Creates a filter matching on the "from" field. Compares the full version, if available, of from and filter
      * address.
      *
-     * @param address The address to filter for. If <code>null</code> is given, the packet must not
+     * @param address The address to filter for. If <code>null</code> is given, the stanza must not
      *        have a from address.
+     * @return filter matching the "from" address.
      */
-    public static FromMatchesFilter createFull(String address) {
+    public static FromMatchesFilter createFull(Jid address) {
         return new FromMatchesFilter(address, false);
     }
 
-    public boolean accept(Packet packet) {
-        String from = packet.getFrom();
-        if (from == null) {
-            return address == null;
-        }
-        // Simplest form of NAMEPREP/STRINGPREP
-        from = from.toLowerCase(Locale.US);
-        if (matchBareJID) {
-            from = XmppStringUtils.parseBareAddress(from);
-        }
-        return from.equals(address);
+    @Override
+    protected Jid getAddressToCompare(Stanza stanza) {
+        return stanza.getFrom();
     }
 
-    public String toString() {
-        String matchMode = matchBareJID ? "bare" : "full";
-        return "FromMatchesFilter (" +matchMode + "): " + address;
-    }
 }

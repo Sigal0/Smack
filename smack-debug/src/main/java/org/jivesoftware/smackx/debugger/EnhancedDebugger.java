@@ -17,28 +17,13 @@
 
 package org.jivesoftware.smackx.debugger;
 
-import org.jivesoftware.smack.AbstractConnectionListener;
-import org.jivesoftware.smack.ConnectionListener;
-import org.jivesoftware.smack.PacketListener;
-import org.jivesoftware.smack.SmackException.NotConnectedException;
-import org.jivesoftware.smack.XMPPConnection;
-import org.jivesoftware.smack.debugger.SmackDebugger;
-import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.Message;
-import org.jivesoftware.smack.packet.Packet;
-import org.jivesoftware.smack.packet.Presence;
-import org.jivesoftware.smack.util.*;
-
-import javax.swing.*;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.ListSelectionListener;
-import javax.swing.table.DefaultTableModel;
-import javax.swing.text.BadLocationException;
-import javax.xml.transform.*;
-import javax.xml.transform.stream.StreamResult;
-import javax.xml.transform.stream.StreamSource;
-
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.GridLayout;
+import java.awt.Insets;
+import java.awt.Toolkit;
 import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.ActionEvent;
@@ -46,8 +31,6 @@ import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.Reader;
-import java.io.StringReader;
-import java.io.StringWriter;
 import java.io.Writer;
 import java.net.URL;
 import java.text.SimpleDateFormat;
@@ -55,19 +38,67 @@ import java.util.Date;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.swing.AbstractAction;
+import javax.swing.BorderFactory;
+import javax.swing.Icon;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JFormattedTextField;
+import javax.swing.JLabel;
+import javax.swing.JMenuItem;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
+import javax.swing.JTabbedPane;
+import javax.swing.JTable;
+import javax.swing.JTextArea;
+import javax.swing.ListSelectionModel;
+import javax.swing.SwingUtilities;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.text.BadLocationException;
+
+import org.jivesoftware.smack.AbstractConnectionListener;
+import org.jivesoftware.smack.AbstractXMPPConnection;
+import org.jivesoftware.smack.ConnectionListener;
+import org.jivesoftware.smack.ReconnectionListener;
+import org.jivesoftware.smack.ReconnectionManager;
+import org.jivesoftware.smack.SmackException.NotConnectedException;
+import org.jivesoftware.smack.XMPPConnection;
+import org.jivesoftware.smack.debugger.SmackDebugger;
+import org.jivesoftware.smack.debugger.SmackDebuggerFactory;
+import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.Message;
+import org.jivesoftware.smack.packet.Presence;
+import org.jivesoftware.smack.packet.Stanza;
+import org.jivesoftware.smack.packet.TopLevelStreamElement;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.util.ObservableReader;
+import org.jivesoftware.smack.util.ObservableWriter;
+import org.jivesoftware.smack.util.ReaderListener;
+import org.jivesoftware.smack.util.StringUtils;
+import org.jivesoftware.smack.util.WriterListener;
+import org.jivesoftware.smack.util.XmlUtil;
+
+import org.jxmpp.jid.EntityFullJid;
+import org.jxmpp.jid.Jid;
+
 /**
  * The EnhancedDebugger is a debugger that allows to debug sent, received and interpreted messages
- * but also provides the ability to send ad-hoc messages composed by the user.<p>
- * <p/>
+ * but also provides the ability to send ad-hoc messages composed by the user.
+ * <p>
  * A new EnhancedDebugger will be created for each connection to debug. All the EnhancedDebuggers
  * will be shown in the same debug window provided by the class EnhancedDebuggerWindow.
+ * </p>
  *
  * @author Gaston Dombiak
  */
-public class EnhancedDebugger implements SmackDebugger {
+public class EnhancedDebugger extends SmackDebugger {
 
     private static final Logger LOGGER = Logger.getLogger(EnhancedDebugger.class.getName());
-    
+
     private static final String NEWLINE = "\n";
 
     private static ImageIcon packetReceivedIcon;
@@ -79,7 +110,7 @@ public class EnhancedDebugger implements SmackDebugger {
 
     {
         URL url;
-        // Load the image icons 
+        // Load the image icons
         url =
                 Thread.currentThread().getContextClassLoader().getResource("images/nav_left_blue.png");
         if (url != null) {
@@ -116,11 +147,8 @@ public class EnhancedDebugger implements SmackDebugger {
     private JFormattedTextField userField = null;
     private JFormattedTextField statusField = null;
 
-    private XMPPConnection connection = null;
-
-    private PacketListener packetReaderListener = null;
-    private PacketListener packetWriterListener = null;
     private ConnectionListener connListener = null;
+    private final ReconnectionListener reconnectionListener;
 
     private Writer writer;
     private Reader reader;
@@ -144,20 +172,41 @@ public class EnhancedDebugger implements SmackDebugger {
 
     JTabbedPane tabbedPane;
 
-    public EnhancedDebugger(XMPPConnection connection, Writer writer, Reader reader) {
-        this.connection = connection;
-        this.writer = writer;
-        this.reader = reader;
-        createDebug();
-        EnhancedDebuggerWindow.addDebugger(this);
-    }
+    public EnhancedDebugger(XMPPConnection connection) {
+        super(connection);
 
-    /**
-     * Creates the debug process, which is a GUI window that displays XML traffic.
-     */
-    private void createDebug() {
+        reconnectionListener = new ReconnectionListener() {
+            @Override
+            public void reconnectingIn(final int seconds) {
+                SwingUtilities.invokeLater(new Runnable() {
+                    @Override
+                    public void run() {
+                        statusField.setValue("Attempt to reconnect in " + seconds + " seconds");
+                    }
+                });
+            }
+
+            @Override
+            public void reconnectionFailed(Exception e) {
+                SwingUtilities.invokeLater(new Runnable() {
+                    @Override
+                    public void run() {
+                        statusField.setValue("Reconnection failed");
+                    }
+                });
+            }
+        };
+
+        if (connection instanceof AbstractXMPPConnection) {
+            AbstractXMPPConnection abstractXmppConnection = (AbstractXMPPConnection) connection;
+            ReconnectionManager.getInstanceFor(abstractXmppConnection).addReconnectionListener(reconnectionListener);
+        } else {
+            LOGGER.info("The connection instance " + connection
+                            + " is not an instance of AbstractXMPPConnection, thus we can not install the ReconnectionListener");
+        }
+
         // We'll arrange the UI into six tabs. The first tab contains all data, the second
-        // client generated XML, the third server generated XML, the fourth allows to send 
+        // client generated XML, the third server generated XML, the fourth allows to send
         // ad-hoc messages and the fifth contains connection information.
         tabbedPane = new JTabbedPane();
 
@@ -170,41 +219,12 @@ public class EnhancedDebugger implements SmackDebugger {
         // Add the connection information panel
         addInformationPanel();
 
-        // Create a thread that will listen for all incoming packets and write them to
-        // the GUI. This is what we call "interpreted" packet data, since it's the packet
-        // data as Smack sees it and not as it's coming in as raw XML.
-        packetReaderListener = new PacketListener() {
-            SimpleDateFormat dateFormatter = new SimpleDateFormat("hh:mm:ss:SS aaa");
-
-            public void processPacket(final Packet packet) {
-                SwingUtilities.invokeLater(new Runnable() {
-                    public void run() {
-                        addReadPacketToTable(dateFormatter, packet);
-                    }
-                });
-
-            }
-        };
-
-        // Create a thread that will listen for all outgoing packets and write them to
-        // the GUI.
-        packetWriterListener = new PacketListener() {
-            SimpleDateFormat dateFormatter = new SimpleDateFormat("hh:mm:ss:SS aaa");
-
-            public void processPacket(final Packet packet) {
-                SwingUtilities.invokeLater(new Runnable() {
-                    public void run() {
-                        addSentPacketToTable(dateFormatter, packet);
-                    }
-                });
-
-            }
-        };
-
         // Create a thread that will listen for any connection closed event
         connListener = new AbstractConnectionListener() {
+            @Override
             public void connectionClosed() {
                 SwingUtilities.invokeLater(new Runnable() {
+                    @Override
                     public void run() {
                         statusField.setValue("Closed");
                         EnhancedDebuggerWindow.connectionClosed(EnhancedDebugger.this);
@@ -213,8 +233,10 @@ public class EnhancedDebugger implements SmackDebugger {
 
             }
 
+            @Override
             public void connectionClosedOnError(final Exception e) {
                 SwingUtilities.invokeLater(new Runnable() {
+                    @Override
                     public void run() {
                         statusField.setValue("Closed due to an exception");
                         EnhancedDebuggerWindow.connectionClosedOnError(EnhancedDebugger.this, e);
@@ -222,31 +244,9 @@ public class EnhancedDebugger implements SmackDebugger {
                 });
 
             }
-            public void reconnectingIn(final int seconds){
-                SwingUtilities.invokeLater(new Runnable() {
-                    public void run() {
-                        statusField.setValue("Attempt to reconnect in " + seconds + " seconds");
-                    }
-                });
-            }
-
-            public void reconnectionSuccessful() {
-                SwingUtilities.invokeLater(new Runnable() {
-                    public void run() {
-                        statusField.setValue("Reconnection stablished");
-                        EnhancedDebuggerWindow.connectionEstablished(EnhancedDebugger.this);
-                    }
-                });
-            }
-
-            public void reconnectionFailed(Exception e) {
-                SwingUtilities.invokeLater(new Runnable() {
-                    public void run() {
-                        statusField.setValue("Reconnection failed");
-                    }
-                });
-            }
         };
+
+        EnhancedDebuggerWindow.addDebugger(this);
     }
 
     private void addBasicPanels() {
@@ -255,13 +255,15 @@ public class EnhancedDebugger implements SmackDebugger {
 
         messagesTable =
                 new DefaultTableModel(
-                        new Object[]{"Hide", "Timestamp", "", "", "Message", "Id", "Type", "To", "From"},
+                        new Object[] {"Hide", "Timestamp", "", "", "Message", "Id", "Type", "To", "From"},
                         0) {
-        			private static final long serialVersionUID = 8136121224474217264L;
-					public boolean isCellEditable(int rowIndex, int mColIndex) {
+                    private static final long serialVersionUID = 8136121224474217264L;
+                    @Override
+                    public boolean isCellEditable(int rowIndex, int mColIndex) {
                         return false;
                     }
 
+                    @Override
                     public Class<?> getColumnClass(int columnIndex) {
                         if (columnIndex == 2 || columnIndex == 3) {
                             return Icon.class;
@@ -310,6 +312,7 @@ public class EnhancedDebugger implements SmackDebugger {
         JPopupMenu menu = new JPopupMenu();
         JMenuItem menuItem1 = new JMenuItem("Copy");
         menuItem1.addActionListener(new ActionListener() {
+            @Override
             public void actionPerformed(ActionEvent e) {
                 // Get the clipboard
                 Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
@@ -320,24 +323,23 @@ public class EnhancedDebugger implements SmackDebugger {
         menu.add(menuItem1);
         // Add listener to the text area so the popup menu can come up.
         messageTextArea.addMouseListener(new PopupListener(menu));
-	JPanel sublayout = new JPanel(new BorderLayout());
+        JPanel sublayout = new JPanel(new BorderLayout());
         sublayout.add(new JScrollPane(messageTextArea), BorderLayout.CENTER);
-       
-        JButton clearb = new JButton("Clear All Packets");
-        
-        clearb.addActionListener(new AbstractAction() {    
-	    private static final long serialVersionUID = -8576045822764763613L;
 
-	    @Override
-	    public void actionPerformed(ActionEvent e) {
-            messagesTable.setRowCount(0);
-		
-	    }
-	});
+        JButton clearb = new JButton("Clear All Packets");
+
+        clearb.addActionListener(new AbstractAction() {
+            private static final long serialVersionUID = -8576045822764763613L;
+
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                messagesTable.setRowCount(0);
+            }
+        });
 
         sublayout.add(clearb, BorderLayout.NORTH);
         allPane.setBottomComponent(sublayout);
-       
+
         allPane.setDividerLocation(150);
 
         tabbedPane.add("All Packets", allPane);
@@ -356,6 +358,7 @@ public class EnhancedDebugger implements SmackDebugger {
         menu = new JPopupMenu();
         menuItem1 = new JMenuItem("Copy");
         menuItem1.addActionListener(new ActionListener() {
+            @Override
             public void actionPerformed(ActionEvent e) {
                 // Get the clipboard
                 Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
@@ -366,6 +369,7 @@ public class EnhancedDebugger implements SmackDebugger {
 
         JMenuItem menuItem2 = new JMenuItem("Clear");
         menuItem2.addActionListener(new ActionListener() {
+            @Override
             public void actionPerformed(ActionEvent e) {
                 sentText.setText("");
             }
@@ -391,6 +395,7 @@ public class EnhancedDebugger implements SmackDebugger {
         menu = new JPopupMenu();
         menuItem1 = new JMenuItem("Copy");
         menuItem1.addActionListener(new ActionListener() {
+            @Override
             public void actionPerformed(ActionEvent e) {
                 // Get the clipboard
                 Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
@@ -401,6 +406,7 @@ public class EnhancedDebugger implements SmackDebugger {
 
         menuItem2 = new JMenuItem("Clear");
         menuItem2.addActionListener(new ActionListener() {
+            @Override
             public void actionPerformed(ActionEvent e) {
                 receivedText.setText("");
             }
@@ -414,8 +420,10 @@ public class EnhancedDebugger implements SmackDebugger {
         // Create a special Reader that wraps the main Reader and logs data to the GUI.
         ObservableReader debugReader = new ObservableReader(reader);
         readerListener = new ReaderListener() {
+            @Override
             public void read(final String str) {
                 SwingUtilities.invokeLater(new Runnable() {
+                    @Override
                     public void run() {
                         if (EnhancedDebuggerWindow.PERSISTED_DEBUGGER &&
                                 !EnhancedDebuggerWindow.getInstance().isVisible()) {
@@ -425,8 +433,7 @@ public class EnhancedDebugger implements SmackDebugger {
 
                         int index = str.lastIndexOf(">");
                         if (index != -1) {
-                            if (receivedText.getLineCount() >= EnhancedDebuggerWindow.MAX_TABLE_ROWS)
-                            {
+                            if (receivedText.getLineCount() >= EnhancedDebuggerWindow.MAX_TABLE_ROWS) {
                                 try {
                                     receivedText.replaceRange("", 0, receivedText.getLineEndOffset(0));
                                 }
@@ -452,8 +459,10 @@ public class EnhancedDebugger implements SmackDebugger {
         // Create a special Writer that wraps the main Writer and logs data to the GUI.
         ObservableWriter debugWriter = new ObservableWriter(writer);
         writerListener = new WriterListener() {
+            @Override
             public void write(final String str) {
                 SwingUtilities.invokeLater(new Runnable() {
+                    @Override
                     public void run() {
                         if (EnhancedDebuggerWindow.PERSISTED_DEBUGGER &&
                                 !EnhancedDebuggerWindow.getInstance().isVisible()) {
@@ -501,6 +510,7 @@ public class EnhancedDebugger implements SmackDebugger {
         JPopupMenu menu = new JPopupMenu();
         JMenuItem menuItem = new JMenuItem("Message");
         menuItem.addActionListener(new ActionListener() {
+            @Override
             public void actionPerformed(ActionEvent e) {
                 adhocMessages.setText(
                         "<message to=\"\" id=\""
@@ -512,6 +522,7 @@ public class EnhancedDebugger implements SmackDebugger {
 
         menuItem = new JMenuItem("IQ Get");
         menuItem.addActionListener(new ActionListener() {
+            @Override
             public void actionPerformed(ActionEvent e) {
                 adhocMessages.setText(
                         "<iq type=\"get\" to=\"\" id=\""
@@ -523,6 +534,7 @@ public class EnhancedDebugger implements SmackDebugger {
 
         menuItem = new JMenuItem("IQ Set");
         menuItem.addActionListener(new ActionListener() {
+            @Override
             public void actionPerformed(ActionEvent e) {
                 adhocMessages.setText(
                         "<iq type=\"set\" to=\"\" id=\""
@@ -534,6 +546,7 @@ public class EnhancedDebugger implements SmackDebugger {
 
         menuItem = new JMenuItem("Presence");
         menuItem.addActionListener(new ActionListener() {
+            @Override
             public void actionPerformed(ActionEvent e) {
                 adhocMessages.setText(
                         "<presence to=\"\" id=\"" + StringUtils.randomString(5) + "-X\"/>");
@@ -544,14 +557,15 @@ public class EnhancedDebugger implements SmackDebugger {
 
         menuItem = new JMenuItem("Send");
         menuItem.addActionListener(new ActionListener() {
+            @Override
             public void actionPerformed(ActionEvent e) {
                 if (!"".equals(adhocMessages.getText())) {
                     AdHocPacket packetToSend = new AdHocPacket(adhocMessages.getText());
                     try {
-                        connection.sendPacket(packetToSend);
+                        connection.sendStanza(packetToSend);
                     }
-                    catch (NotConnectedException e1) {
-                        e1.printStackTrace();
+                    catch (InterruptedException | NotConnectedException e1) {
+                        LOGGER.log(Level.WARNING, "exception", e);
                     }
                 }
             }
@@ -560,6 +574,7 @@ public class EnhancedDebugger implements SmackDebugger {
 
         menuItem = new JMenuItem("Clear");
         menuItem.addActionListener(new ActionListener() {
+            @Override
             public void actionPerformed(ActionEvent e) {
                 adhocMessages.setText(null);
             }
@@ -586,7 +601,7 @@ public class EnhancedDebugger implements SmackDebugger {
         connPanel.add(
                 label,
                 new GridBagConstraints(0, 0, 1, 1, 0.0, 0.0, 21, 0, new Insets(0, 0, 0, 0), 0, 0));
-        JFormattedTextField field = new JFormattedTextField(connection.getServiceName());
+        JFormattedTextField field = new JFormattedTextField(connection.getXMPPServiceDomain());
         field.setMinimumSize(new java.awt.Dimension(150, 20));
         field.setMaximumSize(new java.awt.Dimension(150, 20));
         field.setEditable(false);
@@ -634,7 +649,7 @@ public class EnhancedDebugger implements SmackDebugger {
         connPanel.add(
                 label,
                 new GridBagConstraints(0, 3, 1, 1, 0.0, 0.0, 21, 0, new Insets(0, 0, 0, 0), 0, 0));
-        field = new JFormattedTextField(new SimpleDateFormat("yyyy.MM.dd hh:mm:ss:SS aaa"));
+        field = new JFormattedTextField(new SimpleDateFormat("yyyy.MM.dd HH:mm:ss:SS"));
         field.setMinimumSize(new java.awt.Dimension(150, 20));
         field.setMaximumSize(new java.awt.Dimension(150, 20));
         field.setValue(creationTime);
@@ -669,11 +684,12 @@ public class EnhancedDebugger implements SmackDebugger {
         packetsPanel.setBorder(BorderFactory.createTitledBorder("Transmitted Packets"));
 
         statisticsTable =
-                new DefaultTableModel(new Object[][]{{"IQ", 0, 0}, {"Message", 0, 0},
+                new DefaultTableModel(new Object[][] { {"IQ", 0, 0}, {"Message", 0, 0},
                         {"Presence", 0, 0}, {"Other", 0, 0}, {"Total", 0, 0}},
-                        new Object[]{"Type", "Received", "Sent"}) {
-        			private static final long serialVersionUID = -6793886085109589269L;
-					public boolean isCellEditable(int rowIndex, int mColIndex) {
+                        new Object[] {"Type", "Received", "Sent"}) {
+                    private static final long serialVersionUID = -6793886085109589269L;
+                    @Override
+                    public boolean isCellEditable(int rowIndex, int mColIndex) {
                         return false;
                     }
                 };
@@ -689,50 +705,30 @@ public class EnhancedDebugger implements SmackDebugger {
         tabbedPane.setToolTipTextAt(4, "Information and statistics about the debugged connection");
     }
 
-    public Reader newConnectionReader(Reader newReader) {
-        ((ObservableReader) reader).removeReaderListener(readerListener);
-        ObservableReader debugReader = new ObservableReader(newReader);
-        debugReader.addReaderListener(readerListener);
-        reader = debugReader;
-        return reader;
+    @Override
+    public final void outgoingStreamSink(CharSequence outgoingCharSequence) {
+        writerListener.write(outgoingCharSequence.toString());
     }
 
-    public Writer newConnectionWriter(Writer newWriter) {
-        ((ObservableWriter) writer).removeWriterListener(writerListener);
-        ObservableWriter debugWriter = new ObservableWriter(newWriter);
-        debugWriter.addWriterListener(writerListener);
-        writer = debugWriter;
-        return writer;
+    @Override
+    public final void incomingStreamSink(CharSequence incomingCharSequence) {
+        readerListener.read(incomingCharSequence.toString());
     }
 
-    public void userHasLogged(final String user) {
+    @Override
+    public void userHasLogged(final EntityFullJid user) {
         final EnhancedDebugger debugger = this;
         SwingUtilities.invokeLater(new Runnable() {
+            @Override
             public void run() {
-                userField.setText(user);
-                EnhancedDebuggerWindow.userHasLogged(debugger, user);
+                userField.setText(user.toString());
+                EnhancedDebuggerWindow.userHasLogged(debugger, user.toString());
                 // Add the connection listener to the connection so that the debugger can be notified
                 // whenever the connection is closed.
                 connection.addConnectionListener(connListener);
             }
         });
 
-    }
-
-    public Reader getReader() {
-        return reader;
-    }
-
-    public Writer getWriter() {
-        return writer;
-    }
-
-    public PacketListener getReaderListener() {
-        return packetReaderListener;
-    }
-
-    public PacketListener getWriterListener() {
-        return packetWriterListener;
     }
 
     /**
@@ -756,16 +752,26 @@ public class EnhancedDebugger implements SmackDebugger {
     }
 
     /**
-     * Adds the received packet detail to the messages table.
+     * Adds the received stanza detail to the messages table.
      *
      * @param dateFormatter the SimpleDateFormat to use to format Dates
-     * @param packet        the read packet to add to the table
+     * @param packet        the read stanza to add to the table
      */
-    private void addReadPacketToTable(final SimpleDateFormat dateFormatter, final Packet packet) {
+    private void addReadPacketToTable(final SimpleDateFormat dateFormatter, final TopLevelStreamElement packet) {
         SwingUtilities.invokeLater(new Runnable() {
+            @Override
             public void run() {
                 String messageType;
-                String from = packet.getFrom();
+                Jid from;
+                String stanzaId;
+                if (packet instanceof Stanza) {
+                    Stanza stanza = (Stanza) packet;
+                    from = stanza.getFrom();
+                    stanzaId = stanza.getStanzaId();
+                } else {
+                    from = null;
+                    stanzaId = "(Nonza)";
+                }
                 String type = "";
                 Icon packetTypeIcon;
                 receivedPackets++;
@@ -800,13 +806,13 @@ public class EnhancedDebugger implements SmackDebugger {
                 }
 
                 messagesTable.addRow(
-                        new Object[]{
-                                formatXML(packet.toXML().toString()),
+                        new Object[] {
+                                XmlUtil.prettyFormatXml(packet.toXML().toString()),
                                 dateFormatter.format(new Date()),
                                 packetReceivedIcon,
                                 packetTypeIcon,
                                 messageType,
-                                packet.getPacketID(),
+                                stanzaId,
                                 type,
                                 "",
                                 from});
@@ -817,16 +823,26 @@ public class EnhancedDebugger implements SmackDebugger {
     }
 
     /**
-     * Adds the sent packet detail to the messages table.
+     * Adds the sent stanza detail to the messages table.
      *
      * @param dateFormatter the SimpleDateFormat to use to format Dates
-     * @param packet        the sent packet to add to the table
+     * @param packet        the sent stanza to add to the table
      */
-    private void addSentPacketToTable(final SimpleDateFormat dateFormatter, final Packet packet) {
+    private void addSentPacketToTable(final SimpleDateFormat dateFormatter, final TopLevelStreamElement packet) {
         SwingUtilities.invokeLater(new Runnable() {
+            @Override
             public void run() {
                 String messageType;
-                String to = packet.getTo();
+                Jid to;
+                String stanzaId;
+                if (packet instanceof Stanza) {
+                    Stanza stanza = (Stanza) packet;
+                    to = stanza.getTo();
+                    stanzaId = stanza.getStanzaId();
+                } else {
+                    to = null;
+                    stanzaId = "(Nonza)";
+                }
                 String type = "";
                 Icon packetTypeIcon;
                 sentPackets++;
@@ -861,13 +877,13 @@ public class EnhancedDebugger implements SmackDebugger {
                 }
 
                 messagesTable.addRow(
-                        new Object[]{
-                                formatXML(packet.toXML().toString()),
+                        new Object[] {
+                                XmlUtil.prettyFormatXml(packet.toXML().toString()),
                                 dateFormatter.format(new Date()),
                                 packetSentIcon,
                                 packetTypeIcon,
                                 messageType,
-                                packet.getPacketID(),
+                                stanzaId,
                                 type,
                                 to,
                                 ""});
@@ -876,40 +892,6 @@ public class EnhancedDebugger implements SmackDebugger {
                 updateStatistics();
             }
         });
-    }
-
-    private String formatXML(String str) {
-        try {
-            // Use a Transformer for output
-            TransformerFactory tFactory = TransformerFactory.newInstance();
-            // Surround this setting in a try/catch for compatibility with Java 1.4. This setting is required
-            // for Java 1.5
-            try {
-                tFactory.setAttribute("indent-number", 2);
-            }
-            catch (IllegalArgumentException e) {
-                // Ignore
-            }
-            Transformer transformer = tFactory.newTransformer();
-            transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
-            transformer.setOutputProperty(OutputKeys.INDENT, "yes");
-            transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "2");
-
-            // Transform the requested string into a nice formatted XML string
-            StreamSource source = new StreamSource(new StringReader(str));
-            StringWriter sw = new StringWriter();
-            StreamResult result = new StreamResult(sw);
-            transformer.transform(source, result);
-            return sw.toString();
-
-        }
-        catch (TransformerConfigurationException tce) {
-            LOGGER.log(Level.SEVERE, "Transformer Factory error", tce);
-        }
-        catch (TransformerException te) {
-            LOGGER.log(Level.SEVERE, "Transformation error", te);
-        }
-        return str;
     }
 
     /**
@@ -926,44 +908,47 @@ public class EnhancedDebugger implements SmackDebugger {
      */
     void cancel() {
         connection.removeConnectionListener(connListener);
-        connection.removePacketListener(packetReaderListener);
-        connection.removePacketSendingListener(packetWriterListener);
         ((ObservableReader) reader).removeReaderListener(readerListener);
         ((ObservableWriter) writer).removeWriterListener(writerListener);
         messagesTable = null;
     }
 
     /**
-     * An ad-hoc packet is like any regular packet but with the exception that it's intention is
+     * An ad-hoc stanza is like any regular stanza but with the exception that it's intention is
      * to be used only <b>to send packets</b>.<p>
      * <p/>
      * The whole text to send must be passed to the constructor. This implies that the client of
      * this class is responsible for sending a valid text to the constructor.
      */
-    private class AdHocPacket extends Packet {
+    private static final class AdHocPacket extends Stanza {
 
-        private String text;
+        private final String text;
 
         /**
          * Create a new AdHocPacket with the text to send. The passed text must be a valid text to
          * send to the server, no validation will be done on the passed text.
          *
-         * @param text the whole text of the packet to send
+         * @param text the whole text of the stanza to send
          */
-        public AdHocPacket(String text) {
+        private AdHocPacket(String text) {
             this.text = text;
         }
 
-        public String toXML() {
+        @Override
+        public String toXML(XmlEnvironment enclosingNamespace) {
             return text;
         }
 
+        @Override
+        public String toString() {
+            return toXML((XmlEnvironment) null);
+        }
     }
 
     /**
      * Listens for debug window popup dialog events.
      */
-    private class PopupListener extends MouseAdapter {
+    private static class PopupListener extends MouseAdapter {
 
         JPopupMenu popup;
 
@@ -971,10 +956,12 @@ public class EnhancedDebugger implements SmackDebugger {
             popup = popupMenu;
         }
 
+        @Override
         public void mousePressed(MouseEvent e) {
             maybeShowPopup(e);
         }
 
+        @Override
         public void mouseReleased(MouseEvent e) {
             maybeShowPopup(e);
         }
@@ -996,6 +983,7 @@ public class EnhancedDebugger implements SmackDebugger {
             this.table = table;
         }
 
+        @Override
         public void valueChanged(ListSelectionEvent e) {
             if (table.getSelectedRow() == -1) {
                 // Clear the messageTextArea since there is none packet selected
@@ -1009,5 +997,41 @@ public class EnhancedDebugger implements SmackDebugger {
                 messageTextArea.setCaretPosition(0);
             }
         }
+    }
+
+    @Override
+    public void onIncomingStreamElement(final TopLevelStreamElement streamElement) {
+        final SimpleDateFormat dateFormatter = new SimpleDateFormat("HH:mm:ss:SS");
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                addReadPacketToTable(dateFormatter, streamElement);
+            }
+        });
+    }
+
+    @Override
+    public void onOutgoingStreamElement(final TopLevelStreamElement streamElement) {
+        final SimpleDateFormat dateFormatter = new SimpleDateFormat("HH:mm:ss:SS");
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                addSentPacketToTable(dateFormatter, streamElement);
+            }
+        });
+    }
+
+    public static final class Factory implements SmackDebuggerFactory {
+
+        public static final SmackDebuggerFactory INSTANCE = new Factory();
+
+        private Factory() {
+        }
+
+        @Override
+        public SmackDebugger create(XMPPConnection connection) throws IllegalArgumentException {
+            return new EnhancedDebugger(connection);
+        }
+
     }
 }

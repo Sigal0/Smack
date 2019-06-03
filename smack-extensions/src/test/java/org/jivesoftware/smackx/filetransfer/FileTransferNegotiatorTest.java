@@ -19,23 +19,25 @@ package org.jivesoftware.smackx.filetransfer;
 import static org.junit.Assert.assertTrue;
 
 import org.jivesoftware.smack.DummyConnection;
-import org.jivesoftware.smack.packet.Packet;
+import org.jivesoftware.smack.SmackException.NoResponseException;
+import org.jivesoftware.smack.packet.Stanza;
+
+import org.jivesoftware.smackx.InitExtensions;
 import org.jivesoftware.smackx.disco.ServiceDiscoveryManager;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.jxmpp.jid.JidTestUtil;
 
-public class FileTransferNegotiatorTest {
+public class FileTransferNegotiatorTest extends InitExtensions {
     private DummyConnection connection;
 
     @Before
     public void setUp() throws Exception {
-        // Uncomment this to enable debug output
-        // XMPPConnection.DEBUG_ENABLED = true;
-
         connection = new DummyConnection();
         connection.connect();
-        connection.login("me", "secret");
+        connection.login();
         ServiceDiscoveryManager.getInstanceFor(connection);
     }
 
@@ -48,8 +50,12 @@ public class FileTransferNegotiatorTest {
     @Test
     public void verifyForm() throws Exception {
         FileTransferNegotiator fileNeg = FileTransferNegotiator.getInstanceFor(connection);
-        fileNeg.negotiateOutgoingTransfer("me", "streamid", "file", 1024, null, 10);
-        Packet packet = connection.getSentPacket();
+        try {
+            fileNeg.negotiateOutgoingTransfer(JidTestUtil.DUMMY_AT_EXAMPLE_ORG, "streamid", "file", 1024, null, 10);
+        } catch (NoResponseException e) {
+            // We do not expect an answer. This unit test only checks the request sent.
+        }
+        Stanza packet = connection.getSentPacket();
         String xml = packet.toXML().toString();
         assertTrue(xml.indexOf("var='stream-method' type='list-single'") != -1);
     }

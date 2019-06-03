@@ -19,12 +19,15 @@ package org.jivesoftware.smackx.bytestreams.ibb;
 import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.packet.IQ;
+
 import org.jivesoftware.smackx.bytestreams.BytestreamRequest;
 import org.jivesoftware.smackx.bytestreams.ibb.packet.Open;
 
+import org.jxmpp.jid.Jid;
+
 /**
  * InBandBytestreamRequest class handles incoming In-Band Bytestream requests.
- * 
+ *
  * @author Henning Staib
  */
 public class InBandBytestreamRequest implements BytestreamRequest {
@@ -46,18 +49,20 @@ public class InBandBytestreamRequest implements BytestreamRequest {
 
     /**
      * Returns the sender of the In-Band Bytestream open request.
-     * 
+     *
      * @return the sender of the In-Band Bytestream open request
      */
-    public String getFrom() {
+    @Override
+    public Jid getFrom() {
         return this.byteStreamRequest.getFrom();
     }
 
     /**
      * Returns the session ID of the In-Band Bytestream open request.
-     * 
+     *
      * @return the session ID of the In-Band Bytestream open request
      */
+    @Override
     public String getSessionID() {
         return this.byteStreamRequest.getSessionID();
     }
@@ -65,11 +70,13 @@ public class InBandBytestreamRequest implements BytestreamRequest {
     /**
      * Accepts the In-Band Bytestream open request and returns the session to
      * send/receive data.
-     * 
+     *
      * @return the session to send/receive data
-     * @throws NotConnectedException 
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public InBandBytestreamSession accept() throws NotConnectedException {
+    @Override
+    public InBandBytestreamSession accept() throws NotConnectedException, InterruptedException {
         XMPPConnection connection = this.manager.getConnection();
 
         // create In-Band Bytestream session and store it
@@ -79,7 +86,7 @@ public class InBandBytestreamRequest implements BytestreamRequest {
 
         // acknowledge request
         IQ resultIQ = IQ.createResultIQ(this.byteStreamRequest);
-        connection.sendPacket(resultIQ);
+        connection.sendStanza(resultIQ);
 
         return ibbSession;
     }
@@ -87,9 +94,11 @@ public class InBandBytestreamRequest implements BytestreamRequest {
     /**
      * Rejects the In-Band Bytestream request by sending a reject error to the
      * initiator.
-     * @throws NotConnectedException 
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public void reject() throws NotConnectedException {
+    @Override
+    public void reject() throws NotConnectedException, InterruptedException {
         this.manager.replyRejectPacket(this.byteStreamRequest);
     }
 

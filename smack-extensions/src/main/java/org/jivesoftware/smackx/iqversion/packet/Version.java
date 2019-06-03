@@ -17,42 +17,46 @@
 
 package org.jivesoftware.smackx.iqversion.packet;
 
-
 import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.Stanza;
 import org.jivesoftware.smack.util.StringUtils;
+
+import org.jxmpp.jid.Jid;
 
 /**
  * A Version IQ packet, which is used by XMPP clients to discover version information
  * about the software running at another entity's JID.<p>
  *
- * An example to discover the version of the server:
- * <pre>
- * // Request the version from the server.
- * Version versionRequest = new Version();
- * timeRequest.setType(IQ.Type.get);
- * timeRequest.setTo("example.com");
- *
- * // Create a packet collector to listen for a response.
- * PacketCollector collector = con.createPacketCollector(
- *                new PacketIDFilter(versionRequest.getPacketID()));
- *
- * con.sendPacket(versionRequest);
- *
- * // Wait up to 5 seconds for a result.
- * IQ result = (IQ)collector.nextResult(5000);
- * if (result != null && result.getType() == IQ.Type.result) {
- *     Version versionResult = (Version)result;
- *     // Do something with result...
- * }</pre><p>
- *
  * @author Gaston Dombiak
  */
 public class Version extends IQ {
+    public static final String ELEMENT = QUERY_ELEMENT;
     public static final String NAMESPACE = "jabber:iq:version";
 
-    private String name;
-    private String version;
+    private final String name;
+    private final String version;
     private String os;
+
+    public Version() {
+        super(ELEMENT, NAMESPACE);
+        name = null;
+        version = null;
+        setType(Type.get);
+    }
+
+    /**
+     * Request version IQ.
+     *
+     * @param to the jid where to request version from
+     */
+    public Version(Jid to) {
+        this();
+        setTo(to);
+    }
+
+    public Version(String name, String version) {
+        this(name, version, null);
+    }
 
     /**
      * Creates a new Version object with given details.
@@ -62,9 +66,10 @@ public class Version extends IQ {
      * @param os The operating system of the queried entity. This element is OPTIONAL.
      */
     public Version(String name, String version, String os) {
+        super(ELEMENT, NAMESPACE);
         this.setType(IQ.Type.result);
-        this.name = name;
-        this.version = version;
+        this.name = StringUtils.requireNotNullNorEmpty(name, "name must not be null");
+        this.version = StringUtils.requireNotNullNorEmpty(version, "version must not be null");
         this.os = os;
     }
 
@@ -83,16 +88,6 @@ public class Version extends IQ {
     }
 
     /**
-     * Sets the natural-language name of the software. This message should only be
-     * invoked when parsing the XML and setting the property to a Version instance.
-     *
-     * @param name the natural-language name of the software.
-     */
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    /**
      * Returns the specific version of the software. This property will always be
      * present in a result.
      *
@@ -100,16 +95,6 @@ public class Version extends IQ {
      */
     public String getVersion() {
         return version;
-    }
-
-    /**
-     * Sets the specific version of the software. This message should only be
-     * invoked when parsing the XML and setting the property to a Version instance.
-     *
-     * @param version the specific version of the software.
-     */
-    public void setVersion(String version) {
-        this.version = version;
     }
 
     /**
@@ -132,21 +117,21 @@ public class Version extends IQ {
         this.os = os;
     }
 
-    public String getChildElementXML() {
-        StringBuilder buf = new StringBuilder();
-        buf.append("<query xmlns=\"");
-        buf.append(Version.NAMESPACE);
-        buf.append("\">");
-        if (name != null) {
-            buf.append("<name>").append(StringUtils.escapeForXML(name)).append("</name>");
-        }
-        if (version != null) {
-            buf.append("<version>").append(StringUtils.escapeForXML(version)).append("</version>");
-        }
-        if (os != null) {
-            buf.append("<os>").append(StringUtils.escapeForXML(os)).append("</os>");
-        }
-        buf.append("</query>");
-        return buf.toString();
+    @Override
+    protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder xml) {
+        xml.rightAngleBracket();
+        // Although not really optional elements, 'name' and 'version' are not set when sending a
+        // version request. So we must handle the case that those are 'null' here.
+        xml.optElement("name", name);
+        xml.optElement("version", version);
+        xml.optElement("os", os);
+        return xml;
+    }
+
+    public static Version createResultFor(Stanza request, Version version) {
+        Version result = new Version(version);
+        result.setStanzaId(request.getStanzaId());
+        result.setTo(request.getFrom());
+        return result;
     }
 }

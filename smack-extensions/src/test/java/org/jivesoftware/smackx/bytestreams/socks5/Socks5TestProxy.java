@@ -24,19 +24,22 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import org.jivesoftware.smack.SmackException;
-import org.jivesoftware.smackx.bytestreams.socks5.Socks5Utils;
 
 /**
  * Simple SOCKS5 proxy for testing purposes. It is almost the same as the Socks5Proxy class but the
  * port can be configured more easy and it all connections are allowed.
- * 
+ *
  * @author Henning Staib
  */
-public class Socks5TestProxy {
+public final class Socks5TestProxy {
+    private static final Logger LOGGER = Logger.getLogger(Socks5TestProxy.class.getName());
 
     /* SOCKS5 proxy singleton */
     private static Socks5TestProxy socks5Server;
@@ -56,6 +59,8 @@ public class Socks5TestProxy {
     /* port of the test proxy */
     private int port = 7777;
 
+    private boolean startupComplete;
+
     /**
      * Private constructor.
      */
@@ -65,8 +70,8 @@ public class Socks5TestProxy {
     }
 
     /**
-     * Returns the local SOCKS5 proxy server
-     * 
+     * Returns the local SOCKS5 proxy server.
+     *
      * @param port of the test proxy
      * @return the local SOCKS5 proxy server
      */
@@ -79,7 +84,7 @@ public class Socks5TestProxy {
     }
 
     /**
-     * Stops the test proxy
+     * Stops the test proxy.
      */
     public static synchronized void stopProxy() {
         if (socks5Server != null) {
@@ -101,7 +106,7 @@ public class Socks5TestProxy {
             this.serverThread.start();
         }
         catch (IOException e) {
-            e.printStackTrace();
+            LOGGER.log(Level.SEVERE, "exception", e);
             // do nothing
         }
     }
@@ -119,7 +124,7 @@ public class Socks5TestProxy {
         }
         catch (IOException e) {
             // do nothing
-            e.printStackTrace();
+            LOGGER.log(Level.SEVERE, "exception", e);
         }
 
         if (this.serverThread != null && this.serverThread.isAlive()) {
@@ -129,7 +134,7 @@ public class Socks5TestProxy {
             }
             catch (InterruptedException e) {
                 // do nothing
-                e.printStackTrace();
+                LOGGER.log(Level.SEVERE, "exception", e);
             }
         }
         this.serverThread = null;
@@ -139,10 +144,10 @@ public class Socks5TestProxy {
 
     /**
      * Returns the host address of the local SOCKS5 proxy server.
-     * 
+     *
      * @return the host address of the local SOCKS5 proxy server
      */
-    public String getAddress() {
+    public static String getAddress() {
         try {
             return InetAddress.getLocalHost().getHostAddress();
         }
@@ -153,7 +158,7 @@ public class Socks5TestProxy {
 
     /**
      * Returns the port of the local SOCKS5 proxy server. If it is not running -1 will be returned.
-     * 
+     *
      * @return the port of the local SOCKS5 proxy server or -1 if proxy is not running
      */
     public int getPort() {
@@ -165,17 +170,30 @@ public class Socks5TestProxy {
 
     /**
      * Returns the socket for the given digest.
-     * 
+     *
      * @param digest identifying the connection
      * @return socket or null if there is no socket for the given digest
      */
+    @SuppressWarnings("WaitNotInLoop")
     public Socket getSocket(String digest) {
+        synchronized (this) {
+            if (!startupComplete) {
+                try {
+                    wait(5000);
+                } catch (InterruptedException e) {
+                    LOGGER.log(Level.SEVERE, "exception", e);
+                }
+            }
+        }
+        if (!startupComplete) {
+            throw new IllegalStateException("Startup of Socks5TestProxy failed within 5 seconds");
+        }
         return this.connectionMap.get(digest);
     }
 
     /**
      * Returns true if the local SOCKS5 proxy server is running, otherwise false.
-     * 
+     *
      * @return true if the local SOCKS5 proxy server is running, otherwise false
      */
     public boolean isRunning() {
@@ -184,11 +202,12 @@ public class Socks5TestProxy {
 
     /**
      * Implementation of a simplified SOCKS5 proxy server.
-     * 
+     *
      * @author Henning Staib
      */
     class Socks5ServerProcess implements Runnable {
 
+        @Override
         public void run() {
             while (true) {
                 Socket socket = null;
@@ -206,13 +225,17 @@ public class Socks5TestProxy {
                     // initialize connection
                     establishConnection(socket);
 
+                    synchronized (this) {
+                        startupComplete = true;
+                        notify();
+                    }
                 }
                 catch (SocketException e) {
                     /* do nothing */
                 }
                 catch (Exception e) {
                     try {
-                        e.printStackTrace();
+                        LOGGER.log(Level.SEVERE, "exception", e);
                         socket.close();
                     }
                     catch (IOException e1) {
@@ -225,7 +248,7 @@ public class Socks5TestProxy {
 
         /**
          * Negotiates a SOCKS5 connection and stores it on success.
-         * 
+         *
          * @param socket connection to the client
          * @throws SmackException if client requests a connection in an unsupported way
          * @throws IOException if a network error occurred
@@ -237,7 +260,7 @@ public class Socks5TestProxy {
             // first byte is version should be 5
             int b = in.read();
             if (b != 5) {
-                throw new SmackException("Only SOCKS5 supported");
+                throw new SmackException.SmackMessageException("Only SOCKS5 supported");
             }
 
             // second byte number of authentication methods supported
@@ -263,7 +286,7 @@ public class Socks5TestProxy {
                 authMethodSelectionResponse[1] = (byte) 0xFF; // no acceptable methods
                 out.write(authMethodSelectionResponse);
                 out.flush();
-                throw new SmackException("Authentication method not supported");
+                throw new SmackException.SmackMessageException("Authentication method not supported");
             }
 
             authMethodSelectionResponse[1] = (byte) 0x00; // no-authentication method
@@ -274,7 +297,7 @@ public class Socks5TestProxy {
             byte[] connectionRequest = Socks5Utils.receiveSocks5Message(in);
 
             // extract digest
-            String responseDigest = new String(connectionRequest, 5, connectionRequest[4]);
+            String responseDigest = new String(connectionRequest, 5, connectionRequest[4], StandardCharsets.UTF_8);
 
             connectionRequest[1] = (byte) 0x00; // set return status to 0 (success)
             out.write(connectionRequest);

@@ -17,32 +17,51 @@
 
 package org.jivesoftware.smackx.iqversion.provider;
 
-import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.provider.IQProvider;
-import org.jivesoftware.smackx.iqversion.packet.Version;
-import org.xmlpull.v1.XmlPullParser;
+import java.io.IOException;
 
-public class VersionProvider implements IQProvider {
-    public IQ parseIQ(XmlPullParser parser) throws Exception {
+import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.IQProvider;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
+import org.jivesoftware.smackx.iqversion.packet.Version;
+
+public class VersionProvider extends IQProvider<Version> {
+
+    @Override
+    public Version parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException {
         String name = null, version = null, os = null;
 
-        boolean done = false;
-        while (!done) {
-            int eventType = parser.next();
-            String tagName = parser.getName();
-            if (eventType == XmlPullParser.START_TAG) {
-                if (tagName.equals("name")) {
+        outerloop: while (true) {
+            XmlPullParser.Event eventType = parser.next();
+            switch (eventType) {
+            case START_ELEMENT:
+                String tagName = parser.getName();
+                switch (tagName) {
+                case "name":
                     name = parser.nextText();
-                }
-                else if (tagName.equals("version")) {
+                    break;
+                case "version":
                     version = parser.nextText();
-                }
-                else if (tagName.equals("os")) {
+                    break;
+                case "os":
                     os = parser.nextText();
+                    break;
                 }
-            } else if (eventType == XmlPullParser.END_TAG && tagName.equals("query")) {
-                done = true;
+                break;
+            case END_ELEMENT:
+                if (parser.getDepth() == initialDepth && parser.getName().equals(IQ.QUERY_ELEMENT)) {
+                    break outerloop;
+                }
+                break;
+            default:
+                // Catch all for incomplete switch (MissingCasesInEnumSwitch) statement.
+                break;
             }
+        }
+        if (name == null && version == null && os == null) {
+            return new Version();
         }
         return new Version(name, version, os);
     }

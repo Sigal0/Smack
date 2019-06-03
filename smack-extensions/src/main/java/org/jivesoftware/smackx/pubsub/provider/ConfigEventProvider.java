@@ -19,26 +19,25 @@ package org.jivesoftware.smackx.pubsub.provider;
 import java.util.List;
 import java.util.Map;
 
-import org.jivesoftware.smack.packet.PacketExtension;
+import org.jivesoftware.smack.packet.ExtensionElement;
 import org.jivesoftware.smack.provider.EmbeddedExtensionProvider;
+
 import org.jivesoftware.smackx.pubsub.ConfigurationEvent;
 import org.jivesoftware.smackx.pubsub.ConfigureForm;
 import org.jivesoftware.smackx.xdata.packet.DataForm;
 
 /**
- * Parses the node configuration element out of the message event stanza from 
+ * Parses the node configuration element out of the message event stanza from
  * the server as specified in the <a href="http://xmpp.org/extensions/xep-0060.html#schemas-event">configuration schema</a>.
- * 
+ *
  * @author Robin Collier
  */
-public class ConfigEventProvider extends EmbeddedExtensionProvider
-{
-	@Override
-	protected PacketExtension createReturnExtension(String currentElement, String currentNamespace, Map<String, String> attMap, List<? extends PacketExtension> content)
-	{
-		if (content.size() == 0)
-			return new ConfigurationEvent(attMap.get("node"));
-		else
-			return new ConfigurationEvent(attMap.get("node"), new ConfigureForm((DataForm)content.iterator().next()));
-	}
+public class ConfigEventProvider extends EmbeddedExtensionProvider<ConfigurationEvent> {
+    @Override
+    protected ConfigurationEvent createReturnExtension(String currentElement, String currentNamespace, Map<String, String> attMap, List<? extends ExtensionElement> content) {
+        if (content.size() == 0)
+            return new ConfigurationEvent(attMap.get("node"));
+        else
+            return new ConfigurationEvent(attMap.get("node"), new ConfigureForm((DataForm) content.iterator().next()));
+    }
 }

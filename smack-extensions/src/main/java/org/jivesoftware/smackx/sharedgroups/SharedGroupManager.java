@@ -16,14 +16,15 @@
  */
 package org.jivesoftware.smackx.sharedgroups;
 
+import java.util.List;
+
 import org.jivesoftware.smack.SmackException.NoResponseException;
 import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException.XMPPErrorException;
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smackx.sharedgroups.packet.SharedGroupsInfo;
 
-import java.util.List;
+import org.jivesoftware.smackx.sharedgroups.packet.SharedGroupsInfo;
 
 /**
  * A SharedGroupManager provides services for discovering the shared groups where a user belongs.<p>
@@ -41,16 +42,17 @@ public class SharedGroupManager {
      *
      * @param connection connection to use to get the user's shared groups.
      * @return collection with the shared groups' name of the logged user.
-     * @throws XMPPErrorException 
-     * @throws NoResponseException 
-     * @throws NotConnectedException 
+     * @throws XMPPErrorException
+     * @throws NoResponseException
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public static List<String> getSharedGroups(XMPPConnection connection) throws NoResponseException, XMPPErrorException, NotConnectedException {
+    public static List<String> getSharedGroups(XMPPConnection connection) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
         // Discover the shared groups of the logged user
         SharedGroupsInfo info = new SharedGroupsInfo();
         info.setType(IQ.Type.get);
 
-        SharedGroupsInfo result = (SharedGroupsInfo) connection.createPacketCollectorAndSend(info).nextResultOrThrow();
+        SharedGroupsInfo result = connection.createStanzaCollectorAndSend(info).nextResultOrThrow();
         return result.getGroups();
     }
 }

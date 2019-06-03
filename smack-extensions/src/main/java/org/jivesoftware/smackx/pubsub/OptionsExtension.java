@@ -19,44 +19,38 @@ package org.jivesoftware.smackx.pubsub;
 import org.jivesoftware.smack.util.XmlStringBuilder;
 
 /**
- * A packet extension representing the <b>options</b> element. 
- * 
+ * A stanza extension representing the <b>options</b> element.
+ *
  * @author Robin Collier
  */
-public class OptionsExtension extends NodeExtension
-{
-	protected String jid;
-	protected String id;
-	
-	public OptionsExtension(String subscriptionJid)
-	{
-		this(subscriptionJid, null, null);
-	}
-	
-	public OptionsExtension(String subscriptionJid, String nodeId)
-	{
-		this(subscriptionJid, nodeId, null);
-	}
-	
-	public OptionsExtension(String jid, String nodeId, String subscriptionId)
-	{
-		super(PubSubElementType.OPTIONS, nodeId);
-		this.jid = jid;
-		id = subscriptionId;
-	}
-	
-	public String getJid()
-	{
-		return jid;
-	}
-	
-	public String getId()
-	{
-		return id;
-	}
+public class OptionsExtension extends NodeExtension {
+    protected String jid;
+    protected String id;
+
+    public OptionsExtension(String subscriptionJid) {
+        this(subscriptionJid, null, null);
+    }
+
+    public OptionsExtension(String subscriptionJid, String nodeId) {
+        this(subscriptionJid, nodeId, null);
+    }
+
+    public OptionsExtension(String jid, String nodeId, String subscriptionId) {
+        super(PubSubElementType.OPTIONS, nodeId);
+        this.jid = jid;
+        id = subscriptionId;
+    }
+
+    public String getJid() {
+        return jid;
+    }
+
+    public String getId() {
+        return id;
+    }
 
     @Override
-    public XmlStringBuilder toXML() {
+    public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
         XmlStringBuilder xml = new XmlStringBuilder();
         xml.halfOpenElement(getElementName());
         xml.attribute("jid", jid);

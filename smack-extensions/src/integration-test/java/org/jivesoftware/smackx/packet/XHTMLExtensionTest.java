@@ -20,9 +20,9 @@ package org.jivesoftware.smackx.packet;
 import java.util.Iterator;
 
 import org.jivesoftware.smack.Chat;
-import org.jivesoftware.smack.PacketCollector;
+import org.jivesoftware.smack.StanzaCollector;
 import org.jivesoftware.smack.PacketListener;
-import org.jivesoftware.smack.filter.PacketExtensionFilter;
+import org.jivesoftware.smack.filter.StanzaExtensionFilter;
 import org.jivesoftware.smack.filter.PacketFilter;
 import org.jivesoftware.smack.filter.ThreadFilter;
 import org.jivesoftware.smack.packet.Message;
@@ -45,7 +45,7 @@ public class XHTMLExtensionTest extends SmackTestCase {
 
     /**
      * Low level API test.
-     * This is a simple test to use with a XMPP client and check if the client receives the message
+     * This is a simple test to use with an XMPP client and check if the client receives the message
      * 1. User_1 will send a message with formatted text (XHTML) to user_2
      */
     public void testSendSimpleXHTMLMessage() {
@@ -83,7 +83,7 @@ public class XHTMLExtensionTest extends SmackTestCase {
     public void testSendSimpleXHTMLMessageAndDisplayReceivedXHTMLMessage() {
 	// Create a chat for each connection
 	Chat chat1 = getConnection(0).getChatManager().createChat(getBareJID(1), null);
-	final PacketCollector chat2 = getConnection(1).createPacketCollector(
+	final StanzaCollector chat2 = getConnection(1).createStanzaCollector(
 		new ThreadFilter(chat1.getThreadID()));
 
 	// User1 creates a message to send to user2
@@ -136,21 +136,21 @@ public class XHTMLExtensionTest extends SmackTestCase {
     public void testSendComplexXHTMLMessageAndDisplayReceivedXHTMLMessage() {
 	// Create a chat for each connection
 	Chat chat1 = getConnection(0).getChatManager().createChat(getBareJID(1), null);
-	final PacketCollector chat2 = getConnection(1).createPacketCollector(
+	final StanzaCollector chat2 = getConnection(1).createStanzaCollector(
 		new ThreadFilter(chat1.getThreadID()));
 
-	// Create a Listener that listens for Messages with the extension 
+	// Create a Listener that listens for Messages with the extension
 	//"http://jabber.org/protocol/xhtml-im"
 	// This listener will listen on the conn2 and answer an ACK if everything is ok
 	PacketFilter packetFilter =
-	    new PacketExtensionFilter("html", "http://jabber.org/protocol/xhtml-im");
+	    new StanzaExtensionFilter("html", "http://jabber.org/protocol/xhtml-im");
 	PacketListener packetListener = new PacketListener() {
 	    @Override
-	    public void processPacket(Packet packet) {
+	    public void processStanza(Packet packet) {
 
 	    }
 	};
-	getConnection(1).addPacketListener(packetListener, packetFilter);
+	getConnection(1).addAsyncPacketListener(packetListener, packetFilter);
 
         // User1 creates a message to send to user2
         Message msg = new Message();

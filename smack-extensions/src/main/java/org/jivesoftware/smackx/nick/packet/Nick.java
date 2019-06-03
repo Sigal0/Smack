@@ -16,95 +16,55 @@
  */
 package org.jivesoftware.smackx.nick.packet;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
-import org.xmlpull.v1.XmlPullParser;
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.util.StringUtils;
+import org.jivesoftware.smack.util.XmlStringBuilder;
 
 /**
- * A minimalistic implementation of a {@link PacketExtension} for nicknames.
- * 
+ * A minimalistic implementation of a {@link ExtensionElement} for nicknames.
+ *
  * @author Guus der Kinderen, guus.der.kinderen@gmail.com
  * @see <a href="http://xmpp.org/extensions/xep-0172.html">XEP-0172: User Nickname</a>
  */
-public class Nick implements PacketExtension {
+public class Nick implements ExtensionElement {
 
-	public static final String NAMESPACE = "http://jabber.org/protocol/nick";
+    public static final String NAMESPACE = "http://jabber.org/protocol/nick";
 
-	public static final String ELEMENT_NAME = "nick";
+    public static final String ELEMENT_NAME = "nick";
 
-	private String name = null;
+    private final String name;
 
-	public Nick(String name) {
-		this.name = name;
-	}
+    public Nick(String name) {
+        this.name = StringUtils.requireNotNullNorEmpty(name, "Nickname must be given");
+    }
 
-	/**
-	 * The value of this nickname
-	 * 
-	 * @return the nickname
-	 */
-	public String getName() {
-		return name;
-	}
+    /**
+     * The value of this nickname.
+     *
+     * @return the nickname
+     */
+    public String getName() {
+        return name;
+    }
 
-	/**
-	 * Sets the value of this nickname
-	 * 
-	 * @param name
-	 *            the name to set
-	 */
-	public void setName(String name) {
-		this.name = name;
-	}
+    @Override
+    public String getElementName() {
+        return ELEMENT_NAME;
+    }
 
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see org.jivesoftware.smack.packet.PacketExtension#getElementName()
-	 */
-	public String getElementName() {
-		return ELEMENT_NAME;
-	}
+    @Override
+    public String getNamespace() {
+        return NAMESPACE;
+    }
 
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see org.jivesoftware.smack.packet.PacketExtension#getNamespace()
-	 */
-	public String getNamespace() {
-		return NAMESPACE;
-	}
+    @Override
+    public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
+        XmlStringBuilder xml = new XmlStringBuilder(this, enclosingNamespace);
+        xml.rightAngleBracket();
 
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see org.jivesoftware.smack.packet.PacketExtension#toXML()
-	 */
-	public String toXML() {
-		final StringBuilder buf = new StringBuilder();
+        xml.escape(getName());
 
-		buf.append("<").append(ELEMENT_NAME).append(" xmlns=\"").append(
-				NAMESPACE).append("\">");
-		buf.append(getName());
-		buf.append("</").append(ELEMENT_NAME).append('>');
-
-		return buf.toString();
-	}
-
-	public static class Provider implements PacketExtensionProvider {
-
-		public PacketExtension parseExtension(XmlPullParser parser)
-				throws Exception {
-			
-            parser.next();
-			final String name = parser.getText();
-
-			// Advance to end of extension.
-			while(parser.getEventType() != XmlPullParser.END_TAG) {
-				parser.next();
-			}
-
-			return new Nick(name);
-		}
-	}
+        xml.closeElement(this);
+        return xml;
+    }
 }

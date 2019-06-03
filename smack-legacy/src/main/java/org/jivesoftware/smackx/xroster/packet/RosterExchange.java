@@ -17,40 +17,41 @@
 
 package org.jivesoftware.smackx.xroster.packet;
 
-import org.jivesoftware.smack.Roster;
-import org.jivesoftware.smack.RosterEntry;
-import org.jivesoftware.smack.RosterGroup;
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smackx.xroster.RemoteRosterEntry;
-import org.jivesoftware.smackx.xroster.RosterExchangeManager;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.roster.Roster;
+import org.jivesoftware.smack.roster.RosterEntry;
+import org.jivesoftware.smack.roster.RosterGroup;
+
+import org.jivesoftware.smackx.xroster.RemoteRosterEntry;
+import org.jivesoftware.smackx.xroster.RosterExchangeManager;
+
 /**
  * Represents XMPP Roster Item Exchange packets.<p>
- * 
- * The 'jabber:x:roster' namespace (which is not to be confused with the 'jabber:iq:roster' 
- * namespace) is used to send roster items from one client to another. A roster item is sent by 
- * adding to the &lt;message/&gt; element an &lt;x/&gt; child scoped by the 'jabber:x:roster' namespace. This 
+ *
+ * The 'jabber:x:roster' namespace (which is not to be confused with the 'jabber:iq:roster'
+ * namespace) is used to send roster items from one client to another. A roster item is sent by
+ * adding to the &lt;message/&gt; element an &lt;x/&gt; child scoped by the 'jabber:x:roster' namespace. This
  * &lt;x/&gt; element may contain one or more &lt;item/&gt; children (one for each roster item to be sent).<p>
- * 
+ *
  * Each &lt;item/&gt; element may possess the following attributes:<p>
- * 
+ *
  * &lt;jid/&gt; -- The id of the contact being sent. This attribute is required.<br>
  * &lt;name/&gt; -- A natural-language nickname for the contact. This attribute is optional.<p>
- * 
- * Each &lt;item/&gt; element may also contain one or more &lt;group/&gt; children specifying the 
- * natural-language name of a user-specified group, for the purpose of categorizing this contact 
+ *
+ * Each &lt;item/&gt; element may also contain one or more &lt;group/&gt; children specifying the
+ * natural-language name of a user-specified group, for the purpose of categorizing this contact
  * into one or more roster groups.
  *
  * @author Gaston Dombiak
  */
-public class RosterExchange implements PacketExtension {
+public class RosterExchange implements ExtensionElement {
 
-    private List<RemoteRosterEntry> remoteRosterEntries = new ArrayList<RemoteRosterEntry>();
+    private final List<RemoteRosterEntry> remoteRosterEntries = new ArrayList<>();
 
     /**
      * Creates a new empty roster exchange package.
@@ -66,7 +67,7 @@ public class RosterExchange implements PacketExtension {
      * @param roster the roster to send to other XMPP entity.
      */
     public RosterExchange(Roster roster) {
-        // Add all the roster entries to the new RosterExchange 
+        // Add all the roster entries to the new RosterExchange
         for (RosterEntry rosterEntry : roster.getEntries()) {
             this.addRosterEntry(rosterEntry);
         }
@@ -78,18 +79,18 @@ public class RosterExchange implements PacketExtension {
      * @param rosterEntry a roster entry to add.
      */
     public void addRosterEntry(RosterEntry rosterEntry) {
-		// Obtain a String[] from the roster entry groups name 
-		List<String> groupNamesList = new ArrayList<String>();
-		String[] groupNames;
-		for (RosterGroup group : rosterEntry.getGroups()) {
-			groupNamesList.add(group.getName());
-		}
-		groupNames = groupNamesList.toArray(new String[groupNamesList.size()]);
+        // Obtain a String[] from the roster entry groups name
+        List<String> groupNamesList = new ArrayList<>();
+        String[] groupNames;
+        for (RosterGroup group : rosterEntry.getGroups()) {
+            groupNamesList.add(group.getName());
+        }
+        groupNames = groupNamesList.toArray(new String[groupNamesList.size()]);
 
         // Create a new Entry based on the rosterEntry and add it to the packet
-        RemoteRosterEntry remoteRosterEntry = new RemoteRosterEntry(rosterEntry.getUser(),
+        RemoteRosterEntry remoteRosterEntry = new RemoteRosterEntry(rosterEntry.getJid(),
                 rosterEntry.getName(), groupNames);
-		
+
         addRosterEntry(remoteRosterEntry);
     }
 
@@ -103,24 +104,26 @@ public class RosterExchange implements PacketExtension {
             remoteRosterEntries.add(remoteRosterEntry);
         }
     }
-    
+
     /**
     * Returns the XML element name of the extension sub-packet root element.
     * Always returns "x"
     *
-    * @return the XML element name of the packet extension.
+    * @return the XML element name of the stanza extension.
     */
+    @Override
     public String getElementName() {
         return RosterExchangeManager.ELEMENT;
     }
 
-    /** 
+    /**
      * Returns the XML namespace of the extension sub-packet root element.
      * According the specification the namespace is always "jabber:x:roster"
      * (which is not to be confused with the 'jabber:iq:roster' namespace
      *
-     * @return the XML namespace of the packet extension.
+     * @return the XML namespace of the stanza extension.
      */
+    @Override
     public String getNamespace() {
         return RosterExchangeManager.NAMESPACE;
     }
@@ -132,7 +135,7 @@ public class RosterExchange implements PacketExtension {
      */
     public Iterator<RemoteRosterEntry> getRosterEntries() {
         synchronized (remoteRosterEntries) {
-            List<RemoteRosterEntry> entries = Collections.unmodifiableList(new ArrayList<RemoteRosterEntry>(remoteRosterEntries));
+            List<RemoteRosterEntry> entries = Collections.unmodifiableList(new ArrayList<>(remoteRosterEntries));
             return entries.iterator();
         }
     }
@@ -148,7 +151,7 @@ public class RosterExchange implements PacketExtension {
 
     /**
      * Returns the XML representation of a Roster Item Exchange according the specification.
-     * 
+     *
      * Usually the XML representation will be inside of a Message XML representation like
      * in the following example:
      * <pre>
@@ -161,18 +164,19 @@ public class RosterExchange implements PacketExtension {
      *     &lt;/x&gt;
      * &lt;/message&gt;
      * </pre>
-     * 
+     *
      */
-    public String toXML() {
+    @Override
+    public String toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
         StringBuilder buf = new StringBuilder();
-        buf.append("<").append(getElementName()).append(" xmlns=\"").append(getNamespace()).append(
+        buf.append('<').append(getElementName()).append(" xmlns=\"").append(getNamespace()).append(
             "\">");
         // Loop through all roster entries and append them to the string buffer
         for (Iterator<RemoteRosterEntry> i = getRosterEntries(); i.hasNext();) {
             RemoteRosterEntry remoteRosterEntry = i.next();
             buf.append(remoteRosterEntry.toXML());
         }
-        buf.append("</").append(getElementName()).append(">");
+        buf.append("</").append(getElementName()).append('>');
         return buf.toString();
     }
 

@@ -17,17 +17,21 @@
 
 package org.jivesoftware.smackx.workgroup.agent;
 
-import org.jivesoftware.smackx.workgroup.packet.Transcript;
-import org.jivesoftware.smackx.workgroup.packet.Transcripts;
 import org.jivesoftware.smack.SmackException.NoResponseException;
 import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException.XMPPErrorException;
 
+import org.jivesoftware.smackx.workgroup.packet.Transcript;
+import org.jivesoftware.smackx.workgroup.packet.Transcripts;
+
+import org.jxmpp.jid.EntityBareJid;
+import org.jxmpp.jid.Jid;
+
 /**
  * A TranscriptManager helps to retrieve the full conversation transcript of a given session
- * {@link #getTranscript(String, String)} or to retrieve a list with the summary of all the
- * conversations that a user had {@link #getTranscripts(String, String)}.
+ * {@link #getTranscript(EntityBareJid, String)} or to retrieve a list with the summary of all the
+ * conversations that a user had {@link #getTranscripts(EntityBareJid, Jid)}.
  *
  * @author Gaston Dombiak
  */
@@ -44,14 +48,15 @@ public class TranscriptManager {
      * @param sessionID the id of the session to get the full transcript.
      * @param workgroupJID the JID of the workgroup that will process the request.
      * @return the full conversation transcript of a given session.
-     * @throws XMPPErrorException 
-     * @throws NoResponseException 
-     * @throws NotConnectedException 
+     * @throws XMPPErrorException
+     * @throws NoResponseException
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public Transcript getTranscript(String workgroupJID, String sessionID) throws NoResponseException, XMPPErrorException, NotConnectedException {
+    public Transcript getTranscript(EntityBareJid workgroupJID, String sessionID) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
         Transcript request = new Transcript(sessionID);
         request.setTo(workgroupJID);
-        Transcript response = (Transcript) connection.createPacketCollectorAndSend(request).nextResultOrThrow();
+        Transcript response = connection.createStanzaCollectorAndSend(request).nextResultOrThrow();
         return response;
     }
 
@@ -62,14 +67,15 @@ public class TranscriptManager {
      * @param userID the id of the user to get his conversations.
      * @param workgroupJID the JID of the workgroup that will process the request.
      * @return the transcripts of a given user.
-     * @throws XMPPErrorException 
+     * @throws XMPPErrorException
      * @throws NoResponseException
-     * @throws NotConnectedException 
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public Transcripts getTranscripts(String workgroupJID, String userID) throws NoResponseException, XMPPErrorException, NotConnectedException {
+    public Transcripts getTranscripts(EntityBareJid workgroupJID, Jid userID) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
         Transcripts request = new Transcripts(userID);
         request.setTo(workgroupJID);
-        Transcripts response = (Transcripts) connection.createPacketCollectorAndSend(request).nextResultOrThrow();
+        Transcripts response = connection.createStanzaCollectorAndSend(request).nextResultOrThrow();
         return response;
     }
 }

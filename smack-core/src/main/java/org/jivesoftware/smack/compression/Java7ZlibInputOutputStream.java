@@ -1,6 +1,6 @@
 /**
  *
- * Copyright 2013-2014 Florian Schmaus
+ * Copyright 2013-2018 Florian Schmaus
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,19 +34,19 @@ import java.util.zip.InflaterInputStream;
  * <p>
  * See also:
  * <ul>
- * <li><a href=
- * "http://docs.oracle.com/javase/7/docs/api/java/util/zip/Deflater.html#deflate(byte[], int, int, int)"
- * >The required deflate() method (Java7)</a>
- * <li><a href=
- * "http://developer.android.com/reference/java/util/zip/Deflater.html#deflate(byte[], int, int, int)"
- * >The required deflate() method (Android)</a>
- * 
+  * <li><a href="http://docs.oracle.com/javase/7/docs/api/java/util/zip/Deflater.html#deflate(byte[],%20int,%20int,%20int)">The required deflate() method (Java7)</a>
+ * <li><a href="http://developer.android.com/reference/java/util/zip/Deflater.html#deflate(byte[],%20int,%20int,%20int)">The required deflate() method (Android)</a>
+ * </ul>
+ *
  * @author Florian Schmaus
  */
 public class Java7ZlibInputOutputStream extends XMPPInputOutputStream {
-    private final static Method method;
-    private final static boolean supported;
-    private final static int compressionLevel = Deflater.DEFAULT_COMPRESSION;
+    private static final Method method;
+    private static final boolean supported;
+    private static final int compressionLevel = Deflater.DEFAULT_COMPRESSION;
+
+    private static final int SYNC_FLUSH_INT = 2;
+    private static final int FULL_FLUSH_INT = 3;
 
     static {
         Method m = null;
@@ -60,7 +60,7 @@ public class Java7ZlibInputOutputStream extends XMPPInputOutputStream {
     }
 
     public Java7ZlibInputOutputStream() {
-        compressionMethod = "zlib";
+        super("zlib");
     }
 
     @Override
@@ -74,7 +74,7 @@ public class Java7ZlibInputOutputStream extends XMPPInputOutputStream {
             /**
              * Provide a more InputStream compatible version. A return value of 1 means that it is likely to read one
              * byte without blocking, 0 means that the system is known to block for more input.
-             * 
+             *
              * @return 0 if no data is available, 1 otherwise
              * @throws IOException
              */
@@ -84,10 +84,10 @@ public class Java7ZlibInputOutputStream extends XMPPInputOutputStream {
                  * aSmack related remark (where KXmlParser is used):
                  * This is one of the funny code blocks. InflaterInputStream.available violates the contract of
                  * InputStream.available, which breaks kXML2.
-                 * 
+                 *
                  * I'm not sure who's to blame, oracle/sun for a broken api or the google guys for mixing a sun bug with
                  * a xml reader that can't handle it....
-                 * 
+                 *
                  * Anyway, this simple if breaks suns distorted reality, but helps to use the api as intended.
                  */
                 if (inf.needsInput()) {
@@ -100,25 +100,24 @@ public class Java7ZlibInputOutputStream extends XMPPInputOutputStream {
 
     @Override
     public OutputStream getOutputStream(OutputStream outputStream) {
+        final int flushMethodInt;
+        if (flushMethod == FlushMethod.SYNC_FLUSH) {
+            flushMethodInt = SYNC_FLUSH_INT;
+        } else {
+            flushMethodInt = FULL_FLUSH_INT;
+        }
         return new DeflaterOutputStream(outputStream, new Deflater(compressionLevel)) {
+            @Override
             public void flush() throws IOException {
                 if (!supported) {
                     super.flush();
                     return;
                 }
-                int count = 0;
-                if (!def.needsInput()) {
-                    do {
-                        count = def.deflate(buf, 0, buf.length);
-                        out.write(buf, 0, count);
-                    } while (count > 0);
-                    out.flush();
-                }
                 try {
-                    do {
-                        count = (Integer) method.invoke(def, buf, 0, buf.length, 2);
+                    int count;
+                    while ((count = (Integer) method.invoke(def, buf, 0, buf.length, flushMethodInt)) != 0) {
                         out.write(buf, 0, count);
-                    } while (count > 0);
+                    }
                 } catch (IllegalArgumentException e) {
                     throw new IOException("Can't flush");
                 } catch (IllegalAccessException e) {

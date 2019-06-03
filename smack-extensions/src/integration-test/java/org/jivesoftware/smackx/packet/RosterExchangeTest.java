@@ -38,7 +38,7 @@ public class RosterExchangeTest extends SmackTestCase {
 
     /**
      * Low level API test.
-     * This is a simple test to use with a XMPP client and check if the client receives the message
+     * This is a simple test to use with an XMPP client and check if the client receives the message
      * 1. User_1 will send his/her roster entries to user_2
      */
     public void testSendRosterEntries() {
@@ -71,7 +71,7 @@ public class RosterExchangeTest extends SmackTestCase {
     public void testSendAndReceiveRosterEntries() {
         // Create a chat for each connection
         Chat chat1 = getConnection(0).getChatManager().createChat(getBareJID(1), null);
-        final PacketCollector chat2 = getConnection(1).createPacketCollector(
+        final StanzaCollector chat2 = getConnection(1).createStanzaCollector(
                 new ThreadFilter(chat1.getThreadID()));
 
         // Create the message to send with the roster
@@ -115,7 +115,7 @@ public class RosterExchangeTest extends SmackTestCase {
     public void testSendAndAcceptRosterEntries() {
         // Create a chat for each connection
         Chat chat1 = getConnection(0).getChatManager().createChat(getBareJID(1), null);
-        final PacketCollector chat2 = getConnection(1).createPacketCollector(
+        final StanzaCollector chat2 = getConnection(1).createStanzaCollector(
                 new ThreadFilter(chat1.getThreadID()));
 
         // Create the message to send with the roster

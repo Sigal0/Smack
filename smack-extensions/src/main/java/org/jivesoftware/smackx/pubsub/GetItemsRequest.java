@@ -16,73 +16,51 @@
  */
 package org.jivesoftware.smackx.pubsub;
 
+import org.jivesoftware.smack.util.XmlStringBuilder;
+
 /**
  * Represents a request to subscribe to a node.
- * 
+ *
  * @author Robin Collier
  */
-public class GetItemsRequest extends NodeExtension
-{
-	protected String subId;
-	protected int maxItems;
-	
-	public GetItemsRequest(String nodeId)
-	{
-		super(PubSubElementType.ITEMS, nodeId);
-	}
-	
-	public GetItemsRequest(String nodeId, String subscriptionId)
-	{
-		super(PubSubElementType.ITEMS, nodeId);
-		subId = subscriptionId;
-	}
+public class GetItemsRequest extends NodeExtension {
+    protected final String subId;
+    protected final int maxItems;
 
-	public GetItemsRequest(String nodeId, int maxItemsToReturn)
-	{
-		super(PubSubElementType.ITEMS, nodeId);
-		maxItems = maxItemsToReturn;
-	}
+    public GetItemsRequest(String nodeId) {
+        this(nodeId, null, -1);
+    }
 
-	public GetItemsRequest(String nodeId, String subscriptionId, int maxItemsToReturn)
-	{
-		this(nodeId, maxItemsToReturn);
-		subId = subscriptionId;
-	}
+    public GetItemsRequest(String nodeId, String subscriptionId) {
+        this(nodeId, subscriptionId, -1);
+    }
 
-	public String getSubscriptionId()
-	{
-		return subId;
-	}
+    public GetItemsRequest(String nodeId, int maxItemsToReturn) {
+        this(nodeId, null, maxItemsToReturn);
+    }
 
-	public int getMaxItems()
-	{
-		return maxItems;
-	}
+    public GetItemsRequest(String nodeId, String subscriptionId, int maxItemsToReturn) {
+        super(PubSubElementType.ITEMS, nodeId);
+        maxItems = maxItemsToReturn;
+        subId = subscriptionId;
+    }
 
-	@Override
-	public String toXML()
-	{
-		StringBuilder builder = new StringBuilder("<");
-		builder.append(getElementName());
-		
-		builder.append(" node='");
-		builder.append(getNode());
-		builder.append("'");
+    public String getSubscriptionId() {
+        return subId;
+    }
 
-		if (getSubscriptionId() != null)
-		{
-			builder.append(" subid='");
-			builder.append(getSubscriptionId());
-			builder.append("'");
-		}
+    public int getMaxItems() {
+        return maxItems;
+    }
 
-		if (getMaxItems() > 0)
-		{
-			builder.append(" max_items='");
-			builder.append(getMaxItems());
-			builder.append("'");
-		}
-		builder.append("/>");
-		return builder.toString();
-	}
+    @Override
+    public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
+        XmlStringBuilder xml = new XmlStringBuilder();
+        xml.halfOpenElement(getElementName());
+        xml.attribute("node", getNode());
+        xml.optAttribute("subid", getSubscriptionId());
+        xml.optIntAttribute("max_items", getMaxItems());
+        xml.closeEmptyElement();
+        return xml;
+    }
 }

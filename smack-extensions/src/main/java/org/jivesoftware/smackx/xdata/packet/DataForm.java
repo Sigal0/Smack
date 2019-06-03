@@ -17,13 +17,20 @@
 
 package org.jivesoftware.smackx.xdata.packet;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.util.XmlStringBuilder;
-import org.jivesoftware.smackx.xdata.FormField;
-
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+import org.jivesoftware.smack.packet.Element;
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.packet.Stanza;
+import org.jivesoftware.smack.util.XmlStringBuilder;
+
+import org.jivesoftware.smackx.xdata.FormField;
 
 /**
  * Represents a form that could be use for gathering data as well as for reporting data
@@ -31,46 +38,64 @@ import java.util.List;
  *
  * @author Gaston Dombiak
  */
-public class DataForm implements PacketExtension {
+public class DataForm implements ExtensionElement {
 
     public static final String NAMESPACE = "jabber:x:data";
     public static final String ELEMENT = "x";
 
-    private String type;
+    public enum Type {
+        /**
+         * This stanza contains a form to fill out. Display it to the user (if your program can).
+         */
+        form,
+
+        /**
+         * The form is filled out, and this is the data that is being returned from the form.
+         */
+        submit,
+
+        /**
+         * The form was cancelled. Tell the asker that piece of information.
+         */
+        cancel,
+
+        /**
+         * Data results being returned from a search, or some other query.
+         */
+        result,
+        ;
+
+        public static Type fromString(String string) {
+            return Type.valueOf(string.toLowerCase(Locale.US));
+        }
+    }
+
+    private Type type;
     private String title;
-    private List<String> instructions = new ArrayList<String>();
+    private final List<String> instructions = new ArrayList<>();
     private ReportedData reportedData;
-    private final List<Item> items = new ArrayList<Item>();
-    private final List<FormField> fields = new ArrayList<FormField>();
-    
-    public DataForm(String type) {
+    private final List<Item> items = new ArrayList<>();
+    private final Map<String, FormField> fields = new LinkedHashMap<>();
+    private final List<Element> extensionElements = new ArrayList<>();
+
+    public DataForm(Type type) {
         this.type = type;
     }
-    
+
     /**
      * Returns the meaning of the data within the context. The data could be part of a form
-     * to fill out, a form submission or data results.<p>
-     * 
-     * Possible form types are:
-     * <ul>
-     *  <li>form -> This packet contains a form to fill out. Display it to the user (if your 
-     * program can).</li>
-     *  <li>submit -> The form is filled out, and this is the data that is being returned from 
-     * the form.</li>
-     *  <li>cancel -> The form was cancelled. Tell the asker that piece of information.</li>
-     *  <li>result -> Data results being returned from a search, or some other query.</li>
-     * </ul>
-     * 
+     * to fill out, a form submission or data results.
+     *
      * @return the form's type.
      */
-    public String getType() {
-        return type; 
+    public Type getType() {
+        return type;
     }
-    
+
     /**
-     * Returns the description of the data. It is similar to the title on a web page or an X 
-     * window.  You can put a <title/> on either a form to fill out, or a set of data results.
-     * 
+     * Returns the description of the data. It is similar to the title on a web page or an X
+     * window.  You can put a &lt;title/&gt; on either a form to fill out, or a set of data results.
+     *
      * @return description of the data.
      */
     public String getTitle() {
@@ -78,22 +103,22 @@ public class DataForm implements PacketExtension {
     }
 
     /**
-     * Returns a List of the list of instructions that explain how to fill out the form and 
-     * what the form is about. The dataform could include multiple instructions since each 
-     * instruction could not contain newlines characters. Join the instructions together in order 
+     * Returns a List of the list of instructions that explain how to fill out the form and
+     * what the form is about. The dataform could include multiple instructions since each
+     * instruction could not contain newlines characters. Join the instructions together in order
      * to show them to the user.
-     * 
+     *
      * @return a List of the list of instructions that explain how to fill out the form.
      */
     public List<String> getInstructions() {
         synchronized (instructions) {
-            return Collections.unmodifiableList(new ArrayList<String>(instructions));
+            return Collections.unmodifiableList(new ArrayList<>(instructions));
         }
     }
 
     /**
      * Returns the fields that will be returned from a search.
-     * 
+     *
      * @return fields that will be returned from a search.
      */
     public ReportedData getReportedData() {
@@ -107,7 +132,7 @@ public class DataForm implements PacketExtension {
      */
     public List<Item> getItems() {
         synchronized (items) {
-            return Collections.unmodifiableList(new ArrayList<Item>(items));
+            return Collections.unmodifiableList(new ArrayList<>(items));
         }
     }
 
@@ -118,22 +143,50 @@ public class DataForm implements PacketExtension {
      */
     public List<FormField> getFields() {
         synchronized (fields) {
-            return Collections.unmodifiableList(new ArrayList<FormField>(fields));
+            return new ArrayList<>(fields.values());
         }
     }
 
+    /**
+     * Return the form field with the given variable name or null.
+     *
+     * @param variableName
+     * @return the form field or null.
+     * @since 4.1
+     */
+    public FormField getField(String variableName) {
+        synchronized (fields) {
+            return fields.get(variableName);
+        }
+    }
+
+    /**
+     * Check if a form field with the given variable name exists.
+     *
+     * @param variableName
+     * @return true if a form field with the variable name exists, false otherwise.
+     * @since 4.2
+     */
+    public boolean hasField(String variableName) {
+        synchronized (fields) {
+            return fields.containsKey(variableName);
+        }
+    }
+
+    @Override
     public String getElementName() {
         return ELEMENT;
     }
 
+    @Override
     public String getNamespace() {
         return NAMESPACE;
     }
 
     /**
      * Sets the description of the data. It is similar to the title on a web page or an X window.
-     * You can put a <title/> on either a form to fill out, or a set of data results.
-     * 
+     * You can put a &lt;title/&gt; on either a form to fill out, or a set of data results.
+     *
      * @param title description of the data.
      */
     public void setTitle(String title) {
@@ -141,19 +194,22 @@ public class DataForm implements PacketExtension {
     }
 
     /**
-     * Sets the list of instructions that explain how to fill out the form and what the form is 
-     * about. The dataform could include multiple instructions since each instruction could not 
-     * contain newlines characters. 
-     * 
+     * Sets the list of instructions that explain how to fill out the form and what the form is
+     * about. The dataform could include multiple instructions since each instruction could not
+     * contain newlines characters.
+     *
      * @param instructions list of instructions that explain how to fill out the form.
      */
     public void setInstructions(List<String> instructions) {
-        this.instructions = instructions;
+        synchronized (this.instructions) {
+            this.instructions.clear();
+            this.instructions.addAll(instructions);
+        }
     }
 
     /**
      * Sets the fields that will be returned from a search.
-     * 
+     *
      * @param reportedData the fields that will be returned from a search.
      */
     public void setReportedData(ReportedData reportedData) {
@@ -162,20 +218,48 @@ public class DataForm implements PacketExtension {
 
     /**
      * Adds a new field as part of the form.
-     * 
+     *
      * @param field the field to add to the form.
      */
     public void addField(FormField field) {
+        String fieldVariableName = field.getVariable();
+        // Form field values must be unique unless they are of type 'fixed', in
+        // which case their variable name may be 'null', and therefore could
+        // appear multiple times within the same form.
+        if (fieldVariableName != null && hasField(fieldVariableName)) {
+            throw new IllegalArgumentException("This data form already contains a form field with the variable name '"
+                            + fieldVariableName + "'");
+        }
         synchronized (fields) {
-            fields.add(field);
+            fields.put(fieldVariableName, field);
         }
     }
-    
+
     /**
-     * Adds a new instruction to the list of instructions that explain how to fill out the form 
-     * and what the form is about. The dataform could include multiple instructions since each 
-     * instruction could not contain newlines characters. 
-     * 
+     * Add the given fields to this form.
+     *
+     * @param fieldsToAdd
+     * @return true if a field was overridden.
+     * @since 4.3.0
+     */
+    public boolean addFields(Collection<FormField> fieldsToAdd) {
+        boolean fieldOverridden = false;
+        synchronized (fields) {
+            for (FormField field : fieldsToAdd) {
+                FormField previousField = fields.put(field.getVariable(), field);
+                if (previousField != null) {
+                    fieldOverridden = true;
+                }
+            }
+        }
+        return fieldOverridden;
+    }
+
+    /**
+     * Adds a new instruction to the list of instructions that explain how to fill out the form
+     * and what the form is about. The dataform could include multiple instructions since each
+     * instruction could not contain newlines characters.
+     *
      * @param instruction the new instruction that explain how to fill out the form.
      */
     public void addInstruction(String instruction) {
@@ -186,13 +270,35 @@ public class DataForm implements PacketExtension {
 
     /**
      * Adds a new item returned from a search.
-     * 
+     *
      * @param item the item returned from a search.
      */
     public void addItem(Item item) {
         synchronized (items) {
             items.add(item);
         }
+    }
+
+    public void addExtensionElement(Element element) {
+        extensionElements.add(element);
+    }
+
+    public List<Element> getExtensionElements() {
+        return Collections.unmodifiableList(extensionElements);
+    }
+
+    /**
+     * Returns the hidden FORM_TYPE field or null if this data form has none.
+     *
+     * @return the hidden FORM_TYPE field or null.
+     * @since 4.1
+     */
+    public FormField getHiddenFormTypeField() {
+        FormField field = getField(FormField.FORM_TYPE);
+        if (field != null && field.getType() == FormField.Type.hidden) {
+            return field;
+        }
+        return null;
     }
 
     /**
@@ -202,19 +308,14 @@ public class DataForm implements PacketExtension {
      * @return true if there is at least one field which is hidden.
      */
     public boolean hasHiddenFormTypeField() {
-        boolean found = false;
-        for (FormField f : fields) {
-            if (f.getVariable().equals("FORM_TYPE") && f.getType() != null && f.getType().equals("hidden"))
-                found = true;
-        }
-        return found;
+        return getHiddenFormTypeField() != null;
     }
 
     @Override
-    public XmlStringBuilder toXML() {
+    public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
         XmlStringBuilder buf = new XmlStringBuilder(this);
         buf.attribute("type", getType());
-        buf.rightAngelBracket();
+        buf.rightAngleBracket();
 
         buf.optElement("title", getTitle());
         for (String instruction : getInstructions()) {
@@ -232,13 +333,25 @@ public class DataForm implements PacketExtension {
         for (FormField field : getFields()) {
             buf.append(field.toXML());
         }
+        for (Element element : extensionElements) {
+            buf.append(element.toXML());
+        }
         buf.closeElement(this);
         return buf;
     }
 
     /**
-     * 
-     * Represents the fields that will be returned from a search. This information is useful when 
+     * Get data form from stanza.
+     * @param packet
+     * @return the DataForm or null
+     */
+    public static DataForm from(Stanza packet) {
+        return (DataForm) packet.getExtension(ELEMENT, NAMESPACE);
+    }
+
+    /**
+     *
+     * Represents the fields that will be returned from a search. This information is useful when
      * you try to use the jabber:iq:search namespace to return dynamic form information.
      *
      * @author Gaston Dombiak
@@ -246,19 +359,19 @@ public class DataForm implements PacketExtension {
     public static class ReportedData {
         public static final String ELEMENT = "reported";
 
-        private List<FormField> fields = new ArrayList<FormField>();
-        
+        private List<FormField> fields = new ArrayList<>();
+
         public ReportedData(List<FormField> fields) {
             this.fields = fields;
         }
 
         /**
          * Returns the fields returned from a search.
-         * 
+         *
          * @return the fields returned from a search.
          */
         public List<FormField> getFields() {
-            return Collections.unmodifiableList(new ArrayList<FormField>(fields));
+            return Collections.unmodifiableList(new ArrayList<>(fields));
         }
 
         public CharSequence toXML() {
@@ -272,9 +385,9 @@ public class DataForm implements PacketExtension {
             return buf;
         }
     }
-    
+
     /**
-     * 
+     *
      * Represents items of reported data.
      *
      * @author Gaston Dombiak
@@ -282,21 +395,21 @@ public class DataForm implements PacketExtension {
     public static class Item {
         public static final String ELEMENT = "item";
 
-        private List<FormField> fields = new ArrayList<FormField>();
-        
+        private List<FormField> fields = new ArrayList<>();
+
         public Item(List<FormField> fields) {
             this.fields = fields;
         }
-        
+
         /**
          * Returns the fields that define the data that goes with the item.
-         * 
+         *
          * @return the fields that define the data that goes with the item.
          */
         public List<FormField> getFields() {
-            return Collections.unmodifiableList(new ArrayList<FormField>(fields));
+            return Collections.unmodifiableList(new ArrayList<>(fields));
         }
-        
+
         public CharSequence toXML() {
             XmlStringBuilder buf = new XmlStringBuilder();
             buf.openElement(ELEMENT);

@@ -17,24 +17,36 @@
 
 package org.jivesoftware.smackx.workgroup.packet;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
-import org.xmlpull.v1.XmlPullParser;
+import java.io.IOException;
+
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.IQ.IQChildElementXmlStringBuilder;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.ExtensionElementProvider;
+import org.jivesoftware.smack.util.XmlStringBuilder;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
+import org.jxmpp.jid.EntityBareJid;
+import org.jxmpp.jid.EntityJid;
+import org.jxmpp.jid.Jid;
+import org.jxmpp.jid.impl.JidCreate;
 
 /**
- * Packet extension for {@link org.jivesoftware.smackx.workgroup.agent.InvitationRequest}.
+ * Stanza extension for {@link org.jivesoftware.smackx.workgroup.agent.InvitationRequest}.
  *
  * @author Gaston Dombiak
  */
-public class RoomInvitation implements PacketExtension {
+public class RoomInvitation implements ExtensionElement {
 
     /**
-     * Element name of the packet extension.
+     * Element name of the stanza extension.
      */
     public static final String ELEMENT_NAME = "invite";
 
     /**
-     * Namespace of the packet extension.
+     * Namespace of the stanza extension.
      */
     public static final String NAMESPACE = "http://jabber.org/protocol/workgroup";
 
@@ -44,13 +56,13 @@ public class RoomInvitation implements PacketExtension {
     private Type type;
     /**
      * JID of the entity being invited. The entity could be another agent, user , a queue or a workgroup. In
-     * the case of a queue or a workgroup the server will select the best agent to invite. 
+     * the case of a queue or a workgroup the server will select the best agent to invite.
      */
-    private String invitee;
+    private Jid invitee;
     /**
      * Full JID of the user that sent the invitation.
      */
-    private String inviter;
+    private EntityJid inviter;
     /**
      * ID of the session that originated the initial user request.
      */
@@ -58,13 +70,13 @@ public class RoomInvitation implements PacketExtension {
     /**
      * JID of the room to join if offer is accepted.
      */
-    private String room;
+    private EntityBareJid room;
     /**
-     * Text provided by the inviter explaining the reason why the invitee is invited. 
+     * Text provided by the inviter explaining the reason why the invitee is invited.
      */
     private String reason;
 
-    public RoomInvitation(Type type, String invitee, String sessionID, String reason) {
+    public RoomInvitation(Type type, Jid invitee, String sessionID, String reason) {
         this.type = type;
         this.invitee = invitee;
         this.sessionID = sessionID;
@@ -74,19 +86,21 @@ public class RoomInvitation implements PacketExtension {
     private RoomInvitation() {
     }
 
+    @Override
     public String getElementName() {
         return ELEMENT_NAME;
     }
 
+    @Override
     public String getNamespace() {
         return NAMESPACE;
     }
 
-    public String getInviter() {
+    public EntityJid getInviter() {
         return inviter;
     }
 
-    public String getRoom() {
+    public EntityBareJid getRoom() {
         return room;
     }
 
@@ -98,11 +112,15 @@ public class RoomInvitation implements PacketExtension {
         return sessionID;
     }
 
-    public String toXML() {
-        StringBuilder buf = new StringBuilder();
+    @Override
+    public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
+        XmlStringBuilder xml = getIQChildElementBuilder(new IQChildElementXmlStringBuilder(this));
+        xml.closeElement(this);
+        return xml;
+    }
 
-        buf.append("<").append(ELEMENT_NAME).append(" xmlns=\"").append(NAMESPACE);
-        buf.append("\" type=\"").append(type).append("\">");
+    public IQ.IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder buf) {
+        buf.append(" type=\"").append(type.name()).append("\">");
         buf.append("<session xmlns=\"http://jivesoftware.com/protocol/workgroup\" id=\"").append(sessionID).append("\"></session>");
         if (invitee != null) {
             buf.append("<invitee>").append(invitee).append("</invitee>");
@@ -113,16 +131,14 @@ public class RoomInvitation implements PacketExtension {
         if (reason != null) {
             buf.append("<reason>").append(reason).append("</reason>");
         }
-        // Add packet extensions, if any are defined.
-        buf.append("</").append(ELEMENT_NAME).append("> ");
 
-        return buf.toString();
+        return buf;
     }
 
     /**
      * Type of entity being invited to a groupchat support session.
      */
-    public static enum Type {
+    public enum Type {
         /**
          * A user is being invited to a groupchat support session. The user could be another agent
          * or just a regular XMPP user.
@@ -138,9 +154,24 @@ public class RoomInvitation implements PacketExtension {
         workgroup
     }
 
-    public static class Provider implements PacketExtensionProvider {
+    public static class RoomInvitationIQ extends IQ {
+        private final RoomInvitation roomInvitation;
+        public RoomInvitationIQ(RoomInvitation roomInvitation) {
+            super(ELEMENT_NAME, NAMESPACE);
+            this.roomInvitation = roomInvitation;
+        }
+        @Override
+        protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder xml) {
+            return roomInvitation.getIQChildElementBuilder(xml);
+        }
+    }
 
-        public PacketExtension parseExtension(XmlPullParser parser) throws Exception {
+    public static class Provider extends ExtensionElementProvider<RoomInvitation> {
+
+        @Override
+        public RoomInvitation parse(XmlPullParser parser,
+                        int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException,
+                        IOException {
             final RoomInvitation invitation = new RoomInvitation();
             invitation.type = Type.valueOf(parser.getAttributeValue("", "type"));
 
@@ -148,24 +179,27 @@ public class RoomInvitation implements PacketExtension {
             while (!done) {
                 parser.next();
                 String elementName = parser.getName();
-                if (parser.getEventType() == XmlPullParser.START_TAG) {
+                if (parser.getEventType() == XmlPullParser.Event.START_ELEMENT) {
                     if ("session".equals(elementName)) {
                         invitation.sessionID = parser.getAttributeValue("", "id");
                     }
                     else if ("invitee".equals(elementName)) {
-                        invitation.invitee = parser.nextText();
+                        String inviteeString = parser.nextText();
+                        invitation.invitee = JidCreate.from(inviteeString);
                     }
                     else if ("inviter".equals(elementName)) {
-                        invitation.inviter = parser.nextText();
+                        String inviterString = parser.nextText();
+                        invitation.inviter = JidCreate.entityFrom(inviterString);
                     }
                     else if ("reason".equals(elementName)) {
                         invitation.reason = parser.nextText();
                     }
                     else if ("room".equals(elementName)) {
-                        invitation.room = parser.nextText();
+                        String roomString = parser.nextText();
+                        invitation.room = JidCreate.entityBareFrom(roomString);
                     }
                 }
-                else if (parser.getEventType() == XmlPullParser.END_TAG && ELEMENT_NAME.equals(elementName)) {
+                else if (parser.getEventType() == XmlPullParser.Event.END_ELEMENT && ELEMENT_NAME.equals(elementName)) {
                     done = true;
                 }
             }

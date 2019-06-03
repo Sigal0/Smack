@@ -16,40 +16,39 @@
  */
 package org.jivesoftware.smackx.search;
 
-import org.jivesoftware.smack.packet.Packet;
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smackx.xdata.FormField;
-import org.jivesoftware.smackx.xdata.packet.DataForm;
-import org.jivesoftware.smackx.xdata.packet.DataForm.Item;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import org.jivesoftware.smack.packet.Stanza;
+
+import org.jivesoftware.smackx.xdata.FormField;
+import org.jivesoftware.smackx.xdata.packet.DataForm;
+import org.jivesoftware.smackx.xdata.packet.DataForm.Item;
+
 /**
- * Represents a set of data results returned as part of a search. The report is structured 
+ * Represents a set of data results returned as part of a search. The report is structured
  * in columns and rows.
- * 
+ *
  * @author Gaston Dombiak
  */
 public class ReportedData {
-    
-    private List<Column> columns = new ArrayList<Column>();
-    private List<Row> rows = new ArrayList<Row>();
+
+    private final List<Column> columns = new ArrayList<>();
+    private final List<Row> rows = new ArrayList<>();
     private String title = "";
-    
+
     /**
-     * Returns a new ReportedData if the packet is used for reporting data and includes an 
+     * Returns a new ReportedData if the stanza is used for reporting data and includes an
      * extension that matches the elementName and namespace "x","jabber:x:data".
-     * 
-     * @param packet the packet used for reporting data.
+     *
+     * @param packet the stanza used for reporting data.
+     * @return ReportedData from the packet if present, otherwise null.
      */
-    public static ReportedData getReportedDataFrom(Packet packet) {
+    public static ReportedData getReportedDataFrom(Stanza packet) {
         // Check if the packet includes the DataForm extension
-        PacketExtension packetExtension = packet.getExtension("x","jabber:x:data");
-        if (packetExtension != null) {
-            // Check if the existing DataForm is a result of a search
-            DataForm dataForm = (DataForm) packetExtension;
+        DataForm dataForm = DataForm.from(packet);
+        if (dataForm != null) {
             if (dataForm.getReportedData() != null)
                 return new ReportedData(dataForm);
         }
@@ -72,13 +71,11 @@ public class ReportedData {
 
         // Add the rows to the report based on the form's items
         for (Item item : dataForm.getItems()) {
-            List<Field> fieldList = new ArrayList<Field>(columns.size());
+            List<Field> fieldList = new ArrayList<>(columns.size());
             for (FormField field : item.getFields()) {
                 // The field is created with all the values of the data form's field
-                List<String> values = new ArrayList<String>();
-                for (String value : field.getValues()) {
-                    values.add(value);
-                }
+                List<CharSequence> values = new ArrayList<>();
+                values.addAll(field.getValues());
                 fieldList.add(new Field(field.getVariable(), values));
             }
             rows.add(new Row(fieldList));
@@ -89,7 +86,7 @@ public class ReportedData {
     }
 
 
-    public ReportedData(){
+    public ReportedData() {
         // Allow for model creation of ReportedData.
     }
 
@@ -97,15 +94,15 @@ public class ReportedData {
      * Adds a new <code>Row</code>.
      * @param row the new row to add.
      */
-    public void addRow(Row row){
+    public void addRow(Row row) {
         rows.add(row);
     }
 
     /**
-     * Adds a new <code>Column</code>
+     * Adds a new <code>Column</code>.
      * @param column the column to add.
      */
-    public void addColumn(Column column){
+    public void addColumn(Column column) {
         columns.add(column);
     }
 
@@ -116,7 +113,7 @@ public class ReportedData {
      * @return a List of the rows returned from a search.
      */
     public List<Row> getRows() {
-        return Collections.unmodifiableList(new ArrayList<Row>(rows));
+        return Collections.unmodifiableList(new ArrayList<>(rows));
     }
 
     /**
@@ -125,7 +122,7 @@ public class ReportedData {
      * @return a List of the columns returned from a search.
      */
     public List<Column> getColumns() {
-        return Collections.unmodifiableList(new ArrayList<Column>(columns));
+        return Collections.unmodifiableList(new ArrayList<>(columns));
     }
 
 
@@ -146,9 +143,9 @@ public class ReportedData {
      * @author Gaston Dombiak
      */
     public static class Column {
-        private String label;
-        private String variable;
-        private String type;
+        private final String label;
+        private final String variable;
+        private final FormField.Type type;
 
         /**
          * Creates a new column with the specified definition.
@@ -157,7 +154,7 @@ public class ReportedData {
          * @param variable the variable name of the column.
          * @param type the format for the returned data.
          */
-        public Column(String label, String variable, String type) {
+        public Column(String label, String variable, FormField.Type type) {
             this.label = label;
             this.variable = variable;
             this.type = type;
@@ -174,27 +171,11 @@ public class ReportedData {
 
 
         /**
-         * Returns the column's data format. Valid formats are:
-         *
-         * <ul>
-         *  <li>text-single -> single line or word of text
-         *  <li>text-private -> instead of showing the user what they typed, you show ***** to
-         * protect it
-         *  <li>text-multi -> multiple lines of text entry
-         *  <li>list-single -> given a list of choices, pick one
-         *  <li>list-multi -> given a list of choices, pick one or more
-         *  <li>boolean -> 0 or 1, true or false, yes or no. Default value is 0
-         *  <li>fixed -> fixed for putting in text to show sections, or just advertise your web
-         * site in the middle of the form
-         *  <li>hidden -> is not given to the user at all, but returned with the questionnaire
-         *  <li>jid-single -> Jabber ID - choosing a JID from your roster, and entering one based
-         * on the rules for a JID.
-         *  <li>jid-multi -> multiple entries for JIDs
-         * </ul>
+         * Returns the column's data format.
          *
          * @return format for the returned data.
          */
-        public String getType() {
+        public FormField.Type getType() {
             return type;
         }
 
@@ -212,7 +193,7 @@ public class ReportedData {
     }
 
     public static class Row {
-        private List<Field> fields = new ArrayList<Field>();
+        private List<Field> fields = new ArrayList<>();
 
         public Row(List<Field> fields) {
             this.fields = fields;
@@ -224,8 +205,8 @@ public class ReportedData {
          * @param variable the variable to match.
          * @return the values of the field whose variable matches the requested variable.
          */
-        public List<String> getValues(String variable) {
-            for(Field field : getFields()) {
+        public List<CharSequence> getValues(String variable) {
+            for (Field field : getFields()) {
                 if (variable.equalsIgnoreCase(field.getVariable())) {
                     return field.getValues();
                 }
@@ -239,22 +220,22 @@ public class ReportedData {
          * @return the fields that define the data that goes with the item.
          */
         private List<Field> getFields() {
-            return Collections.unmodifiableList(new ArrayList<Field>(fields));
+            return Collections.unmodifiableList(new ArrayList<>(fields));
         }
     }
 
     public static class Field {
-        private String variable;
-        private List<String> values;
+        private final String variable;
+        private final List<? extends CharSequence> values;
 
-        public Field(String variable, List<String> values) {
+        public Field(String variable, List<? extends CharSequence> values) {
             this.variable = variable;
             this.values = values;
         }
 
         /**
          * Returns the variable name that the field represents.
-         * 
+         *
          * @return the variable name of the field.
          */
         public String getVariable() {
@@ -263,10 +244,10 @@ public class ReportedData {
 
         /**
          * Returns a List of the values reported as part of the search.
-         * 
+         *
          * @return the returned values of the search.
          */
-        public List<String> getValues() {
+        public List<CharSequence> getValues() {
             return Collections.unmodifiableList(values);
         }
     }

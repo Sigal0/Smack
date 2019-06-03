@@ -16,17 +16,22 @@
  */
 package org.jivesoftware.smackx.iqversion;
 
+import static org.jivesoftware.smack.test.util.CharSequenceEquals.equalsCharSequence;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 
 import org.jivesoftware.smack.DummyConnection;
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.Packet;
+import org.jivesoftware.smack.packet.Stanza;
 import org.jivesoftware.smack.util.PacketParserUtils;
+
+import org.jivesoftware.smackx.InitExtensions;
 import org.jivesoftware.smackx.iqversion.packet.Version;
+
 import org.junit.Test;
 
-public class VersionTest {
+public class VersionTest extends InitExtensions {
     @Test
     public void checkProvider() throws Exception {
         // @formatter:off
@@ -35,23 +40,25 @@ public class VersionTest {
                 + "</iq>";
         // @formatter:on
         DummyConnection con = new DummyConnection();
+        con.connect();
 
         // Enable version replys for this connection
-        VersionManager.getInstanceFor(con).setVersion(new Version("Test", "0.23", "DummyOS"));
-        IQ versionRequest = (IQ) PacketParserUtils.parseStanza(control);
+        VersionManager.setAutoAppendSmackVersion(false);
+        VersionManager.getInstanceFor(con).setVersion("Test", "0.23", "DummyOS");
+        IQ versionRequest = PacketParserUtils.parseStanza(control);
 
         assertTrue(versionRequest instanceof Version);
 
-        con.processPacket(versionRequest);
+        con.processStanza(versionRequest);
 
-        Packet replyPacket = con.getSentPacket();
+        Stanza replyPacket = con.getSentPacket();
         assertTrue(replyPacket instanceof Version);
 
         Version reply = (Version) replyPacket;
-        //getFrom check is pending for SMACK-547
-        //assertEquals("juliet@capulet.lit/balcony", reply.getFrom());
-        assertEquals("capulet.lit", reply.getTo());
-        assertEquals("s2c1", reply.getPacketID());
+        // getFrom check is pending for SMACK-547
+        // assertEquals("juliet@capulet.lit/balcony", reply.getFrom());
+        assertThat("capulet.lit", equalsCharSequence(reply.getTo()));
+        assertEquals("s2c1", reply.getStanzaId());
         assertEquals(IQ.Type.result, reply.getType());
         assertEquals("Test", reply.getName());
         assertEquals("0.23", reply.getVersion());

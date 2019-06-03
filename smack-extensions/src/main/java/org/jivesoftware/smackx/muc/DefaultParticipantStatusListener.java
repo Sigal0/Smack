@@ -17,60 +17,79 @@
 
 package org.jivesoftware.smackx.muc;
 
+import org.jxmpp.jid.EntityFullJid;
+import org.jxmpp.jid.Jid;
+import org.jxmpp.jid.parts.Resourcepart;
+
 /**
  * Default implementation of the ParticipantStatusListener interface.<p>
  *
  * This class does not provide any behavior by default. It just avoids having
  * to implement all the inteface methods if the user is only interested in implementing
  * some of the methods.
- * 
+ *
  * @author Gaston Dombiak
  */
 public class DefaultParticipantStatusListener implements ParticipantStatusListener {
 
-    public void joined(String participant) {
+    @Override
+    public void joined(EntityFullJid participant) {
     }
 
-    public void left(String participant) {
+    @Override
+    public void left(EntityFullJid participant) {
     }
 
-    public void kicked(String participant, String actor, String reason) {
+    @Override
+    public void kicked(EntityFullJid participant, Jid actor, String reason) {
     }
 
-    public void voiceGranted(String participant) {
+    @Override
+    public void voiceGranted(EntityFullJid participant) {
     }
 
-    public void voiceRevoked(String participant) {
+    @Override
+    public void voiceRevoked(EntityFullJid participant) {
     }
 
-    public void banned(String participant, String actor, String reason) {
+    @Override
+    public void banned(EntityFullJid participant, Jid actor, String reason) {
     }
 
-    public void membershipGranted(String participant) {
+    @Override
+    public void membershipGranted(EntityFullJid participant) {
     }
 
-    public void membershipRevoked(String participant) {
+    @Override
+    public void membershipRevoked(EntityFullJid participant) {
     }
 
-    public void moderatorGranted(String participant) {
+    @Override
+    public void moderatorGranted(EntityFullJid participant) {
     }
 
-    public void moderatorRevoked(String participant) {
+    @Override
+    public void moderatorRevoked(EntityFullJid participant) {
     }
 
-    public void ownershipGranted(String participant) {
+    @Override
+    public void ownershipGranted(EntityFullJid participant) {
     }
 
-    public void ownershipRevoked(String participant) {
+    @Override
+    public void ownershipRevoked(EntityFullJid participant) {
     }
 
-    public void adminGranted(String participant) {
+    @Override
+    public void adminGranted(EntityFullJid participant) {
     }
 
-    public void adminRevoked(String participant) {
+    @Override
+    public void adminRevoked(EntityFullJid participant) {
     }
 
-    public void nicknameChanged(String participant, String newNickname) {
+    @Override
+    public void nicknameChanged(EntityFullJid participant, Resourcepart newNickname) {
     }
 
 }

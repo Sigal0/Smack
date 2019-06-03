@@ -17,15 +17,16 @@
 
 package org.jivesoftware.smackx.xhtmlim.packet;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.util.XmlStringBuilder;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.packet.Message;
+import org.jivesoftware.smack.util.XmlStringBuilder;
+
 /**
- * An XHTML sub-packet, which is used by XMPP clients to exchange formatted text. The XHTML 
+ * An XHTML sub-packet, which is used by XMPP clients to exchange formatted text. The XHTML
  * extension is only a subset of XHTML 1.0.
  * <p>
  * The following link summarizes the requirements of XHTML IM:
@@ -34,36 +35,38 @@ import java.util.List;
  *
  * @author Gaston Dombiak
  */
-public class XHTMLExtension implements PacketExtension {
+public class XHTMLExtension implements ExtensionElement {
 
     public static final String ELEMENT = "html";
     public static final String NAMESPACE = "http://jabber.org/protocol/xhtml-im";
 
-    private List<CharSequence> bodies = new ArrayList<CharSequence>();
+    private final List<CharSequence> bodies = new ArrayList<>();
 
     /**
     * Returns the XML element name of the extension sub-packet root element.
     * Always returns "html"
     *
-    * @return the XML element name of the packet extension.
+    * @return the XML element name of the stanza extension.
     */
+    @Override
     public String getElementName() {
         return ELEMENT;
     }
 
-    /** 
+    /**
      * Returns the XML namespace of the extension sub-packet root element.
      * According the specification the namespace is always "http://jabber.org/protocol/xhtml-im"
      *
-     * @return the XML namespace of the packet extension.
+     * @return the XML namespace of the stanza extension.
      */
+    @Override
     public String getNamespace() {
         return NAMESPACE;
     }
 
     /**
      * Returns the XML representation of a XHTML extension according the specification.
-     * 
+     *
      * Usually the XML representation will be inside of a Message XML representation like
      * in the following example:
      * <pre>
@@ -75,12 +78,12 @@ public class XHTMLExtension implements PacketExtension {
      *     &lt;/html&gt;
      * &lt;/message&gt;
      * </pre>
-     * 
+     *
      */
     @Override
-    public XmlStringBuilder toXML() {
+    public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
         XmlStringBuilder xml = new XmlStringBuilder(this);
-        xml.rightAngelBracket();
+        xml.rightAngleBracket();
         // Loop through all the bodies and append them to the string buffer
         for (CharSequence body : getBodies()) {
             xml.append(body);
@@ -96,7 +99,7 @@ public class XHTMLExtension implements PacketExtension {
      */
     public List<CharSequence> getBodies() {
         synchronized (bodies) {
-            return Collections.unmodifiableList(new ArrayList<CharSequence>(bodies));
+            return Collections.unmodifiableList(new ArrayList<>(bodies));
         }
     }
 
@@ -122,4 +125,7 @@ public class XHTMLExtension implements PacketExtension {
         }
     }
 
+    public static XHTMLExtension from(Message message) {
+        return message.getExtension(ELEMENT, NAMESPACE);
+    }
 }

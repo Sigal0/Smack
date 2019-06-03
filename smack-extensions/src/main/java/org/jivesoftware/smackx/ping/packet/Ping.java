@@ -1,6 +1,6 @@
 /**
  *
- * Copyright 2012 Florian Schmaus
+ * Copyright 2012-2015 Florian Schmaus
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,22 +17,31 @@
 package org.jivesoftware.smackx.ping.packet;
 
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smackx.ping.PingManager;
+import org.jivesoftware.smack.packet.SimpleIQ;
 
-public class Ping extends IQ {
+import org.jxmpp.jid.Jid;
+
+public class Ping extends SimpleIQ {
 
     public static final String ELEMENT = "ping";
-    
+    public static final String NAMESPACE = "urn:xmpp:ping";
+
     public Ping() {
+        super(ELEMENT, NAMESPACE);
     }
-    
-    public Ping(String to) {
+
+    public Ping(Jid to) {
+        this();
         setTo(to);
         setType(IQ.Type.get);
     }
-    
-    @Override
-    public String getChildElementXML() {
-        return "<" + ELEMENT + " xmlns=\'" + PingManager.NAMESPACE + "\' />";
+
+    /**
+     * Create an XMPP Pong for this Ping.
+     *
+     * @return the Pong
+     */
+    public IQ getPong() {
+        return createResultIQ(this);
     }
 }

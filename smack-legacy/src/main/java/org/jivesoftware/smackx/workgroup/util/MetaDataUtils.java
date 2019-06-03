@@ -16,13 +16,18 @@
  */
 package org.jivesoftware.smackx.workgroup.util;
 
-import org.jivesoftware.smackx.workgroup.MetaData;
-import org.jivesoftware.smack.util.StringUtils;
-import org.xmlpull.v1.XmlPullParser;
-import org.xmlpull.v1.XmlPullParserException;
-
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Hashtable;
+import java.util.List;
+import java.util.Map;
+
+import org.jivesoftware.smack.util.StringUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
+import org.jivesoftware.smackx.workgroup.MetaData;
 
 /**
  * Utility class for meta-data parsing and writing.
@@ -41,19 +46,19 @@ public class MetaDataUtils {
      * @throws IOException            if an error occurs while parsing the XML.
      */
     public static Map<String, List<String>> parseMetaData(XmlPullParser parser) throws XmlPullParserException, IOException {
-        int eventType = parser.getEventType();
+        XmlPullParser.Event eventType = parser.getEventType();
 
         // If correctly positioned on an opening meta-data tag, parse meta-data.
-        if ((eventType == XmlPullParser.START_TAG)
+        if ((eventType == XmlPullParser.Event.START_ELEMENT)
                 && parser.getName().equals(MetaData.ELEMENT_NAME)
                 && parser.getNamespace().equals(MetaData.NAMESPACE)) {
-            Map<String, List<String>> metaData = new Hashtable<String, List<String>>();
+            Map<String, List<String>> metaData = new Hashtable<>();
 
-            eventType = parser.nextTag();
+            eventType = parser.next();
 
             // Keep parsing until we've gotten to end of meta-data.
-            while ((eventType != XmlPullParser.END_TAG)
-                    || (!parser.getName().equals(MetaData.ELEMENT_NAME))) {
+            while ((eventType != XmlPullParser.Event.END_ELEMENT)
+                    || !parser.getName().equals(MetaData.ELEMENT_NAME)) {
                 String name = parser.getAttributeValue(0);
                 String value = parser.nextText();
 
@@ -62,12 +67,12 @@ public class MetaDataUtils {
                     values.add(value);
                 }
                 else {
-                    List<String> values = new ArrayList<String>();
+                    List<String> values = new ArrayList<>();
                     values.add(value);
                     metaData.put(name, values);
                 }
 
-                eventType = parser.nextTag();
+                eventType = parser.next();
             }
 
             return metaData;
@@ -79,20 +84,18 @@ public class MetaDataUtils {
     /**
      * Serializes a Map of String name/value pairs into the meta-data XML format.
      *
-     * @param metaData the Map of meta-data as Map&lt;String,List&lt;String>>
+     * @param metaData the Map of meta-data as Map&lt;String, List&lt;String&gt;&gt;
      * @return the meta-data values in XML form.
      */
     public static String serializeMetaData(Map<String, List<String>> metaData) {
         StringBuilder buf = new StringBuilder();
         if (metaData != null && metaData.size() > 0) {
             buf.append("<metadata xmlns=\"http://jivesoftware.com/protocol/workgroup\">");
-            for (Iterator<String> i = metaData.keySet().iterator(); i.hasNext();) {
-                String key = i.next();
+            for (String key : metaData.keySet()) {
                 List<String> value = metaData.get(key);
-                for (Iterator<String> it = value.iterator(); it.hasNext();) {
-                    String v = it.next();
+                for (String v : value) {
                     buf.append("<value name=\"").append(key).append("\">");
-                    buf.append(StringUtils.escapeForXML(v));
+                    buf.append(StringUtils.escapeForXmlText(v));
                     buf.append("</value>");
                 }
             }

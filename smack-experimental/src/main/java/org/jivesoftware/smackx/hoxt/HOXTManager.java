@@ -18,11 +18,15 @@ package org.jivesoftware.smackx.hoxt;
 
 import org.jivesoftware.smack.ConnectionCreationListener;
 import org.jivesoftware.smack.SmackException.NoResponseException;
+import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPConnectionRegistry;
 import org.jivesoftware.smack.XMPPException.XMPPErrorException;
-import org.jivesoftware.smack.SmackException.NotConnectedException;
+
 import org.jivesoftware.smackx.disco.ServiceDiscoveryManager;
+import org.jivesoftware.smackx.hoxt.packet.AbstractHttpOverXmpp;
+
+import org.jxmpp.jid.Jid;
 
 /**
  * Manager for HTTP ove XMPP transport (XEP-0332) extension.
@@ -35,7 +39,7 @@ public class HOXTManager {
     /**
      * Namespace for this extension.
      */
-    public static final String NAMESPACE = "urn:xmpp:http";
+    public static final String NAMESPACE = AbstractHttpOverXmpp.NAMESPACE;
 
     static {
         XMPPConnectionRegistry.addConnectionCreationListener(new ConnectionCreationListener() {
@@ -55,8 +59,9 @@ public class HOXTManager {
      * @throws XMPPErrorException
      * @throws NoResponseException
      * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public static boolean isSupported(String jid, XMPPConnection connection) throws NoResponseException, XMPPErrorException, NotConnectedException {
+    public static boolean isSupported(Jid jid, XMPPConnection connection) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
         return ServiceDiscoveryManager.getInstanceFor(connection).supportsFeature(jid, NAMESPACE);
     }
 }

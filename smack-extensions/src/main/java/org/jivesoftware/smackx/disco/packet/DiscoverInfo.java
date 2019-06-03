@@ -16,38 +16,49 @@
  */
 package org.jivesoftware.smackx.disco.packet;
 
-import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.util.XmlStringBuilder;
-
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
+
+import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.util.StringUtils;
+import org.jivesoftware.smack.util.TypedCloneable;
+import org.jivesoftware.smack.util.XmlStringBuilder;
+
+import org.jxmpp.util.XmppStringUtils;
 
 /**
- * A DiscoverInfo IQ packet, which is used by XMPP clients to request and receive information 
- * to/from other XMPP entities.<p> 
- * 
- * The received information may contain one or more identities of the requested XMPP entity, and 
+ * A DiscoverInfo IQ packet, which is used by XMPP clients to request and receive information
+ * to/from other XMPP entities.<p>
+ *
+ * The received information may contain one or more identities of the requested XMPP entity, and
  * a list of supported features by the requested XMPP entity.
  *
  * @author Gaston Dombiak
  */
-public class DiscoverInfo extends IQ implements Cloneable {
+public class DiscoverInfo extends IQ implements TypedCloneable<DiscoverInfo> {
 
+    public static final String ELEMENT = QUERY_ELEMENT;
     public static final String NAMESPACE = "http://jabber.org/protocol/disco#info";
 
-    private final List<Feature> features = new LinkedList<Feature>();
-    private final List<Identity> identities = new LinkedList<Identity>();
+    private final List<Feature> features = new LinkedList<>();
+    private final Set<Feature> featuresSet = new HashSet<>();
+    private final List<Identity> identities = new LinkedList<>();
+    private final Set<String> identitiesSet = new HashSet<>();
     private String node;
+    private boolean containsDuplicateFeatures;
 
     public DiscoverInfo() {
-        super();
+        super(ELEMENT, NAMESPACE);
     }
 
     /**
-     * Copy constructor
-     * 
+     * Copy constructor.
+     *
      * @param d
      */
     public DiscoverInfo(DiscoverInfo d) {
@@ -71,9 +82,10 @@ public class DiscoverInfo extends IQ implements Cloneable {
      * Adds a new feature to the discovered information.
      *
      * @param feature the discovered feature
+     * @return true if the feature did not already exist.
      */
-    public void addFeature(String feature) {
-        addFeature(new Feature(feature));
+    public boolean addFeature(String feature) {
+        return addFeature(new Feature(feature));
     }
 
     /**
@@ -88,8 +100,13 @@ public class DiscoverInfo extends IQ implements Cloneable {
         }
     }
 
-    private void addFeature(Feature feature) {
+    public boolean addFeature(Feature feature) {
         features.add(feature);
+        boolean featureIsNew = featuresSet.add(feature);
+        if (!featureIsNew) {
+            containsDuplicateFeatures = true;
+        }
+        return featureIsNew;
     }
 
     /**
@@ -103,26 +120,29 @@ public class DiscoverInfo extends IQ implements Cloneable {
 
     /**
      * Adds a new identity of the requested entity to the discovered information.
-     * 
+     *
      * @param identity the discovered entity's identity
      */
     public void addIdentity(Identity identity) {
         identities.add(identity);
+        identitiesSet.add(identity.getKey());
     }
 
     /**
-     * Adds identities to the DiscoverInfo stanza
-     * 
+     * Adds identities to the DiscoverInfo stanza.
+     *
      * @param identitiesToAdd
      */
     public void addIdentities(Collection<Identity> identitiesToAdd) {
         if (identitiesToAdd == null) return;
-        identities.addAll(identitiesToAdd);
+        for (Identity identity : identitiesToAdd) {
+            addIdentity(identity);
+        }
     }
 
     /**
      * Returns the discovered identities of an XMPP entity.
-     * 
+     *
      * @return an unmodifiable list of the discovered identities
      */
     public List<Identity> getIdentities() {
@@ -130,10 +150,39 @@ public class DiscoverInfo extends IQ implements Cloneable {
     }
 
     /**
-     * Returns the node attribute that supplements the 'jid' attribute. A node is merely 
-     * something that is associated with a JID and for which the JID can provide information.<p> 
-     * 
-     * Node attributes SHOULD be used only when trying to provide or query information which 
+     * Returns true if this DiscoverInfo contains at least one Identity of the given category and type.
+     *
+     * @param category the category to look for.
+     * @param type the type to look for.
+     * @return true if this DiscoverInfo contains a Identity of the given category and type.
+     */
+    public boolean hasIdentity(String category, String type) {
+        String key = XmppStringUtils.generateKey(category, type);
+        return identitiesSet.contains(key);
+    }
+
+    /**
+     * Returns all Identities of the given category and type of this DiscoverInfo.
+     *
+     * @param category category the category to look for.
+     * @param type type the type to look for.
+     * @return a list of Identites with the given category and type.
+     */
+    public List<Identity> getIdentities(String category, String type) {
+        List<Identity> res = new ArrayList<>(identities.size());
+        for (Identity identity : identities) {
+            if (identity.getCategory().equals(category) && identity.getType().equals(type)) {
+                res.add(identity);
+            }
+        }
+        return res;
+    }
+
+    /**
+     * Returns the node attribute that supplements the 'jid' attribute. A node is merely
+     * something that is associated with a JID and for which the JID can provide information.<p>
+     *
+     * Node attributes SHOULD be used only when trying to provide or query information which
      * is not directly addressable.
      *
      * @return the node attribute that supplements the 'jid' attribute
@@ -143,12 +192,12 @@ public class DiscoverInfo extends IQ implements Cloneable {
     }
 
     /**
-     * Sets the node attribute that supplements the 'jid' attribute. A node is merely 
-     * something that is associated with a JID and for which the JID can provide information.<p> 
-     * 
-     * Node attributes SHOULD be used only when trying to provide or query information which 
+     * Sets the node attribute that supplements the 'jid' attribute. A node is merely
+     * something that is associated with a JID and for which the JID can provide information.<p>
+     *
+     * Node attributes SHOULD be used only when trying to provide or query information which
      * is not directly addressable.
-     * 
+     *
      * @param node the node attribute that supplements the 'jid' attribute
      */
     public void setNode(String node) {
@@ -157,44 +206,35 @@ public class DiscoverInfo extends IQ implements Cloneable {
 
     /**
      * Returns true if the specified feature is part of the discovered information.
-     * 
+     *
      * @param feature the feature to check
-     * @return true if the requestes feature has been discovered
+     * @return true if the requests feature has been discovered
      */
-    public boolean containsFeature(String feature) {
-        for (Feature f : getFeatures()) {
-            if (feature.equals(f.getVar()))
-                return true;
-        }
-        return false;
+    public boolean containsFeature(CharSequence feature) {
+        return features.contains(new Feature(feature));
     }
 
     @Override
-    public CharSequence getChildElementXML() {
-        XmlStringBuilder xml = new XmlStringBuilder();
-        xml.halfOpenElement("query");
-        xml.xmlnsAttribute(NAMESPACE);
+    protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder xml) {
         xml.optAttribute("node", getNode());
-        xml.rightAngelBracket();
+        xml.rightAngleBracket();
         for (Identity identity : identities) {
             xml.append(identity.toXML());
         }
         for (Feature feature : features) {
             xml.append(feature.toXML());
         }
-        // Add packet extensions, if any are defined.
-        xml.append(getExtensionsXML());
-        xml.closeElement("query");
+
         return xml;
     }
 
     /**
      * Test if a DiscoverInfo response contains duplicate identities.
-     * 
+     *
      * @return true if duplicate identities where found, otherwise false
      */
     public boolean containsDuplicateIdentities() {
-        List<Identity> checkedIdentities = new LinkedList<Identity>();
+        List<Identity> checkedIdentities = new LinkedList<>();
         for (Identity i : identities) {
             for (Identity i2 : checkedIdentities) {
                 if (i.equals(i2))
@@ -207,19 +247,11 @@ public class DiscoverInfo extends IQ implements Cloneable {
 
     /**
      * Test if a DiscoverInfo response contains duplicate features.
-     * 
+     *
      * @return true if duplicate identities where found, otherwise false
      */
     public boolean containsDuplicateFeatures() {
-        List<Feature> checkedFeatures = new LinkedList<Feature>();
-        for (Feature f : features) {
-            for (Feature f2 : checkedFeatures) {
-                if (f.equals(f2))
-                    return true;
-            }
-            checkedFeatures.add(f);
-        }
-        return false;
+        return containsDuplicateFeatures;
     }
 
     @Override
@@ -230,45 +262,72 @@ public class DiscoverInfo extends IQ implements Cloneable {
     /**
      * Represents the identity of a given XMPP entity. An entity may have many identities but all
      * the identities SHOULD have the same name.<p>
-     * 
-     * Refer to <a href="http://www.jabber.org/registrar/disco-categories.html">Jabber::Registrar</a>
-     * in order to get the official registry of values for the <i>category</i> and <i>type</i> 
+     *
+     * Refer to <a href="https://xmpp.org/registrar/disco-categories.html">XMPP Registry for Service Discovery Identities</a>
+     * in order to get the official registry of values for the <i>category</i> and <i>type</i>
      * attributes.
-     * 
+     *
      */
-    public static class Identity implements Comparable<Identity>, Cloneable {
+    public static final class Identity implements Comparable<Identity>, TypedCloneable<Identity> {
 
         private final String category;
-        private String name;
         private final String type;
-        private String lang; // 'xml:lang;
+        private final String key;
+        private final String name;
+        private final String lang; // 'xml:lang;
 
         public Identity(Identity identity) {
-            this(identity.category, identity.name, identity.type);
-            lang = identity.lang;
+            this.category = identity.category;
+            this.type = identity.type;
+            this.key = identity.type;
+            this.name = identity.name;
+            this.lang = identity.lang;
         }
 
         /**
          * Creates a new identity for an XMPP entity.
-         * 'category' and 'type' are required by 
+         *
+         * @param category the entity's category (required as per XEP-30).
+         * @param type the entity's type (required as per XEP-30).
+         */
+        public Identity(String category, String type) {
+            this(category, type, null, null);
+        }
+
+        /**
+         * Creates a new identity for an XMPP entity.
+         * 'category' and 'type' are required by
          * <a href="http://xmpp.org/extensions/xep-0030.html#schemas">XEP-30 XML Schemas</a>
-         * 
+         *
          * @param category the entity's category (required as per XEP-30).
          * @param name the entity's name.
          * @param type the entity's type (required as per XEP-30).
          */
         public Identity(String category, String name, String type) {
-            if ((category == null) || (type == null))
-                throw new IllegalArgumentException("category and type cannot be null");
-            
-            this.category = category;
-            this.name = name;
-            this.type = type;
+            this(category, type, name, null);
         }
 
         /**
-         * Returns the entity's category. To get the official registry of values for the 
-         * 'category' attribute refer to <a href="http://www.jabber.org/registrar/disco-categories.html">Jabber::Registrar</a> 
+         * Creates a new identity for an XMPP entity.
+         * 'category' and 'type' are required by
+         * <a href="http://xmpp.org/extensions/xep-0030.html#schemas">XEP-30 XML Schemas</a>
+         *
+         * @param category the entity's category (required as per XEP-30).
+         * @param type the entity's type (required as per XEP-30).
+         * @param name the entity's name.
+         * @param lang the entity's lang.
+         */
+        public Identity(String category, String type, String name, String lang) {
+            this.category = StringUtils.requireNotNullNorEmpty(category, "category cannot be null");
+            this.type = StringUtils.requireNotNullNorEmpty(type, "type cannot be null");
+            this.key = XmppStringUtils.generateKey(category, type);
+            this.name = name;
+            this.lang = lang;
+        }
+
+        /**
+         * Returns the entity's category. To get the official registry of values for the
+         * 'category' attribute refer to <a href="https://xmpp.org/registrar/disco-categories.html">XMPP Registry for Service Discovery Identities</a>.
          *
          * @return the entity's category.
          */
@@ -286,17 +345,8 @@ public class DiscoverInfo extends IQ implements Cloneable {
         }
 
         /**
-         * Set the identity's name.
-         * 
-         * @param name
-         */
-        public void setName(String name) {
-            this.name = name;
-        }
-
-        /**
-         * Returns the entity's type. To get the official registry of values for the 
-         * 'type' attribute refer to <a href="http://www.jabber.org/registrar/disco-categories.html">Jabber::Registrar</a> 
+         * Returns the entity's type. To get the official registry of values for the
+         * 'type' attribute refer to <a href="https://xmpp.org/registrar/disco-categories.html">XMPP Registry for Service Discovery Identities</a>.
          *
          * @return the entity's type.
          */
@@ -305,21 +355,27 @@ public class DiscoverInfo extends IQ implements Cloneable {
         }
 
         /**
-         * Sets the natural language (xml:lang) for this identity (optional)
-         * 
-         * @param lang the xml:lang of this Identity
-         */
-        public void setLanguage(String lang) {
-            this.lang = lang;
-        }
-
-        /**
-         * Returns the identities natural language if one is set
-         * 
+         * Returns the identities natural language if one is set.
+         *
          * @return the value of xml:lang of this Identity
          */
         public String getLanguage() {
             return lang;
+        }
+
+        private String getKey() {
+            return key;
+        }
+
+        /**
+         * Returns true if this identity is of the given category and type.
+         *
+         * @param category the category.
+         * @param type the type.
+         * @return true if this identity is of the given category and type.
+         */
+        public boolean isOfCategoryAndType(String category, String type) {
+            return this.category.equals(category) && this.type.equals(type);
         }
 
         public XmlStringBuilder toXML() {
@@ -333,12 +389,13 @@ public class DiscoverInfo extends IQ implements Cloneable {
             return xml;
         }
 
-        /** 
+        /**
          * Check equality for Identity  for category, type, lang and name
          * in that order as defined by
-         * <a href="http://xmpp.org/extensions/xep-0115.html#ver-proc">XEP-0015 5.4 Processing Method (Step 3.3)</a>
-         *  
+         * <a href="http://xmpp.org/extensions/xep-0115.html#ver-proc">XEP-0015 5.4 Processing Method (Step 3.3)</a>.
+         *
          */
+        @Override
         public boolean equals(Object obj) {
             if (obj == null)
                 return false;
@@ -348,18 +405,12 @@ public class DiscoverInfo extends IQ implements Cloneable {
                 return false;
 
             DiscoverInfo.Identity other = (DiscoverInfo.Identity) obj;
-            if (!this.category.equals(other.category))
+            if (!this.key.equals(other.key))
                 return false;
 
             String otherLang = other.lang == null ? "" : other.lang;
             String thisLang = lang == null ? "" : lang;
             if (!otherLang.equals(thisLang))
-                return false;
-            
-            // This safeguard can be removed once the deprecated constructor is removed.
-            String otherType = other.type == null ? "" : other.type;
-            String thisType = type == null ? "" : type;
-            if (!otherType.equals(thisType))
                 return false;
 
             String otherName = other.name == null ? "" : other.name;
@@ -373,9 +424,8 @@ public class DiscoverInfo extends IQ implements Cloneable {
         @Override
         public int hashCode() {
             int result = 1;
-            result = 37 * result + category.hashCode();
+            result = 37 * result + key.hashCode();
             result = 37 * result + (lang == null ? 0 : lang.hashCode());
-            result = 37 * result + (type == null ? 0 : type.hashCode());
             result = 37 * result + (name == null ? 0 : name.hashCode());
             return result;
         }
@@ -384,15 +434,16 @@ public class DiscoverInfo extends IQ implements Cloneable {
          * Compares this identity with another one. The comparison order is: Category, Type, Lang.
          * If all three are identical the other Identity is considered equal. Name is not used for
          * comparison, as defined by XEP-0115
-         * 
+         *
          * @param other
          * @return a negative integer, zero, or a positive integer as this object is less than,
          *         equal to, or greater than the specified object.
          */
+        @Override
         public int compareTo(DiscoverInfo.Identity other) {
             String otherLang = other.lang == null ? "" : other.lang;
             String thisLang = lang == null ? "" : lang;
-            
+
             // This can be removed once the deprecated constructor is removed.
             String otherType = other.type == null ? "" : other.type;
             String thisType = type == null ? "" : type;
@@ -418,15 +469,20 @@ public class DiscoverInfo extends IQ implements Cloneable {
         public Identity clone() {
             return new Identity(this);
         }
+
+        @Override
+        public String toString() {
+            return toXML().toString();
+        }
     }
 
     /**
-     * Represents the features offered by the item. This information helps requestors determine 
-     * what actions are possible with regard to this item (registration, search, join, etc.) 
-     * as well as specific feature types of interest, if any (e.g., for the purpose of feature 
+     * Represents the features offered by the item. This information helps the requester to determine
+     * what actions are possible with regard to this item (registration, search, join, etc.)
+     * as well as specific feature types of interest, if any (e.g., for the purpose of feature
      * negotiation).
      */
-    public static class Feature implements Cloneable {
+    public static final class Feature implements TypedCloneable<Feature> {
 
         private final String variable;
 
@@ -434,15 +490,17 @@ public class DiscoverInfo extends IQ implements Cloneable {
             this.variable = feature.variable;
         }
 
+        public Feature(CharSequence variable) {
+            this(variable.toString());
+        }
+
         /**
          * Creates a new feature offered by an XMPP entity or item.
-         * 
+         *
          * @param variable the feature's variable.
          */
         public Feature(String variable) {
-            if (variable == null)
-                throw new IllegalArgumentException("variable cannot be null");
-            this.variable = variable;
+            this.variable = StringUtils.requireNotNullNorEmpty(variable, "variable cannot be null");
         }
 
         /**
@@ -462,6 +520,7 @@ public class DiscoverInfo extends IQ implements Cloneable {
             return xml;
         }
 
+        @Override
         public boolean equals(Object obj) {
             if (obj == null)
                 return false;
@@ -476,12 +535,17 @@ public class DiscoverInfo extends IQ implements Cloneable {
 
         @Override
         public int hashCode() {
-            return 37 * variable.hashCode();
+            return variable.hashCode();
         }
 
         @Override
         public Feature clone() {
             return new Feature(this);
+        }
+
+        @Override
+        public String toString() {
+            return toXML().toString();
         }
     }
 }

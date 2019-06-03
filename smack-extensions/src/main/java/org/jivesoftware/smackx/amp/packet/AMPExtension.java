@@ -16,20 +16,22 @@
  */
 package org.jivesoftware.smackx.amp.packet;
 
-import org.jivesoftware.smack.packet.PacketExtension;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+import org.jivesoftware.smack.packet.ExtensionElement;
+
 import org.jivesoftware.smackx.amp.AMPDeliverCondition;
 import org.jivesoftware.smackx.amp.AMPExpireAtCondition;
 import org.jivesoftware.smackx.amp.AMPMatchResourceCondition;
 
-import java.util.*;
-import java.util.concurrent.CopyOnWriteArrayList;
-
-public class AMPExtension implements PacketExtension {
+public class AMPExtension implements ExtensionElement {
 
     public static final String NAMESPACE = "http://jabber.org/protocol/amp";
     public static final String ELEMENT = "amp";
 
-    private CopyOnWriteArrayList<Rule> rules = new CopyOnWriteArrayList<Rule>();
+    private final CopyOnWriteArrayList<Rule> rules = new CopyOnWriteArrayList<>();
     private boolean perHop = false;
 
     private final String from;
@@ -58,6 +60,7 @@ public class AMPExtension implements PacketExtension {
     }
 
     /**
+     * Get the JID that triggered this AMP callback.
      * @return jid that triggered this amp callback.
      */
     public String getFrom() {
@@ -65,6 +68,7 @@ public class AMPExtension implements PacketExtension {
     }
 
     /**
+     * Get the receiver of this AMP receipt.
      * @return receiver of this amp receipt.
      */
     public String getTo() {
@@ -72,7 +76,7 @@ public class AMPExtension implements PacketExtension {
     }
 
     /**
-     * Status of this amp notification
+     * Status of this amp notification.
      * @return Status for this amp
      */
     public Status getStatus() {
@@ -80,12 +84,12 @@ public class AMPExtension implements PacketExtension {
     }
 
     /**
-     * Returns a Collection of the rules in the packet.
+     * Returns a unmodifiable List of the rules in the packet.
      *
-     * @return a Collection of the rules in the packet.
+     * @return a unmodifiable List of the rules in the packet.
      */
-    public Collection<Rule> getRules() {
-        return Collections.unmodifiableList(new ArrayList<Rule>(rules));
+    public List<Rule> getRules() {
+        return Collections.unmodifiableList(rules);
     }
 
     /**
@@ -128,7 +132,7 @@ public class AMPExtension implements PacketExtension {
      * Returns the XML element name of the extension sub-packet root element.
      * Always returns "amp"
      *
-     * @return the XML element name of the packet extension.
+     * @return the XML element name of the stanza extension.
      */
     @Override
     public String getElementName() {
@@ -139,7 +143,7 @@ public class AMPExtension implements PacketExtension {
      * Returns the XML namespace of the extension sub-packet root element.
      * According the specification the namespace is always "http://jabber.org/protocol/xhtml-im"
      *
-     * @return the XML namespace of the packet extension.
+     * @return the XML namespace of the stanza extension.
      */
     @Override
     public String getNamespace() {
@@ -150,29 +154,29 @@ public class AMPExtension implements PacketExtension {
      * Returns the XML representation of a XHTML extension according the specification.
      **/
     @Override
-    public String toXML() {
+    public String toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
         StringBuilder buf = new StringBuilder();
-        buf.append("<").append(getElementName()).append(" xmlns=\"").append(getNamespace()).append("\"");
+        buf.append('<').append(getElementName()).append(" xmlns=\"").append(getNamespace()).append('"');
         if (status != null) {
-            buf.append(" status=\"").append(status.toString()).append("\"");
+            buf.append(" status=\"").append(status.toString()).append('"');
         }
         if (to != null) {
-            buf.append(" to=\"").append(to).append("\"");
+            buf.append(" to=\"").append(to).append('"');
         }
         if (from != null) {
-            buf.append(" from=\"").append(from).append("\"");
+            buf.append(" from=\"").append(from).append('"');
         }
         if (perHop) {
             buf.append(" per-hop=\"true\"");
         }
-        buf.append(">");
+        buf.append('>');
 
         // Loop through all the rules and append them to the string buffer
         for (Rule rule : getRules()) {
             buf.append(rule.toXML());
         }
 
-        buf.append("</").append(getElementName()).append(">");
+        buf.append("</").append(getElementName()).append('>');
         return buf.toString();
     }
 
@@ -216,27 +220,27 @@ public class AMPExtension implements PacketExtension {
     }
 
     /**
-     * Interface for defining XEP-0079 Conditions and their values
+     * Interface for defining XEP-0079 Conditions and their values.
      * @see AMPDeliverCondition
      * @see AMPExpireAtCondition
      * @see AMPMatchResourceCondition
      **/
-    public static interface Condition {
+    public interface Condition {
         String getName();
         String getValue();
 
-        static final String ATTRIBUTE_NAME="condition";
+        String ATTRIBUTE_NAME = "condition";
     }
 
     /**
-     * amp action attribute
+     * amp action attribute.
      * See http://xmpp.org/extensions/xep-0079.html#actions-def
      **/
-    public static enum Action {
+    public enum Action {
         /**
-         * The "alert" action triggers a reply <message/> stanza to the sending entity.
-         * This <message/> stanza MUST contain the element <amp status='alert'/>,
-         * which itself contains the <rule/> that triggered this action. In all other respects,
+         * The "alert" action triggers a reply &lt;message/&gt; stanza to the sending entity.
+         * This &lt;message/&gt; stanza MUST contain the element &lt;amp status='alert'/&gt;,
+         * which itself contains the &lt;rule/&gt; that triggered this action. In all other respects,
          * this action behaves as "drop".
          */
         alert,
@@ -247,28 +251,28 @@ public class AMPExtension implements PacketExtension {
          */
         drop,
         /**
-         * The "error" action triggers a reply <message/> stanza of type "error" to the sending entity.
-         * The <message/> stanza's <error/> child MUST contain a
-         * <failed-rules xmlns='http://jabber.org/protocol/amp#errors'/> error condition,
+         * The "error" action triggers a reply &lt;message/&gt; stanza of type "error" to the sending entity.
+         * The &lt;message/&gt; stanza's &lt;error/&gt; child MUST contain a
+         * &lt;failed-rules xmlns='http://jabber.org/protocol/amp#errors'/&gt; error condition,
          * which itself contains the rules that triggered this action.
          */
         error,
         /**
-         * The "notify" action triggers a reply <message/> stanza to the sending entity.
-         * This <message/> stanza MUST contain the element <amp status='notify'/>, which itself
-         * contains the <rule/> that triggered this action. Unlike the other actions,
+         * The "notify" action triggers a reply &lt;message/&gt; stanza to the sending entity.
+         * This &lt;message/&gt; stanza MUST contain the element &lt;amp status='notify'/&gt;, which itself
+         * contains the &lt;rule/&gt; that triggered this action. Unlike the other actions,
          * this action does not override the default behavior for a server.
          * Instead, the server then executes its default behavior after sending the notify.
          */
         notify;
 
-        public static final String ATTRIBUTE_NAME="action";
+        public static final String ATTRIBUTE_NAME = "action";
     }
 
     /**
-     * amp notification status as defined by XEP-0079
+     * amp notification status as defined by XEP-0079.
      */
-    public static enum Status {
+    public enum Status {
         alert,
         error,
         notify

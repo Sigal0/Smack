@@ -16,47 +16,45 @@
  */
 package org.jivesoftware.smackx.pubsub;
 
-import org.jivesoftware.smack.packet.PacketExtension;
+import org.jivesoftware.smack.packet.ExtensionElement;
+
 import org.jivesoftware.smackx.pubsub.packet.PubSubNamespace;
 
 /**
  * Represents and item that has been deleted from a node.
- * 
+ *
  * @author Robin Collier
  */
-public class RetractItem implements PacketExtension
-{
-	private String id;
+public class RetractItem implements ExtensionElement {
+    private final String id;
 
-	/**
-	 * Construct a <tt>RetractItem</tt> with the specified id.
-	 * 
-	 * @param itemId The id if the item deleted
-	 */
-	public RetractItem(String itemId)
-	{
-		if (itemId == null)
-			throw new IllegalArgumentException("itemId must not be 'null'");
-		id = itemId;
-	}
-	
-	public String getId()
-	{
-		return id;
-	}
+    /**
+     * Construct a <tt>RetractItem</tt> with the specified id.
+     *
+     * @param itemId The id if the item deleted
+     */
+    public RetractItem(String itemId) {
+        if (itemId == null)
+            throw new IllegalArgumentException("itemId must not be 'null'");
+        id = itemId;
+    }
 
-	public String getElementName()
-	{
-		return "retract";
-	}
+    public String getId() {
+        return id;
+    }
 
-	public String getNamespace()
-	{
-		return PubSubNamespace.EVENT.getXmlns();
-	}
+    @Override
+    public String getElementName() {
+        return "retract";
+    }
 
-	public String toXML()
-	{
-		return "<retract id='" + id + "'/>";
-	}
+    @Override
+    public String getNamespace() {
+        return PubSubNamespace.event.getXmlns();
+    }
+
+    @Override
+    public String toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
+        return "<retract id='" + id + "'/>";
+    }
 }

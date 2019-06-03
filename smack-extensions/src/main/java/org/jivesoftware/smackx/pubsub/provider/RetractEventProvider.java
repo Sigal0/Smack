@@ -19,23 +19,22 @@ package org.jivesoftware.smackx.pubsub.provider;
 import java.util.List;
 import java.util.Map;
 
-import org.jivesoftware.smack.packet.PacketExtension;
+import org.jivesoftware.smack.packet.ExtensionElement;
 import org.jivesoftware.smack.provider.EmbeddedExtensionProvider;
+
 import org.jivesoftware.smackx.pubsub.RetractItem;
 
 /**
- * Parses the <b>retract</b> element out of the message event stanza from 
+ * Parses the <b>retract</b> element out of the message event stanza from
  * the server as specified in the <a href="http://xmpp.org/extensions/xep-0060.html#schemas-event">retract schema</a>.
  * This element is a child of the <b>items</b> element.
- * 
+ *
  * @author Robin Collier
  */
-public class RetractEventProvider extends EmbeddedExtensionProvider
-{
-	@Override
-	protected PacketExtension createReturnExtension(String currentElement, String currentNamespace, Map<String, String> attributeMap, List<? extends PacketExtension> content)
-	{
-		return new RetractItem(attributeMap.get("id"));
-	}
+public class RetractEventProvider extends EmbeddedExtensionProvider<RetractItem> {
+    @Override
+    protected RetractItem createReturnExtension(String currentElement, String currentNamespace, Map<String, String> attributeMap, List<? extends ExtensionElement> content) {
+        return new RetractItem(attributeMap.get("id"));
+    }
 
 }

@@ -16,41 +16,48 @@
  */
 package org.jivesoftware.smackx.bytestreams.socks5;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
 
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.XMPPError;
+import org.jivesoftware.smack.packet.StanzaError;
+
 import org.jivesoftware.smackx.bytestreams.BytestreamRequest;
-import org.jivesoftware.smackx.bytestreams.socks5.InitiationListener;
-import org.jivesoftware.smackx.bytestreams.socks5.Socks5BytestreamListener;
-import org.jivesoftware.smackx.bytestreams.socks5.Socks5BytestreamManager;
 import org.jivesoftware.smackx.bytestreams.socks5.packet.Bytestream;
 import org.jivesoftware.smackx.disco.ServiceDiscoveryManager;
+
 import org.junit.Before;
 import org.junit.Test;
+import org.jxmpp.jid.DomainBareJid;
+import org.jxmpp.jid.EntityFullJid;
+import org.jxmpp.jid.JidTestUtil;
+import org.jxmpp.jid.impl.JidCreate;
 import org.mockito.ArgumentCaptor;
 import org.powermock.reflect.Whitebox;
 
 /**
  * Test for the InitiationListener class.
- * 
+ *
  * @author Henning Staib
  */
 public class InitiationListenerTest {
 
-    String initiatorJID = "initiator@xmpp-server/Smack";
-    String targetJID = "target@xmpp-server/Smack";
-    String xmppServer = "xmpp-server";
-    String proxyJID = "proxy.xmpp-server";
-    String proxyAddress = "127.0.0.1";
-    String sessionID = "session_id";
+    private static final int TIMEOUT = 10000;
 
-    XMPPConnection connection;
-    Socks5BytestreamManager byteStreamManager;
-    InitiationListener initiationListener;
-    Bytestream initBytestream;
+    private static final EntityFullJid initiatorJID = JidTestUtil.DUMMY_AT_EXAMPLE_ORG_SLASH_DUMMYRESOURCE;
+    private static final EntityFullJid targetJID = JidTestUtil.FULL_JID_1_RESOURCE_1;
+    private static final DomainBareJid proxyJID = JidTestUtil.MUC_EXAMPLE_ORG;
+    private static final String proxyAddress = "127.0.0.1";
+    private static final String sessionID = "session_id";
+
+    private XMPPConnection connection;
+    private Socks5BytestreamManager byteStreamManager;
+    private InitiationListener initiationListener;
+    private Bytestream initBytestream;
 
     /**
      * Initialize fields used in the tests.
@@ -80,33 +87,30 @@ public class InitiationListenerTest {
     /**
      * If no listeners are registered for incoming SOCKS5 Bytestream requests, all request should be
      * rejected with an error.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
     public void shouldRespondWithError() throws Exception {
 
         // run the listener with the initiation packet
-        initiationListener.processPacket(initBytestream);
-
-        // wait because packet is processed in an extra thread
-        Thread.sleep(200);
+        initiationListener.handleIQRequest(initBytestream);
 
         // capture reply to the SOCKS5 Bytestream initiation
         ArgumentCaptor<IQ> argument = ArgumentCaptor.forClass(IQ.class);
-        verify(connection).sendPacket(argument.capture());
+        verify(connection, timeout(TIMEOUT)).sendStanza(argument.capture());
 
         // assert that reply is the correct error packet
         assertEquals(initiatorJID, argument.getValue().getTo());
         assertEquals(IQ.Type.error, argument.getValue().getType());
-        assertEquals(XMPPError.Condition.no_acceptable.toString(),
+        assertEquals(StanzaError.Condition.not_acceptable,
                         argument.getValue().getError().getCondition());
 
     }
 
     /**
      * If a listener for all requests is registered it should be notified on incoming requests.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -117,14 +121,11 @@ public class InitiationListenerTest {
         byteStreamManager.addIncomingBytestreamListener(listener);
 
         // run the listener with the initiation packet
-        initiationListener.processPacket(initBytestream);
-
-        // wait because packet is processed in an extra thread
-        Thread.sleep(200);
+        initiationListener.handleIQRequest(initBytestream);
 
         // assert listener is called once
         ArgumentCaptor<BytestreamRequest> byteStreamRequest = ArgumentCaptor.forClass(BytestreamRequest.class);
-        verify(listener).incomingBytestreamRequest(byteStreamRequest.capture());
+        verify(listener, timeout(TIMEOUT)).incomingBytestreamRequest(byteStreamRequest.capture());
 
         // assert that listener is called for the correct request
         assertEquals(initiatorJID, byteStreamRequest.getValue().getFrom());
@@ -134,7 +135,7 @@ public class InitiationListenerTest {
     /**
      * If a listener for a specific user in registered it should be notified on incoming requests
      * for that user.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -145,14 +146,11 @@ public class InitiationListenerTest {
         byteStreamManager.addIncomingBytestreamListener(listener, initiatorJID);
 
         // run the listener with the initiation packet
-        initiationListener.processPacket(initBytestream);
-
-        // wait because packet is processed in an extra thread
-        Thread.sleep(200);
+        initiationListener.handleIQRequest(initBytestream);
 
         // assert listener is called once
         ArgumentCaptor<BytestreamRequest> byteStreamRequest = ArgumentCaptor.forClass(BytestreamRequest.class);
-        verify(listener).incomingBytestreamRequest(byteStreamRequest.capture());
+        verify(listener, timeout(TIMEOUT)).incomingBytestreamRequest(byteStreamRequest.capture());
 
         // assert that reply is the correct error packet
         assertEquals(initiatorJID, byteStreamRequest.getValue().getFrom());
@@ -162,7 +160,7 @@ public class InitiationListenerTest {
     /**
      * If listener for a specific user is registered it should not be notified on incoming requests
      * from other users.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -170,13 +168,10 @@ public class InitiationListenerTest {
 
         // add listener for request of user "other_initiator"
         Socks5BytestreamListener listener = mock(Socks5BytestreamListener.class);
-        byteStreamManager.addIncomingBytestreamListener(listener, "other_" + initiatorJID);
+        byteStreamManager.addIncomingBytestreamListener(listener, JidCreate.from("other_" + initiatorJID));
 
         // run the listener with the initiation packet
-        initiationListener.processPacket(initBytestream);
-
-        // wait because packet is processed in an extra thread
-        Thread.sleep(200);
+        initiationListener.handleIQRequest(initBytestream);
 
         // assert listener is not called
         ArgumentCaptor<BytestreamRequest> byteStreamRequest = ArgumentCaptor.forClass(BytestreamRequest.class);
@@ -184,19 +179,19 @@ public class InitiationListenerTest {
 
         // capture reply to the SOCKS5 Bytestream initiation
         ArgumentCaptor<IQ> argument = ArgumentCaptor.forClass(IQ.class);
-        verify(connection).sendPacket(argument.capture());
+        verify(connection, timeout(TIMEOUT)).sendStanza(argument.capture());
 
         // assert that reply is the correct error packet
         assertEquals(initiatorJID, argument.getValue().getTo());
         assertEquals(IQ.Type.error, argument.getValue().getType());
-        assertEquals(XMPPError.Condition.no_acceptable.toString(),
+        assertEquals(StanzaError.Condition.not_acceptable,
                         argument.getValue().getError().getCondition());
     }
 
     /**
      * If a user specific listener and an all requests listener is registered only the user specific
      * listener should be notified.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -211,14 +206,11 @@ public class InitiationListenerTest {
         byteStreamManager.addIncomingBytestreamListener(userRequestsListener, initiatorJID);
 
         // run the listener with the initiation packet
-        initiationListener.processPacket(initBytestream);
-
-        // wait because packet is processed in an extra thread
-        Thread.sleep(200);
+        initiationListener.handleIQRequest(initBytestream);
 
         // assert user request listener is called once
         ArgumentCaptor<BytestreamRequest> byteStreamRequest = ArgumentCaptor.forClass(BytestreamRequest.class);
-        verify(userRequestsListener).incomingBytestreamRequest(byteStreamRequest.capture());
+        verify(userRequestsListener, timeout(TIMEOUT)).incomingBytestreamRequest(byteStreamRequest.capture());
 
         // assert all requests listener is not called
         byteStreamRequest = ArgumentCaptor.forClass(BytestreamRequest.class);
@@ -229,9 +221,10 @@ public class InitiationListenerTest {
     /**
      * If a user specific listener and an all requests listener is registered only the all requests
      * listener should be notified on an incoming request for another user.
-     * 
+     *
      * @throws Exception should not happen
      */
+    @SuppressWarnings("UnusedVariable")
     @Test
     public void shouldInvokeAllRequestsListenerIfUserListenerExists() throws Exception {
 
@@ -241,28 +234,27 @@ public class InitiationListenerTest {
 
         // add listener for request of user "other_initiator"
         Socks5BytestreamListener userRequestsListener = mock(Socks5BytestreamListener.class);
-        byteStreamManager.addIncomingBytestreamListener(userRequestsListener, "other_"
-                        + initiatorJID);
+        byteStreamManager.addIncomingBytestreamListener(userRequestsListener, JidCreate.from("other_"
+                        + initiatorJID));
 
         // run the listener with the initiation packet
-        initiationListener.processPacket(initBytestream);
+        initiationListener.handleIQRequest(initBytestream);
 
-        // wait because packet is processed in an extra thread
-        Thread.sleep(200);
-
-        // assert user request listener is not called
         ArgumentCaptor<BytestreamRequest> byteStreamRequest = ArgumentCaptor.forClass(BytestreamRequest.class);
-        verify(userRequestsListener, never()).incomingBytestreamRequest(byteStreamRequest.capture());
 
         // assert all requests listener is called
         byteStreamRequest = ArgumentCaptor.forClass(BytestreamRequest.class);
-        verify(allRequestsListener).incomingBytestreamRequest(byteStreamRequest.capture());
+        verify(allRequestsListener, timeout(TIMEOUT)).incomingBytestreamRequest(byteStreamRequest.capture());
+
+        // assert user request listener is not called
+        verify(userRequestsListener, never()).incomingBytestreamRequest(byteStreamRequest.capture());
+
 
     }
 
     /**
      * If a request with a specific session ID should be ignored no listeners should be notified.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -280,10 +272,7 @@ public class InitiationListenerTest {
         byteStreamManager.ignoreBytestreamRequestOnce(sessionID);
 
         // run the listener with the initiation packet
-        initiationListener.processPacket(initBytestream);
-
-        // wait because packet is processed in an extra thread
-        Thread.sleep(200);
+        initiationListener.handleIQRequest(initBytestream);
 
         // assert user request listener is not called
         ArgumentCaptor<BytestreamRequest> byteStreamRequest = ArgumentCaptor.forClass(BytestreamRequest.class);
@@ -294,13 +283,10 @@ public class InitiationListenerTest {
         verify(allRequestsListener, never()).incomingBytestreamRequest(byteStreamRequest.capture());
 
         // run the listener with the initiation packet again
-        initiationListener.processPacket(initBytestream);
-
-        // wait because packet is processed in an extra thread
-        Thread.sleep(200);
+        initiationListener.handleIQRequest(initBytestream);
 
         // assert user request listener is called on the second request with the same session ID
-        verify(userRequestsListener).incomingBytestreamRequest(byteStreamRequest.capture());
+        verify(userRequestsListener, timeout(TIMEOUT)).incomingBytestreamRequest(byteStreamRequest.capture());
 
         // assert all requests listener is not called
         byteStreamRequest = ArgumentCaptor.forClass(BytestreamRequest.class);

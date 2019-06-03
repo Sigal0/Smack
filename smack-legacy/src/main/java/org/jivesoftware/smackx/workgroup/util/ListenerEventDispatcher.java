@@ -45,7 +45,7 @@ public class ListenerEventDispatcher implements Runnable {
     public ListenerEventDispatcher () {
         super();
 
-        this.triplets = new ArrayList<TripletContainer>();
+        this.triplets = new ArrayList<>();
 
         this.hasFinishedDispatching = false;
         this.isRunning = false;
@@ -68,8 +68,7 @@ public class ListenerEventDispatcher implements Runnable {
      * @param methodArguments the arguments supplied to the notification method
      */
     public void addListenerTriplet(Object listenerInstance, Method listenerMethod,
-            Object[] methodArguments)
-    {
+            Object[] methodArguments) {
         if (!this.isRunning) {
             this.triplets.add(new TripletContainer(listenerInstance, listenerMethod,
                     methodArguments));
@@ -77,14 +76,16 @@ public class ListenerEventDispatcher implements Runnable {
     }
 
     /**
+     * Has finished.
      * @return whether this instance has finished dispatching its messages
      */
     public boolean hasFinished() {
         return this.hasFinishedDispatching;
     }
 
+    @Override
     public void run() {
-        ListIterator<TripletContainer> li = null;
+        ListIterator<TripletContainer> li;
 
         this.isRunning = true;
 
@@ -103,7 +104,7 @@ public class ListenerEventDispatcher implements Runnable {
     }
 
 
-    protected class TripletContainer {
+    protected static class TripletContainer {
 
         protected Object listenerInstance;
         protected Method listenerMethod;

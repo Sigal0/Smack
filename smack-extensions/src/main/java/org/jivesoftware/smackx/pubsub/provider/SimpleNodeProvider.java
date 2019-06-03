@@ -19,22 +19,21 @@ package org.jivesoftware.smackx.pubsub.provider;
 import java.util.List;
 import java.util.Map;
 
-import org.jivesoftware.smack.packet.PacketExtension;
+import org.jivesoftware.smack.packet.ExtensionElement;
 import org.jivesoftware.smack.provider.EmbeddedExtensionProvider;
+
 import org.jivesoftware.smackx.pubsub.NodeExtension;
 import org.jivesoftware.smackx.pubsub.PubSubElementType;
 
 /**
- * Parses simple elements that only contain a <b>node</b> attribute.  This is common amongst many of the 
- * elements defined in the pubsub specification.  For this common case a {@link NodeExtension} is returned. 
- * 
+ * Parses simple elements that only contain a <b>node</b> attribute. This is common amongst many of the
+ * elements defined in the PubSub specification. For this common case a {@link NodeExtension} is returned.
+ *
  * @author Robin Collier
  */
-public class SimpleNodeProvider extends EmbeddedExtensionProvider
-{
-	@Override
-	protected PacketExtension createReturnExtension(String currentElement, String currentNamespace, Map<String, String> attributeMap, List<? extends PacketExtension> content)
-	{
+public class SimpleNodeProvider extends EmbeddedExtensionProvider<NodeExtension> {
+    @Override
+    protected NodeExtension createReturnExtension(String currentElement, String currentNamespace, Map<String, String> attributeMap, List<? extends ExtensionElement> content) {
         return new NodeExtension(PubSubElementType.valueOfFromElemName(currentElement, currentNamespace), attributeMap.get("node"));
-	}
+    }
 }

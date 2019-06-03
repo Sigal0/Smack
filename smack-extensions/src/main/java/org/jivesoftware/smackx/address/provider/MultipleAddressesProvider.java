@@ -17,46 +17,58 @@
 
 package org.jivesoftware.smackx.address.provider;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
+import java.io.IOException;
+
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.ExtensionElementProvider;
+import org.jivesoftware.smack.util.ParserUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
 import org.jivesoftware.smackx.address.packet.MultipleAddresses;
-import org.xmlpull.v1.XmlPullParser;
+import org.jivesoftware.smackx.address.packet.MultipleAddresses.Type;
+
+import org.jxmpp.jid.Jid;
 
 /**
  * The MultipleAddressesProvider parses {@link MultipleAddresses} packets.
  *
  * @author Gaston Dombiak
  */
-public class MultipleAddressesProvider implements PacketExtensionProvider {
+public class MultipleAddressesProvider extends ExtensionElementProvider<MultipleAddresses> {
 
-    /**
-     * Creates a new MultipleAddressesProvider.
-     * ProviderManager requires that every PacketExtensionProvider has a public, no-argument
-     * constructor.
-     */
-    public MultipleAddressesProvider() {
-    }
-
-    public PacketExtension parseExtension(XmlPullParser parser) throws Exception {
-        boolean done = false;
+    @Override
+    public MultipleAddresses parse(XmlPullParser parser,
+                    int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException,
+                    IOException {
         MultipleAddresses multipleAddresses = new MultipleAddresses();
-        while (!done) {
-            int eventType = parser.next();
-            if (eventType == XmlPullParser.START_TAG) {
-                if (parser.getName().equals("address")) {
-                    String type = parser.getAttributeValue("", "type");
-                    String jid = parser.getAttributeValue("", "jid");
+        outerloop: while (true) {
+            XmlPullParser.Event eventType = parser.next();
+            switch (eventType) {
+            case START_ELEMENT:
+                String name = parser.getName();
+                switch (name) {
+                case MultipleAddresses.Address.ELEMENT:
+                    String typeString = parser.getAttributeValue("", "type");
+                    Type type = Type.valueOf(typeString);
+                    Jid jid = ParserUtils.getJidAttribute(parser, "jid");
                     String node = parser.getAttributeValue("", "node");
                     String desc = parser.getAttributeValue("", "desc");
                     boolean delivered = "true".equals(parser.getAttributeValue("", "delivered"));
                     String uri = parser.getAttributeValue("", "uri");
                     // Add the parsed address
                     multipleAddresses.addAddress(type, jid, node, desc, delivered, uri);
+                    break;
                 }
-            } else if (eventType == XmlPullParser.END_TAG) {
-                if (parser.getName().equals(multipleAddresses.getElementName())) {
-                    done = true;
+                break;
+            case END_ELEMENT:
+                if (parser.getDepth() == initialDepth) {
+                    break outerloop;
                 }
+                break;
+            default:
+                // Catch all for incomplete switch (MissingCasesInEnumSwitch) statement.
+                break;
             }
         }
         return multipleAddresses;

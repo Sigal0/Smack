@@ -17,29 +17,33 @@
 
 package org.jivesoftware.smackx.workgroup.packet;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
-import org.xmlpull.v1.XmlPullParser;
+import java.io.IOException;
+
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.ExtensionElementProvider;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
 
 /**
- * An IQ packet that encapsulates both types of workgroup queue
+ * An IQ stanza that encapsulates both types of workgroup queue
  * status notifications -- position updates, and estimated time
  * left in the queue updates.
  */
-public class QueueUpdate implements PacketExtension {
+public class QueueUpdate implements ExtensionElement {
 
     /**
-     * Element name of the packet extension.
+     * Element name of the stanza extension.
      */
     public static final String ELEMENT_NAME = "queue-status";
 
     /**
-     * Namespace of the packet extension.
+     * Namespace of the stanza extension.
      */
     public static final String NAMESPACE = "http://jabber.org/protocol/workgroup";
 
-    private int position;
-    private int remainingTime;
+    private final int position;
+    private final int remainingTime;
 
     public QueueUpdate(int position, int remainingTime) {
         this.position = position;
@@ -66,7 +70,8 @@ public class QueueUpdate implements PacketExtension {
         return remainingTime;
     }
 
-    public String toXML() {
+    @Override
+    public String toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
         StringBuilder buf = new StringBuilder();
         buf.append("<queue-status xmlns=\"http://jabber.org/protocol/workgroup\">");
         if (position != -1) {
@@ -79,38 +84,42 @@ public class QueueUpdate implements PacketExtension {
         return buf.toString();
     }
 
+    @Override
     public String getElementName() {
         return ELEMENT_NAME;
     }
 
+    @Override
     public String getNamespace() {
         return NAMESPACE;
     }
 
-    public static class Provider implements PacketExtensionProvider {
+    public static class Provider extends ExtensionElementProvider<QueueUpdate> {
 
-        public PacketExtension parseExtension(XmlPullParser parser) throws Exception {
+        @Override
+        public QueueUpdate parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment)
+                        throws XmlPullParserException, IOException {
             boolean done = false;
             int position = -1;
             int timeRemaining = -1;
             while (!done) {
                 parser.next();
                 String elementName = parser.getName();
-                if (parser.getEventType() == XmlPullParser.START_TAG && "position".equals(elementName)) {
+                if (parser.getEventType() == XmlPullParser.Event.START_ELEMENT && "position".equals(elementName)) {
                     try {
                         position = Integer.parseInt(parser.nextText());
                     }
                     catch (NumberFormatException nfe) {
                     }
                 }
-                else if (parser.getEventType() == XmlPullParser.START_TAG && "time".equals(elementName)) {
+                else if (parser.getEventType() == XmlPullParser.Event.START_ELEMENT && "time".equals(elementName)) {
                     try {
                         timeRemaining = Integer.parseInt(parser.nextText());
                     }
                     catch (NumberFormatException nfe) {
                     }
                 }
-                else if (parser.getEventType() == XmlPullParser.END_TAG && "queue-status".equals(elementName)) {
+                else if (parser.getEventType() == XmlPullParser.Event.END_ELEMENT && "queue-status".equals(elementName)) {
                     done = true;
                 }
             }

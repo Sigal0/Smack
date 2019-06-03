@@ -25,15 +25,16 @@ import org.jivesoftware.smackx.bytestreams.BytestreamRequest;
  * <p>
  * There are two ways to add this listener. See
  * {@link InBandBytestreamManager#addIncomingBytestreamListener(BytestreamListener)} and
- * {@link InBandBytestreamManager#addIncomingBytestreamListener(BytestreamListener, String)} for
+ * {@link InBandBytestreamManager#addIncomingBytestreamListener(BytestreamListener, org.jxmpp.jid.Jid)} for
  * further details.
- * 
+ *
  * @author Henning Staib
  */
 public abstract class InBandBytestreamListener implements BytestreamListener {
 
-    
-    
+
+
+    @Override
     public void incomingBytestreamRequest(BytestreamRequest request) {
         incomingBytestreamRequest((InBandBytestreamRequest) request);
     }
@@ -41,7 +42,7 @@ public abstract class InBandBytestreamListener implements BytestreamListener {
     /**
      * This listener is notified if an In-Band Bytestream request from another user has been
      * received.
-     * 
+     *
      * @param request the incoming In-Band Bytestream request
      */
     public abstract void incomingBytestreamRequest(InBandBytestreamRequest request);

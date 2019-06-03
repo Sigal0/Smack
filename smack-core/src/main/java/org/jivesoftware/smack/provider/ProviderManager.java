@@ -17,12 +17,19 @@
 
 package org.jivesoftware.smack.provider;
 
-import java.util.Collection;
-import java.util.Collections;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import javax.xml.namespace.QName;
+
+import org.jivesoftware.smack.SmackConfiguration;
+import org.jivesoftware.smack.packet.ExtensionElement;
 import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.Nonza;
+import org.jivesoftware.smack.util.StringUtils;
+import org.jivesoftware.smack.util.XmppElementUtil;
 
 /**
  * Manages providers for parsing custom XML sub-documents of XMPP packets. Two types of
@@ -40,7 +47,7 @@ import org.jivesoftware.smack.packet.IQ;
  *      <li>jabber:iq:register</ul>
  *
  * Because many more IQ types are part of XMPP and its extensions, a pluggable IQ parsing
- * mechanism is provided. IQ providers are registered programatically or by creating a
+ * mechanism is provided. IQ providers are registered programmatically or by creating a
  * providers file. The file is an XML
  * document that contains one or more iqProvider entries, as in the following example:
  *
@@ -50,7 +57,7 @@ import org.jivesoftware.smack.packet.IQ;
  *     &lt;iqProvider&gt;
  *         &lt;elementName&gt;query&lt;/elementName&gt;
  *         &lt;namespace&gt;jabber:iq:time&lt;/namespace&gt;
- *         &lt;className&gt;org.jivesoftware.smack.packet.Time&lt/className&gt;
+ *         &lt;className&gt;org.jivesoftware.smack.packet.Time&lt;/className&gt;
  *     &lt;/iqProvider&gt;
  * &lt;/smackProviders&gt;</pre>
  *
@@ -60,7 +67,7 @@ import org.jivesoftware.smack.packet.IQ;
  * interface, or extend the IQ class. In the former case, each IQProvider is responsible for
  * parsing the raw XML stream to create an IQ instance. In the latter case, bean introspection
  * is used to try to automatically set properties of the IQ instance using the values found
- * in the IQ packet XML. For example, an XMPP time packet resembles the following:
+ * in the IQ stanza XML. For example, an XMPP time stanza resembles the following:
  * <pre>
  * &lt;iq type='result' to='joe@example.com' from='mary@example.com' id='time_1'&gt;
  *     &lt;query xmlns='jabber:iq:time'&gt;
@@ -70,13 +77,13 @@ import org.jivesoftware.smack.packet.IQ;
  *     &lt;/query&gt;
  * &lt;/iq&gt;</pre>
  *
- * In order for this packet to be automatically mapped to the Time object listed in the
+ * In order for this stanza to be automatically mapped to the Time object listed in the
  * providers file above, it must have the methods setUtc(String), setTz(String), and
  * setDisplay(String). The introspection service will automatically try to convert the String
  * value from the XML into a boolean, int, long, float, double, or Class depending on the
  * type the IQ instance expects.<p>
  *
- * A pluggable system for packet extensions, child elements in a custom namespace for
+ * A pluggable system for stanza extensions, child elements in a custom namespace for
  * message and presence packets, also exists. Each extension provider
  * is registered with a name space in the smack.providers file as in the following example:
  *
@@ -86,17 +93,17 @@ import org.jivesoftware.smack.packet.IQ;
  *     &lt;extensionProvider&gt;
  *         &lt;elementName&gt;x&lt;/elementName&gt;
  *         &lt;namespace&gt;jabber:iq:event&lt;/namespace&gt;
- *         &lt;className&gt;org.jivesoftware.smack.packet.MessageEvent&lt/className&gt;
+ *         &lt;className&gt;org.jivesoftware.smack.packet.MessageEvent&lt;/className&gt;
  *     &lt;/extensionProvider&gt;
  * &lt;/smackProviders&gt;</pre>
  *
  * If multiple provider entries attempt to register to handle the same element name and namespace,
- * the first entry loaded from the classpath will take precedence. Whenever a packet extension
+ * the first entry loaded from the classpath will take precedence. Whenever a stanza extension
  * is found in a packet, parsing will be passed to the correct provider. Each provider
  * can either implement the PacketExtensionProvider interface or be a standard Java Bean. In
  * the former case, each extension provider is responsible for parsing the raw XML stream to
- * contruct an object. In the latter case, bean introspection is used to try to automatically
- * set the properties of th class using the values in the packet extension sub-element. When an
+ * construct an object. In the latter case, bean introspection is used to try to automatically
+ * set the properties of th class using the values in the stanza extension sub-element. When an
  * extension provider is not registered for an element name and namespace combination, Smack will
  * store all top-level elements of the sub-packet in DefaultPacketExtension object and then
  * attach it to the packet.<p>
@@ -105,27 +112,45 @@ import org.jivesoftware.smack.packet.IQ;
  */
 public final class ProviderManager {
 
-    private static final Map<String, Object> extensionProviders = new ConcurrentHashMap<String, Object>();
-    private static final Map<String, Object> iqProviders = new ConcurrentHashMap<String, Object>();
+    private static final Map<QName, ExtensionElementProvider<ExtensionElement>> extensionProviders = new ConcurrentHashMap<>();
+    private static final Map<QName, IQProvider<IQ>> iqProviders = new ConcurrentHashMap<>();
+    private static final Map<QName, ExtensionElementProvider<ExtensionElement>> streamFeatureProviders = new ConcurrentHashMap<>();
+    private static final Map<QName, NonzaProvider<? extends Nonza>> nonzaProviders = new ConcurrentHashMap<>();
 
+    static {
+        // Ensure that Smack is initialized by calling getVersion, so that user
+        // registered providers do not get overwritten by a following Smack
+        // initialization. This guarantees that Smack is initialized before a
+        // new provider is registered
+        SmackConfiguration.getVersion();
+    }
+
+    @SuppressWarnings("unchecked")
     public static void addLoader(ProviderLoader loader) {
         if (loader.getIQProviderInfo() != null) {
             for (IQProviderInfo info : loader.getIQProviderInfo()) {
-                iqProviders.put(getProviderKey(info.getElementName(), info.getNamespace()), info.getProvider());
+                addIQProvider(info.getElementName(), info.getNamespace(), info.getProvider());
             }
         }
-        
+
         if (loader.getExtensionProviderInfo() != null) {
             for (ExtensionProviderInfo info : loader.getExtensionProviderInfo()) {
-                extensionProviders.put(getProviderKey(info.getElementName(), info.getNamespace()), info.getProvider());
+                addExtensionProvider(info.getElementName(), info.getNamespace(), info.getProvider());
+            }
+        }
+
+        if (loader.getStreamFeatureProviderInfo() != null) {
+            for (StreamFeatureProviderInfo info : loader.getStreamFeatureProviderInfo()) {
+                addStreamFeatureProvider(info.getElementName(), info.getNamespace(),
+                                (ExtensionElementProvider<ExtensionElement>) info.getProvider());
             }
         }
     }
-    
+
     /**
      * Returns the IQ provider registered to the specified XML element name and namespace.
      * For example, if a provider was registered to the element name "query" and the
-     * namespace "jabber:iq:time", then the following packet would trigger the provider:
+     * namespace "jabber:iq:time", then the following stanza would trigger the provider:
      *
      * <pre>
      * &lt;iq type='result' to='joe@example.com' from='mary@example.com' id='time_1'&gt;
@@ -142,8 +167,8 @@ public final class ProviderManager {
      * @param namespace the XML namespace.
      * @return the IQ provider.
      */
-    public static Object getIQProvider(String elementName, String namespace) {
-        String key = getProviderKey(elementName, namespace);
+    public static IQProvider<IQ> getIQProvider(String elementName, String namespace) {
+        QName key = getQName(elementName, namespace);
         return iqProviders.get(key);
     }
 
@@ -154,8 +179,10 @@ public final class ProviderManager {
      *
      * @return all IQProvider instances.
      */
-    public static Collection<Object> getIQProviders() {
-        return Collections.unmodifiableCollection(iqProviders.values());
+    public static List<IQProvider<IQ>> getIQProviders() {
+        List<IQProvider<IQ>> providers = new ArrayList<>(iqProviders.size());
+        providers.addAll(iqProviders.values());
+        return providers;
     }
 
     /**
@@ -167,36 +194,38 @@ public final class ProviderManager {
      * @param namespace the XML namespace.
      * @param provider the IQ provider.
      */
+    @SuppressWarnings("unchecked")
     public static void addIQProvider(String elementName, String namespace,
-            Object provider)
-    {
-        if (!(provider instanceof IQProvider || (provider instanceof Class &&
-                IQ.class.isAssignableFrom((Class<?>)provider))))
-        {
-            throw new IllegalArgumentException("Provider must be an IQProvider " +
-                    "or a Class instance sublcassing IQ.");
+            Object provider) {
+        validate(elementName, namespace);
+        // First remove existing providers
+        QName key = removeIQProvider(elementName, namespace);
+        if (provider instanceof IQProvider) {
+            iqProviders.put(key, (IQProvider<IQ>) provider);
+        } else {
+            throw new IllegalArgumentException("Provider must be an IQProvider");
         }
-        String key = getProviderKey(elementName, namespace);
-        iqProviders.put(key, provider);
     }
 
     /**
      * Removes an IQ provider with the specified element name and namespace. This
-     * method is typically called to cleanup providers that are programatically added
+     * method is typically called to cleanup providers that are programmatically added
      * using the {@link #addIQProvider(String, String, Object) addIQProvider} method.
      *
      * @param elementName the XML element name.
      * @param namespace the XML namespace.
+     * @return the QName of the removed provider
      */
-    public static void removeIQProvider(String elementName, String namespace) {
-        String key = getProviderKey(elementName, namespace);
+    public static QName removeIQProvider(String elementName, String namespace) {
+        QName key = getQName(elementName, namespace);
         iqProviders.remove(key);
+        return key;
     }
 
     /**
-     * Returns the packet extension provider registered to the specified XML element name
+     * Returns the stanza extension provider registered to the specified XML element name
      * and namespace. For example, if a provider was registered to the element name "x" and the
-     * namespace "jabber:x:event", then the following packet would trigger the provider:
+     * namespace "jabber:x:event", then the following stanza would trigger the provider:
      *
      * <pre>
      * &lt;message to='romeo@montague.net' id='message_1'&gt;
@@ -210,10 +239,10 @@ public final class ProviderManager {
      *
      * @param elementName element name associated with extension provider.
      * @param namespace namespace associated with extension provider.
-     * @return the extenion provider.
+     * @return the extension provider.
      */
-    public static Object getExtensionProvider(String elementName, String namespace) {
-        String key = getProviderKey(elementName, namespace);
+    public static ExtensionElementProvider<ExtensionElement> getExtensionProvider(String elementName, String namespace) {
+        QName key = getQName(elementName, namespace);
         return extensionProviders.get(key);
     }
 
@@ -226,28 +255,32 @@ public final class ProviderManager {
      * @param namespace the XML namespace.
      * @param provider the extension provider.
      */
+    @SuppressWarnings("unchecked")
     public static void addExtensionProvider(String elementName, String namespace,
-            Object provider)
-    {
-        if (!(provider instanceof PacketExtensionProvider || provider instanceof Class)) {
-            throw new IllegalArgumentException("Provider must be a PacketExtensionProvider " +
-                    "or a Class instance.");
+            Object provider) {
+        validate(elementName, namespace);
+        // First remove existing providers
+        QName key = removeExtensionProvider(elementName, namespace);
+        if (provider instanceof ExtensionElementProvider) {
+            extensionProviders.put(key, (ExtensionElementProvider<ExtensionElement>) provider);
+        } else {
+            throw new IllegalArgumentException("Provider must be a PacketExtensionProvider");
         }
-        String key = getProviderKey(elementName, namespace);
-        extensionProviders.put(key, provider);
     }
 
     /**
      * Removes an extension provider with the specified element name and namespace. This
-     * method is typically called to cleanup providers that are programatically added
+     * method is typically called to cleanup providers that are programmatically added
      * using the {@link #addExtensionProvider(String, String, Object) addExtensionProvider} method.
      *
      * @param elementName the XML element name.
      * @param namespace the XML namespace.
+     * @return the QName of the removed stanza extension provider
      */
-    public static void removeExtensionProvider(String elementName, String namespace) {
-        String key = getProviderKey(elementName, namespace);
+    public static QName removeExtensionProvider(String elementName, String namespace) {
+        QName key = getQName(elementName, namespace);
         extensionProviders.remove(key);
+        return key;
     }
 
     /**
@@ -257,18 +290,63 @@ public final class ProviderManager {
      *
      * @return all PacketExtensionProvider instances.
      */
-    public static Collection<Object> getExtensionProviders() {
-        return Collections.unmodifiableCollection(extensionProviders.values());
+    public static List<ExtensionElementProvider<ExtensionElement>> getExtensionProviders() {
+        List<ExtensionElementProvider<ExtensionElement>> providers = new ArrayList<>(extensionProviders.size());
+        providers.addAll(extensionProviders.values());
+        return providers;
     }
 
-    /**
-     * Returns a String key for a given element name and namespace.
-     *
-     * @param elementName the element name.
-     * @param namespace the namespace.
-     * @return a unique key for the element name and namespace pair.
-     */
-    private static String getProviderKey(String elementName, String namespace) {
-        return elementName + '#' + namespace;
+    public static ExtensionElementProvider<ExtensionElement> getStreamFeatureProvider(String elementName, String namespace) {
+        QName key = getQName(elementName, namespace);
+        return streamFeatureProviders.get(key);
+    }
+
+    public static void addStreamFeatureProvider(String elementName, String namespace, ExtensionElementProvider<ExtensionElement> provider) {
+        validate(elementName, namespace);
+        QName key = getQName(elementName, namespace);
+        streamFeatureProviders.put(key, provider);
+    }
+
+    public static void removeStreamFeatureProvider(String elementName, String namespace) {
+        QName key = getQName(elementName, namespace);
+        streamFeatureProviders.remove(key);
+    }
+
+    public static NonzaProvider<? extends Nonza> getNonzaProvider(String elementName, String namespace) {
+        QName key = getQName(elementName, namespace);
+        return getNonzaProvider(key);
+    }
+
+    public static NonzaProvider<? extends Nonza> getNonzaProvider(QName key) {
+        return nonzaProviders.get(key);
+    }
+
+    public static void addNonzaProvider(NonzaProvider<? extends Nonza> nonzaProvider) {
+        Class<? extends Nonza> nonzaClass = nonzaProvider.getElementClass();
+        QName key = XmppElementUtil.getQNameFor(nonzaClass);
+        nonzaProviders.put(key, nonzaProvider);
+    }
+
+    public static void removeNonzaProvider(Class<? extends Nonza> nonzaClass) {
+        QName key = XmppElementUtil.getQNameFor(nonzaClass);
+        nonzaProviders.remove(key);
+    }
+
+    public static void removeNonzaProvider(String elementName, String namespace) {
+        QName key = getQName(elementName, namespace);
+        nonzaProviders.remove(key);
+    }
+
+    private static QName getQName(String elementName, String namespace) {
+        return new QName(namespace, elementName);
+    }
+
+    private static void validate(String elementName, String namespace) {
+        if (StringUtils.isNullOrEmpty(elementName)) {
+            throw new IllegalArgumentException("elementName must not be null or empty");
+        }
+        if (StringUtils.isNullOrEmpty(namespace)) {
+            throw new IllegalArgumentException("namespace must not be null or empty");
+        }
     }
 }

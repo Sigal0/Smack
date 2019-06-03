@@ -16,50 +16,57 @@
  */
 package org.jivesoftware.smackx.pubsub.provider;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
+import java.io.IOException;
+
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.parsing.SmackParsingException;
+import org.jivesoftware.smack.provider.ExtensionElementProvider;
 import org.jivesoftware.smack.provider.ProviderManager;
 import org.jivesoftware.smack.util.PacketParserUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
 import org.jivesoftware.smackx.pubsub.Item;
+import org.jivesoftware.smackx.pubsub.Item.ItemNamespace;
 import org.jivesoftware.smackx.pubsub.PayloadItem;
 import org.jivesoftware.smackx.pubsub.SimplePayload;
 import org.jivesoftware.smackx.pubsub.packet.PubSubNamespace;
-import org.xmlpull.v1.XmlPullParser;
 
 /**
- * Parses an <b>item</b> element as is defined in both the {@link PubSubNamespace#BASIC} and
- * {@link PubSubNamespace#EVENT} namespaces. To parse the item contents, it will use whatever
- * {@link PacketExtensionProvider} is registered in <b>smack.providers</b> for its element name and namespace. If no
+ * Parses an <b>item</b> element as is defined in both the {@link PubSubNamespace#basic} and
+ * {@link PubSubNamespace#event} namespaces. To parse the item contents, it will use whatever
+ * {@link ExtensionElementProvider} is registered in <b>smack.providers</b> for its element name and namespace. If no
  * provider is registered, it will return a {@link SimplePayload}.
- * 
+ *
  * @author Robin Collier
  */
-public class ItemProvider implements PacketExtensionProvider 
-{
-    public PacketExtension parseExtension(XmlPullParser parser) throws Exception 
-    {
+public class ItemProvider extends ExtensionElementProvider<Item>  {
+    @Override
+    public Item parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment)
+                    throws XmlPullParserException, IOException, SmackParsingException {
         String id = parser.getAttributeValue(null, "id");
         String node = parser.getAttributeValue(null, "node");
+        String xmlns = parser.getNamespace();
+        ItemNamespace itemNamespace = ItemNamespace.fromXmlns(xmlns);
 
-        int tag = parser.next();
+        XmlPullParser.Event tag = parser.next();
 
-        if (tag == XmlPullParser.END_TAG) 
-        {
-            return new Item(id, node);
+        if (tag == XmlPullParser.Event.END_ELEMENT)  {
+            return new Item(itemNamespace, id, node);
         }
-        else 
-        {
+        else {
             String payloadElemName = parser.getName();
             String payloadNS = parser.getNamespace();
 
-            if (ProviderManager.getExtensionProvider(payloadElemName, payloadNS) == null) 
-            {
-                String payloadText = PacketParserUtils.parseElement(parser);
-                return new PayloadItem<SimplePayload>(id, node, new SimplePayload(payloadElemName, payloadNS, payloadText));
+            final ExtensionElementProvider<ExtensionElement> extensionProvider = ProviderManager.getExtensionProvider(payloadElemName, payloadNS);
+            if (extensionProvider == null) {
+                // TODO: Should we use StandardExtensionElement in this case? And probably remove SimplePayload all together.
+                CharSequence payloadText = PacketParserUtils.parseElement(parser, true);
+                return new PayloadItem<>(itemNamespace, id, node, new SimplePayload(payloadText.toString()));
             }
-            else 
-            {
-                return new PayloadItem<PacketExtension>(id, node, PacketParserUtils.parsePacketExtension(payloadElemName, payloadNS, parser));
+            else {
+                return new PayloadItem<>(itemNamespace, id, node, extensionProvider.parse(parser));
             }
         }
     }

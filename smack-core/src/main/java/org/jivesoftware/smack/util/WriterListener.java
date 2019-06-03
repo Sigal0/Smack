@@ -23,16 +23,16 @@ package org.jivesoftware.smack.util;
  *
  * @see ObservableWriter#addWriterListener
  * @see ObservableWriter#removeWriterListener
- * 
+ *
  * @author Gaston Dombiak
  */
 public interface WriterListener {
 
     /**
      * Notification that the Writer has written a new string.
-     * 
+     *
      * @param str the written string
      */
-    public abstract void write(String str);
+    void write(String str);
 
 }

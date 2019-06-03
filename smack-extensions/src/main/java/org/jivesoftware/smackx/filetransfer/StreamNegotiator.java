@@ -16,23 +16,26 @@
  */
 package org.jivesoftware.smackx.filetransfer;
 
-import org.jivesoftware.smack.PacketCollector;
+import java.io.InputStream;
+import java.io.OutputStream;
+
+import org.jivesoftware.smack.Manager;
 import org.jivesoftware.smack.SmackException;
 import org.jivesoftware.smack.SmackException.NoResponseException;
 import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException;
 import org.jivesoftware.smack.XMPPException.XMPPErrorException;
-import org.jivesoftware.smack.filter.PacketFilter;
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.Packet;
+import org.jivesoftware.smack.packet.Stanza;
+import org.jivesoftware.smack.util.EventManger;
+import org.jivesoftware.smack.util.EventManger.Callback;
+
 import org.jivesoftware.smackx.si.packet.StreamInitiation;
-import org.jivesoftware.smackx.xdata.Form;
 import org.jivesoftware.smackx.xdata.FormField;
 import org.jivesoftware.smackx.xdata.packet.DataForm;
 
-import java.io.InputStream;
-import java.io.OutputStream;
+import org.jxmpp.jid.Jid;
 
 /**
  * After the file transfer negotiation process is completed according to
@@ -42,26 +45,42 @@ import java.io.OutputStream;
  *
  * @author Alexander Wenckus
  */
-public abstract class StreamNegotiator {
+public abstract class StreamNegotiator extends Manager {
+
+    protected StreamNegotiator(XMPPConnection connection) {
+        super(connection);
+    }
 
     /**
-     * Creates the initiation acceptance packet to forward to the stream
+     * A event manager for stream initiation requests send to us.
+     * <p>
+     * Those are typical XEP-45 Open or XEP-65 Bytestream IQ requests. The even key is in the format
+     * "initiationFrom + '\t' + streamId"
+     * </p>
+     */
+    // TODO This field currently being static is considered a quick hack. Ideally this should take
+    // the local connection into account, for example by changing the key to
+    // "localJid + '\t' + initiationFrom + '\t' + streamId" or making the field non-static (but then
+    // you need to provide access to the InitiationListeners, which could get tricky)
+    protected static final EventManger<String, IQ, SmackException.NotConnectedException> initationSetEvents = new EventManger<>();
+
+    /**
+     * Creates the initiation acceptance stanza to forward to the stream
      * initiator.
      *
      * @param streamInitiationOffer The offer from the stream initiator to connect for a stream.
      * @param namespaces            The namespace that relates to the accepted means of transfer.
      * @return The response to be forwarded to the initiator.
      */
-    public StreamInitiation createInitiationAccept(
-            StreamInitiation streamInitiationOffer, String[] namespaces)
-    {
+    protected static StreamInitiation createInitiationAccept(
+            StreamInitiation streamInitiationOffer, String[] namespaces) {
         StreamInitiation response = new StreamInitiation();
         response.setTo(streamInitiationOffer.getFrom());
         response.setFrom(streamInitiationOffer.getTo());
         response.setType(IQ.Type.result);
-        response.setPacketID(streamInitiationOffer.getPacketID());
+        response.setStanzaId(streamInitiationOffer.getStanzaId());
 
-        DataForm form = new DataForm(Form.TYPE_SUBMIT);
+        DataForm form = new DataForm(DataForm.Type.submit);
         FormField field = new FormField(
                 FileTransferNegotiator.STREAM_DATA_FIELD_NAME);
         for (String namespace : namespaces) {
@@ -73,34 +92,51 @@ public abstract class StreamNegotiator {
         return response;
     }
 
-    Packet initiateIncomingStream(XMPPConnection connection, StreamInitiation initiation) throws NoResponseException, XMPPErrorException, NotConnectedException  {
-        StreamInitiation response = createInitiationAccept(initiation,
+    protected final IQ initiateIncomingStream(final XMPPConnection connection, StreamInitiation initiation)
+                    throws NoResponseException, XMPPErrorException, NotConnectedException {
+        final StreamInitiation response = createInitiationAccept(initiation,
                 getNamespaces());
 
-        // establish collector to await response
-        PacketCollector collector = connection
-                .createPacketCollector(getInitiationPacketFilter(initiation.getFrom(), initiation.getSessionID()));
-        connection.sendPacket(response);
+        newStreamInitiation(initiation.getFrom(), initiation.getSessionID());
 
-        Packet streamMethodInitiation = collector.nextResultOrThrow();
+        final String eventKey = initiation.getFrom().toString() + '\t' + initiation.getSessionID();
+        IQ streamMethodInitiation;
+        try {
+            streamMethodInitiation = initationSetEvents.performActionAndWaitForEvent(eventKey, connection.getReplyTimeout(), new Callback<NotConnectedException>() {
+                @Override
+                public void action() throws NotConnectedException {
+                    try {
+                        connection.sendStanza(response);
+                    }
+                    catch (InterruptedException e) {
+                        // Ignore
+                    }
+                }
+            });
+        }
+        catch (InterruptedException e) {
+            // TODO remove this try/catch once merged into 4.2's master branch
+            throw new IllegalStateException(e);
+        }
 
+        if (streamMethodInitiation == null) {
+            throw NoResponseException.newWith(connection, "stream initiation");
+        }
+        XMPPErrorException.ifHasErrorThenThrow(streamMethodInitiation);
         return streamMethodInitiation;
     }
 
     /**
-     * Returns the packet filter that will return the initiation packet for the appropriate stream
-     * initiation.
+     * Signal that a new stream initiation arrived. The negotiator may needs to prepare for it.
      *
      * @param from     The initiator of the file transfer.
      * @param streamID The stream ID related to the transfer.
-     * @return The <b><i>PacketFilter</b></i> that will return the packet relatable to the stream
-     *         initiation.
      */
-    public abstract PacketFilter getInitiationPacketFilter(String from, String streamID);
+    protected abstract void newStreamInitiation(Jid from, String streamID);
 
 
-    abstract InputStream negotiateIncomingStream(Packet streamInitiation) throws XMPPErrorException,
-            InterruptedException, NoResponseException, SmackException;
+    abstract InputStream negotiateIncomingStream(Stanza streamInitiation) throws XMPPErrorException,
+            InterruptedException, SmackException;
 
     /**
      * This method handles the file stream download negotiation process. The
@@ -116,10 +152,10 @@ public abstract class StreamNegotiator {
      * @throws XMPPErrorException If an error occurs during this process an XMPPException is
      *                       thrown.
      * @throws InterruptedException If thread is interrupted.
-     * @throws SmackException 
+     * @throws SmackException
      */
     public abstract InputStream createIncomingStream(StreamInitiation initiation)
-            throws XMPPErrorException, InterruptedException, NoResponseException, SmackException;
+            throws XMPPErrorException, InterruptedException, SmackException;
 
     /**
      * This method handles the file upload stream negotiation process. The
@@ -132,13 +168,12 @@ public abstract class StreamNegotiator {
      * @param target    The fully-qualified JID of the target or receiver of the file
      *                  transfer.
      * @return The negotiated stream ready for data.
-     * @throws XMPPErrorException If an error occurs during the negotiation process an
-     *                       exception will be thrown.
-     * @throws SmackException 
-     * @throws XMPPException 
+     * @throws SmackException
+     * @throws XMPPException
+     * @throws InterruptedException
      */
     public abstract OutputStream createOutgoingStream(String streamID,
-            String initiator, String target) throws XMPPErrorException, NoResponseException, SmackException, XMPPException;
+            Jid initiator, Jid target) throws SmackException, XMPPException, InterruptedException;
 
     /**
      * Returns the XMPP namespace reserved for this particular type of file
@@ -149,4 +184,7 @@ public abstract class StreamNegotiator {
      */
     public abstract String[] getNamespaces();
 
+    public static void signal(String eventKey, IQ eventValue) {
+        initationSetEvents.signalEvent(eventKey, eventValue);
+    }
 }

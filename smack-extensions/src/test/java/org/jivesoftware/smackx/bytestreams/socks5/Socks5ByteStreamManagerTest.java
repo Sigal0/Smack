@@ -16,8 +16,13 @@
  */
 package org.jivesoftware.smackx.bytestreams.socks5;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,67 +34,71 @@ import org.jivesoftware.smack.SmackException.FeatureNotSupportedException;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException;
 import org.jivesoftware.smack.XMPPException.XMPPErrorException;
+import org.jivesoftware.smack.packet.ErrorIQ;
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.XMPPError;
-import org.jivesoftware.smack.packet.IQ.Type;
-import org.jivesoftware.smackx.bytestreams.socks5.Socks5BytestreamManager;
-import org.jivesoftware.smackx.bytestreams.socks5.Socks5Client;
-import org.jivesoftware.smackx.bytestreams.socks5.Socks5Proxy;
-import org.jivesoftware.smackx.bytestreams.socks5.Socks5Utils;
+import org.jivesoftware.smack.packet.StanzaError;
+
 import org.jivesoftware.smackx.bytestreams.socks5.packet.Bytestream;
 import org.jivesoftware.smackx.bytestreams.socks5.packet.Bytestream.StreamHost;
 import org.jivesoftware.smackx.disco.ServiceDiscoveryManager;
 import org.jivesoftware.smackx.disco.packet.DiscoverInfo;
-import org.jivesoftware.smackx.disco.packet.DiscoverItems;
 import org.jivesoftware.smackx.disco.packet.DiscoverInfo.Identity;
+import org.jivesoftware.smackx.disco.packet.DiscoverItems;
 import org.jivesoftware.smackx.disco.packet.DiscoverItems.Item;
+
 import org.jivesoftware.util.ConnectionUtils;
 import org.jivesoftware.util.Protocol;
 import org.jivesoftware.util.Verification;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.jxmpp.jid.DomainBareJid;
+import org.jxmpp.jid.EntityFullJid;
+import org.jxmpp.jid.JidTestUtil;
+import org.jxmpp.jid.impl.JidCreate;
+import org.jxmpp.stringprep.XmppStringprepException;
 
 /**
  * Test for Socks5BytestreamManager.
- * 
+ *
  * @author Henning Staib
  */
 public class Socks5ByteStreamManagerTest {
 
     // settings
-    String initiatorJID = "initiator@xmpp-server/Smack";
-    String targetJID = "target@xmpp-server/Smack";
-    String xmppServer = "xmpp-server";
-    String proxyJID = "proxy.xmpp-server";
-    String proxyAddress = "127.0.0.1";
-    String sessionID = "session_id";
+    private static final EntityFullJid initiatorJID = JidTestUtil.DUMMY_AT_EXAMPLE_ORG_SLASH_DUMMYRESOURCE;
+    private static final EntityFullJid targetJID = JidTestUtil.FULL_JID_1_RESOURCE_1;
+    private static final DomainBareJid xmppServer = initiatorJID.asDomainBareJid();
+    private static final DomainBareJid proxyJID = JidTestUtil.MUC_EXAMPLE_ORG;
+    private static final String proxyAddress = "127.0.0.1";
+    private static final String sessionID = "session_id";
 
     // protocol verifier
-    Protocol protocol;
+    private Protocol protocol;
 
     // mocked XMPP connection
-    XMPPConnection connection;
+    private XMPPConnection connection;
 
     /**
      * Initialize fields used in the tests.
-     * @throws XMPPException 
-     * @throws SmackException 
+     * @throws XMPPException
+     * @throws SmackException
+     * @throws InterruptedException
      */
     @Before
-    public void setup() throws XMPPException, SmackException {
+    public void setup() throws XMPPException, SmackException, InterruptedException {
 
         // build protocol verifier
         protocol = new Protocol();
 
         // create mocked XMPP connection
-        connection = ConnectionUtils.createMockedConnection(protocol, initiatorJID, xmppServer);
+        connection = ConnectionUtils.createMockedConnection(protocol, initiatorJID);
 
     }
 
     /**
      * Test that {@link Socks5BytestreamManager#getBytestreamManager(XMPPConnection)} returns one
-     * bytestream manager for every connection
+     * bytestream manager for every connection.
      */
     @Test
     public void shouldHaveOneManagerForEveryConnection() {
@@ -135,9 +144,9 @@ public class Socks5ByteStreamManagerTest {
     }
 
     /**
-     * Invoking {@link Socks5BytestreamManager#establishSession(String)} should throw an exception
+     * Invoking {@link Socks5BytestreamManager#establishSession(org.jxmpp.jid.Jid)} should throw an exception
      * if the given target does not support SOCKS5 Bytestream.
-     * @throws XMPPException 
+     * @throws XMPPException
      */
     @Test
     public void shouldFailIfTargetDoesNotSupportSocks5() throws XMPPException {
@@ -156,14 +165,14 @@ public class Socks5ByteStreamManagerTest {
         catch (FeatureNotSupportedException e) {
             assertTrue(e.getFeature().equals("SOCKS5 Bytestream"));
             assertTrue(e.getJid().equals(targetJID));
-        } catch(Exception e) {
+        } catch (Exception e) {
             fail(e.getMessage());
         }
 
     }
 
     /**
-     * Invoking {@link Socks5BytestreamManager#establishSession(String, String)} should fail if XMPP
+     * Invoking {@link Socks5BytestreamManager#establishSession(org.jxmpp.jid.Jid, String)} should fail if XMPP
      * server doesn't return any proxies.
      */
     @Test
@@ -214,7 +223,7 @@ public class Socks5ByteStreamManagerTest {
     }
 
     /**
-     * Invoking {@link Socks5BytestreamManager#establishSession(String, String)} should fail if no
+     * Invoking {@link Socks5BytestreamManager#establishSession(org.jxmpp.jid.Jid, String)} should fail if no
      * proxy is a SOCKS5 proxy.
      */
     @Test
@@ -252,7 +261,7 @@ public class Socks5ByteStreamManagerTest {
         // build discover info for proxy containing information about NOT being a Socks5
         // proxy
         DiscoverInfo proxyInfo = Socks5PacketUtils.createDiscoverInfo(proxyJID, initiatorJID);
-        Identity identity = new Identity("noproxy", proxyJID, "bytestreams");
+        Identity identity = new Identity("noproxy", proxyJID.toString(), "bytestreams");
         proxyInfo.addIdentity(identity);
 
         // return the proxy identity if proxy is queried
@@ -277,7 +286,7 @@ public class Socks5ByteStreamManagerTest {
     }
 
     /**
-     * Invoking {@link Socks5BytestreamManager#establishSession(String, String)} should fail if no
+     * Invoking {@link Socks5BytestreamManager#establishSession(org.jxmpp.jid.Jid, String)} should fail if no
      * SOCKS5 proxy can be found. If it turns out that a proxy is not a SOCKS5 proxy it should not
      * be queried again.
      */
@@ -316,7 +325,7 @@ public class Socks5ByteStreamManagerTest {
         // build discover info for proxy containing information about NOT being a Socks5
         // proxy
         DiscoverInfo proxyInfo = Socks5PacketUtils.createDiscoverInfo(proxyJID, initiatorJID);
-        Identity identity = new Identity("noproxy", proxyJID, "bytestreams");
+        Identity identity = new Identity("noproxy", proxyJID.toString(), "bytestreams");
         proxyInfo.addIdentity(identity);
 
         // return the proxy identity if proxy is queried
@@ -368,7 +377,7 @@ public class Socks5ByteStreamManagerTest {
     }
 
     /**
-     * Invoking {@link Socks5BytestreamManager#establishSession(String, String)} should fail if the
+     * Invoking {@link Socks5BytestreamManager#establishSession(org.jxmpp.jid.Jid, String)} should fail if the
      * target does not accept a SOCKS5 Bytestream. See <a
      * href="http://xmpp.org/extensions/xep-0065.html#usecase-alternate">XEP-0065 Section 5.2 A2</a>
      */
@@ -406,7 +415,7 @@ public class Socks5ByteStreamManagerTest {
 
         // build discover info for proxy containing information about being a SOCKS5 proxy
         DiscoverInfo proxyInfo = Socks5PacketUtils.createDiscoverInfo(proxyJID, initiatorJID);
-        Identity identity = new Identity("proxy", proxyJID, "bytestreams");
+        Identity identity = new Identity("proxy", proxyJID.toString(), "bytestreams");
         proxyInfo.addIdentity(identity);
 
         // return the socks5 bytestream proxy identity if proxy is queried
@@ -424,18 +433,10 @@ public class Socks5ByteStreamManagerTest {
                         Verification.requestTypeGET);
 
         // build error packet to reject SOCKS5 Bytestream
-        XMPPError xmppError = new XMPPError(XMPPError.Condition.no_acceptable);
-        IQ rejectPacket = new IQ() {
-
-            public String getChildElementXML() {
-                return null;
-            }
-
-        };
-        rejectPacket.setType(Type.error);
+        StanzaError.Builder builder = StanzaError.getBuilder(StanzaError.Condition.not_acceptable);
+        IQ rejectPacket = new ErrorIQ(builder);
         rejectPacket.setFrom(targetJID);
         rejectPacket.setTo(initiatorJID);
-        rejectPacket.setError(xmppError);
 
         // return error packet as response to the bytestream initiation
         protocol.addResponse(rejectPacket, Verification.correspondingSenderReceiver,
@@ -450,7 +451,7 @@ public class Socks5ByteStreamManagerTest {
         }
         catch (XMPPErrorException e) {
             protocol.verifyAll();
-            assertEquals(xmppError, e.getXMPPError());
+            assertEquals(rejectPacket.getError(), e.getStanzaError());
         }
         catch (Exception e) {
             fail(e.getMessage());
@@ -459,11 +460,12 @@ public class Socks5ByteStreamManagerTest {
     }
 
     /**
-     * Invoking {@link Socks5BytestreamManager#establishSession(String, String)} should fail if the
+     * Invoking {@link Socks5BytestreamManager#establishSession(org.jxmpp.jid.Jid, String)} should fail if the
      * proxy used by target is invalid.
+     * @throws XmppStringprepException
      */
     @Test
-    public void shouldFailIfTargetUsesInvalidSocks5Proxy() {
+    public void shouldFailIfTargetUsesInvalidSocks5Proxy() throws XmppStringprepException {
 
         // disable clients local SOCKS5 proxy
         Socks5Proxy.setLocalSocks5ProxyEnabled(false);
@@ -496,7 +498,7 @@ public class Socks5ByteStreamManagerTest {
 
         // build discover info for proxy containing information about being a SOCKS5 proxy
         DiscoverInfo proxyInfo = Socks5PacketUtils.createDiscoverInfo(proxyJID, initiatorJID);
-        Identity identity = new Identity("proxy", proxyJID, "bytestreams");
+        Identity identity = new Identity("proxy", proxyJID.toString(), "bytestreams");
         proxyInfo.addIdentity(identity);
 
         // return the socks5 bytestream proxy identity if proxy is queried
@@ -517,7 +519,7 @@ public class Socks5ByteStreamManagerTest {
         Bytestream streamHostUsedPacket = Socks5PacketUtils.createBytestreamResponse(targetJID,
                         initiatorJID);
         streamHostUsedPacket.setSessionID(sessionID);
-        streamHostUsedPacket.setUsedHost("invalid.proxy");
+        streamHostUsedPacket.setUsedHost(JidCreate.from("invalid.proxy"));
 
         // return used stream host info as response to the bytestream initiation
         protocol.addResponse(streamHostUsedPacket, Verification.correspondingSenderReceiver,
@@ -541,7 +543,7 @@ public class Socks5ByteStreamManagerTest {
     }
 
     /**
-     * Invoking {@link Socks5BytestreamManager#establishSession(String, String)} should fail if
+     * Invoking {@link Socks5BytestreamManager#establishSession(org.jxmpp.jid.Jid, String)} should fail if
      * initiator can not connect to the SOCKS5 proxy used by target.
      */
     @Test
@@ -578,7 +580,7 @@ public class Socks5ByteStreamManagerTest {
 
         // build discover info for proxy containing information about being a SOCKS5 proxy
         DiscoverInfo proxyInfo = Socks5PacketUtils.createDiscoverInfo(proxyJID, initiatorJID);
-        Identity identity = new Identity("proxy", proxyJID, "bytestreams");
+        Identity identity = new Identity("proxy", proxyJID.toString(), "bytestreams");
         proxyInfo.addIdentity(identity);
 
         // return the socks5 bytestream proxy identity if proxy is queried
@@ -604,6 +606,7 @@ public class Socks5ByteStreamManagerTest {
         // return used stream host info as response to the bytestream initiation
         protocol.addResponse(streamHostUsedPacket, new Verification<Bytestream, Bytestream>() {
 
+            @Override
             public void verify(Bytestream request, Bytestream response) {
                 // verify SOCKS5 Bytestream request
                 assertEquals(response.getSessionID(), request.getSessionID());
@@ -633,9 +636,9 @@ public class Socks5ByteStreamManagerTest {
     }
 
     /**
-     * Invoking {@link Socks5BytestreamManager#establishSession(String, String)} should successfully
+     * Invoking {@link Socks5BytestreamManager#establishSession(org.jxmpp.jid.Jid, String)} should successfully
      * negotiate and return a SOCKS5 Bytestream connection.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -672,7 +675,7 @@ public class Socks5ByteStreamManagerTest {
 
         // build discover info for proxy containing information about being a SOCKS5 proxy
         DiscoverInfo proxyInfo = Socks5PacketUtils.createDiscoverInfo(proxyJID, initiatorJID);
-        Identity identity = new Identity("proxy", proxyJID, "bytestreams");
+        Identity identity = new Identity("proxy", proxyJID.toString(), "bytestreams");
         proxyInfo.addIdentity(identity);
 
         // return the socks5 bytestream proxy identity if proxy is queried
@@ -698,6 +701,7 @@ public class Socks5ByteStreamManagerTest {
         // return used stream host info as response to the bytestream initiation
         protocol.addResponse(streamHostUsedPacket, new Verification<Bytestream, Bytestream>() {
 
+            @Override
             public void verify(Bytestream request, Bytestream response) {
                 assertEquals(response.getSessionID(), request.getSessionID());
                 assertEquals(1, request.getStreamHosts().size());
@@ -714,6 +718,7 @@ public class Socks5ByteStreamManagerTest {
         // return proxy activation response if proxy should be activated
         protocol.addResponse(activationResponse, new Verification<Bytestream, IQ>() {
 
+            @Override
             public void verify(Bytestream request, IQ response) {
                 assertEquals(targetJID, request.getToActivate().getTarget());
             }
@@ -748,7 +753,7 @@ public class Socks5ByteStreamManagerTest {
     /**
      * If multiple network addresses are added to the local SOCKS5 proxy, all of them should be
      * contained in the SOCKS5 Bytestream request.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -796,12 +801,12 @@ public class Socks5ByteStreamManagerTest {
         // return used stream host info as response to the bytestream initiation
         protocol.addResponse(streamHostUsedPacket, new Verification<Bytestream, Bytestream>() {
 
+            @Override
             public void verify(Bytestream request, Bytestream response) {
                 assertEquals(response.getSessionID(), request.getSessionID());
-                assertEquals(2, request.getStreamHosts().size());
-                StreamHost streamHost1 = (StreamHost) request.getStreamHosts().toArray()[0];
+                StreamHost streamHost1 = request.getStreamHosts().get(0);
                 assertEquals(response.getUsedHost().getJID(), streamHost1.getJID());
-                StreamHost streamHost2 = (StreamHost) request.getStreamHosts().toArray()[1];
+                StreamHost streamHost2 = request.getStreamHosts().get(request.getStreamHosts().size() - 1);
                 assertEquals(response.getUsedHost().getJID(), streamHost2.getJID());
                 assertEquals("localAddress", streamHost2.getAddress());
             }
@@ -813,8 +818,9 @@ public class Socks5ByteStreamManagerTest {
 
         // connect to proxy as target
         socks5Proxy.addTransfer(digest);
-        StreamHost streamHost = new StreamHost(targetJID, socks5Proxy.getLocalAddresses().get(0));
-        streamHost.setPort(socks5Proxy.getPort());
+        StreamHost streamHost = new StreamHost(targetJID,
+                        socks5Proxy.getLocalAddresses().get(0),
+                        socks5Proxy.getPort());
         Socks5Client socks5Client = new Socks5Client(streamHost, digest);
         InputStream inputStream = socks5Client.getSocket(2000).getInputStream();
 
@@ -843,10 +849,10 @@ public class Socks5ByteStreamManagerTest {
     }
 
     /**
-     * Invoking {@link Socks5BytestreamManager#establishSession(String, String)} the first time
+     * Invoking {@link Socks5BytestreamManager#establishSession(org.jxmpp.jid.Jid, String)} the first time
      * should successfully negotiate a SOCKS5 Bytestream via the second SOCKS5 proxy and should
      * prioritize this proxy for a second SOCKS5 Bytestream negotiation.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -862,6 +868,7 @@ public class Socks5ByteStreamManagerTest {
 
         Verification<Bytestream, Bytestream> streamHostUsedVerification1 = new Verification<Bytestream, Bytestream>() {
 
+            @Override
             public void verify(Bytestream request, Bytestream response) {
                 assertEquals(response.getSessionID(), request.getSessionID());
                 assertEquals(2, request.getStreamHosts().size());
@@ -898,6 +905,7 @@ public class Socks5ByteStreamManagerTest {
 
         Verification<Bytestream, Bytestream> streamHostUsedVerification2 = new Verification<Bytestream, Bytestream>() {
 
+            @Override
             public void verify(Bytestream request, Bytestream response) {
                 assertEquals(response.getSessionID(), request.getSessionID());
                 assertEquals(2, request.getStreamHosts().size());
@@ -926,10 +934,10 @@ public class Socks5ByteStreamManagerTest {
     }
 
     /**
-     * Invoking {@link Socks5BytestreamManager#establishSession(String, String)} the first time
+     * Invoking {@link Socks5BytestreamManager#establishSession(org.jxmpp.jid.Jid, String)} the first time
      * should successfully negotiate a SOCKS5 Bytestream via the second SOCKS5 proxy. The second
      * negotiation should run in the same manner if prioritization is disabled.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -946,6 +954,7 @@ public class Socks5ByteStreamManagerTest {
 
         Verification<Bytestream, Bytestream> streamHostUsedVerification = new Verification<Bytestream, Bytestream>() {
 
+            @Override
             public void verify(Bytestream request, Bytestream response) {
                 assertEquals(response.getSessionID(), request.getSessionID());
                 assertEquals(2, request.getStreamHosts().size());
@@ -1000,7 +1009,7 @@ public class Socks5ByteStreamManagerTest {
 
     }
 
-    private void createResponses(Verification<Bytestream, Bytestream> streamHostUsedVerification) {
+    private void createResponses(Verification<Bytestream, Bytestream> streamHostUsedVerification) throws XmppStringprepException {
         // build discover info that supports the SOCKS5 feature
         DiscoverInfo discoverInfo = Socks5PacketUtils.createDiscoverInfo(targetJID, initiatorJID);
         discoverInfo.addFeature(Bytestream.NAMESPACE);
@@ -1012,7 +1021,7 @@ public class Socks5ByteStreamManagerTest {
         // build discover items containing a proxy item
         DiscoverItems discoverItems = Socks5PacketUtils.createDiscoverItems(xmppServer,
                         initiatorJID);
-        discoverItems.addItem(new Item("proxy2.xmpp-server"));
+        discoverItems.addItem(new Item(JidCreate.from("proxy2.xmpp-server")));
         discoverItems.addItem(new Item(proxyJID));
 
         // return the proxy item if XMPP server is queried
@@ -1023,7 +1032,7 @@ public class Socks5ByteStreamManagerTest {
          * build discover info for proxy "proxy2.xmpp-server" containing information about being a
          * SOCKS5 proxy
          */
-        DiscoverInfo proxyInfo1 = Socks5PacketUtils.createDiscoverInfo("proxy2.xmpp-server",
+        DiscoverInfo proxyInfo1 = Socks5PacketUtils.createDiscoverInfo(JidCreate.from("proxy2.xmpp-server"),
                         initiatorJID);
         Identity identity1 = new Identity("proxy", "proxy2.xmpp-server", "bytestreams");
         proxyInfo1.addIdentity(identity1);
@@ -1034,7 +1043,7 @@ public class Socks5ByteStreamManagerTest {
 
         // build discover info for proxy containing information about being a SOCKS5 proxy
         DiscoverInfo proxyInfo2 = Socks5PacketUtils.createDiscoverInfo(proxyJID, initiatorJID);
-        Identity identity2 = new Identity("proxy", proxyJID, "bytestreams");
+        Identity identity2 = new Identity("proxy", proxyJID.toString(), "bytestreams");
         proxyInfo2.addIdentity(identity2);
 
         // return the SOCKS5 bytestream proxy identity if proxy is queried
@@ -1046,8 +1055,8 @@ public class Socks5ByteStreamManagerTest {
          * port of the proxy
          */
         Bytestream streamHostInfo1 = Socks5PacketUtils.createBytestreamResponse(
-                        "proxy2.xmpp-server", initiatorJID);
-        streamHostInfo1.addStreamHost("proxy2.xmpp-server", proxyAddress, 7778);
+                        JidCreate.from("proxy2.xmpp-server"), initiatorJID);
+        streamHostInfo1.addStreamHost(JidCreate.from("proxy2.xmpp-server"), proxyAddress, 7778);
 
         // return stream host info if it is queried
         protocol.addResponse(streamHostInfo1, Verification.correspondingSenderReceiver,
@@ -1079,6 +1088,7 @@ public class Socks5ByteStreamManagerTest {
         // return proxy activation response if proxy should be activated
         protocol.addResponse(activationResponse, new Verification<Bytestream, IQ>() {
 
+            @Override
             public void verify(Bytestream request, IQ response) {
                 assertEquals(targetJID, request.getToActivate().getTarget());
             }

@@ -17,158 +17,87 @@
 
 package org.jivesoftware.smack.packet;
 
-import org.jivesoftware.smack.util.StringUtils;
-import org.jivesoftware.smack.util.XmlStringBuilder;
-
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.Set;
 
 /**
- * Base class for XMPP packets. Every packet has a unique ID (which is automatically
- * generated, but can be overridden). Optionally, the "to" and "from" fields can be set.
- *
- * @author Matt Tucker
+ * Deprecated interface of pre Smack 4.1 Stanzas.
+ * @deprecated use {@link Stanza} instead
  */
-public abstract class Packet {
+@Deprecated
+public interface Packet extends TopLevelStreamElement {
 
-    protected static final String DEFAULT_LANGUAGE =
-            java.util.Locale.getDefault().getLanguage().toLowerCase(Locale.US);
-
-    private static String DEFAULT_XML_NS = null;
-
-    /**
-     * Constant used as packetID to indicate that a packet has no id. To indicate that a packet
-     * has no id set this constant as the packet's id. When the packet is asked for its id the
-     * answer will be <tt>null</tt>.
-     */
-    public static final String ID_NOT_AVAILABLE = "ID_NOT_AVAILABLE";
+    String TEXT = "text";
+    String ITEM = "item";
 
     /**
-     * A prefix helps to make sure that ID's are unique across mutliple instances.
-     */
-    private static String prefix = StringUtils.randomString(5) + "-";
-
-    /**
-     * Keeps track of the current increment, which is appended to the prefix to
-     * forum a unique ID.
-     */
-    private static long id = 0;
-
-    private String xmlns = DEFAULT_XML_NS;
-
-    /**
-     * Returns the next unique id. Each id made up of a short alphanumeric
-     * prefix along with a unique numeric value.
+     * Returns the unique ID of the stanza. The returned value could be <code>null</code>.
      *
-     * @return the next id.
+     * @return the packet's unique ID or <code>null</code> if the id is not available.
      */
-    public static synchronized String nextID() {
-        return prefix + Long.toString(id++);
-    }
-
-    public static void setDefaultXmlns(String defaultXmlns) {
-        DEFAULT_XML_NS = defaultXmlns;
-    }
-
-    private String packetID = null;
-    private String to = null;
-    private String from = null;
-    private final List<PacketExtension> packetExtensions
-            = new CopyOnWriteArrayList<PacketExtension>();
-
-    private XMPPError error = null;
-
-    public Packet() {
-    }
-
-    public Packet(Packet p) {
-        packetID = p.getPacketID();
-        to = p.getTo();
-        from = p.getFrom();
-        xmlns = p.xmlns;
-        error = p.error;
-
-        // Copy extensions
-        for (PacketExtension pe : p.getExtensions()) {
-            addExtension(pe);
-        }
-    }
+    String getStanzaId();
 
     /**
-     * Returns the unique ID of the packet. The returned value could be <tt>null</tt> when
-     * ID_NOT_AVAILABLE was set as the packet's id.
+     * Get the stanza id.
+     * @return the stanza id.
+     * @deprecated use {@link #getStanzaId()} instead.
+     */
+    @Deprecated
+    String getPacketID();
+
+    /**
+     * Sets the unique ID of the packet. To indicate that a stanza has no id
+     * pass <code>null</code> as the packet's id value.
      *
-     * @return the packet's unique ID or <tt>null</tt> if the packet's id is not available.
+     * @param id the unique ID for the packet.
      */
-    public String getPacketID() {
-        if (ID_NOT_AVAILABLE.equals(packetID)) {
-            return null;
-        }
-
-        if (packetID == null) {
-            packetID = nextID();
-        }
-        return packetID;
-    }
+    void setStanzaId(String id);
 
     /**
-     * Sets the unique ID of the packet. To indicate that a packet has no id
-     * pass the constant ID_NOT_AVAILABLE as the packet's id value.
-     *
-     * @param packetID the unique ID for the packet.
+     * Set the stanza ID.
+     * @param packetID
+     * @deprecated use {@link #setStanzaId(String)} instead.
      */
-    public void setPacketID(String packetID) {
-        this.packetID = packetID;
-    }
+    @Deprecated
+    void setPacketID(String packetID);
 
     /**
-     * Returns who the packet is being sent "to", or <tt>null</tt> if
+     * Returns who the stanza is being sent "to", or <tt>null</tt> if
      * the value is not set. The XMPP protocol often makes the "to"
      * attribute optional, so it does not always need to be set.<p>
      *
-     * @return who the packet is being sent to, or <tt>null</tt> if the
+     * @return who the stanza is being sent to, or <tt>null</tt> if the
      *      value has not been set.
      */
-    public String getTo() {
-        return to;
-    }
+    String getTo();
 
     /**
-     * Sets who the packet is being sent "to". The XMPP protocol often makes
+     * Sets who the stanza is being sent "to". The XMPP protocol often makes
      * the "to" attribute optional, so it does not always need to be set.
      *
-     * @param to who the packet is being sent to.
+     * @param to who the stanza is being sent to.
      */
-    public void setTo(String to) {
-        this.to = to;
-    }
+    void setTo(String to);
 
     /**
-     * Returns who the packet is being sent "from" or <tt>null</tt> if
+     * Returns who the stanza is being sent "from" or <tt>null</tt> if
      * the value is not set. The XMPP protocol often makes the "from"
      * attribute optional, so it does not always need to be set.<p>
      *
-     * @return who the packet is being sent from, or <tt>null</tt> if the
+     * @return who the stanza is being sent from, or <tt>null</tt> if the
      *      value has not been set.
      */
-    public String getFrom() {
-        return from;
-    }
+    String getFrom();
 
     /**
-     * Sets who the packet is being sent "from". The XMPP protocol often
+     * Sets who the stanza is being sent "from". The XMPP protocol often
      * makes the "from" attribute optional, so it does not always need to
      * be set.
      *
-     * @param from who the packet is being sent to.
+     * @param from who the stanza is being sent to.
      */
-    public void setFrom(String from) {
-        this.from = from;
-    }
+    void setFrom(String from);
 
     /**
      * Returns the error associated with this packet, or <tt>null</tt> if there are
@@ -176,179 +105,129 @@ public abstract class Packet {
      *
      * @return the error sub-packet or <tt>null</tt> if there isn't an error.
      */
-    public XMPPError getError() {
-        return error;
-    }
-
+    StanzaError getError();
     /**
      * Sets the error for this packet.
      *
      * @param error the error to associate with this packet.
      */
-    public void setError(XMPPError error) {
-        this.error = error;
-    }
+    void setError(StanzaError error);
 
     /**
-     * Returns an unmodifiable collection of the packet extensions attached to the packet.
+     * Returns the xml:lang of this Stanza, or null if one has not been set.
      *
-     * @return the packet extensions.
+     * @return the xml:lang of this Stanza, or null.
      */
-    public synchronized Collection<PacketExtension> getExtensions() {
-        if (packetExtensions == null) {
-            return Collections.emptyList();
-        }
-        return Collections.unmodifiableList(new ArrayList<PacketExtension>(packetExtensions));
-    }
+    String getLanguage();
 
     /**
-     * Returns the first extension of this packet that has the given namespace.
+     * Sets the xml:lang of this Stanza.
+     *
+     * @param language the xml:lang of this Stanza.
+     */
+    void setLanguage(String language);
+
+    /**
+     * Returns a copy of the stanza extensions attached to the packet.
+     *
+     * @return the stanza extensions.
+     */
+    List<ExtensionElement> getExtensions();
+
+    /**
+     * Return a set of all extensions with the given element name <i>and</i> namespace.
+     * <p>
+     * Changes to the returned set will update the stanza extensions, if the returned set is not the empty set.
+     * </p>
+     *
+     * @param elementName the element name, must not be null.
+     * @param namespace the namespace of the element(s), must not be null.
+     * @return a set of all matching extensions.
+     * @since 4.1
+     */
+    Set<ExtensionElement> getExtensions(String elementName, String namespace);
+
+    /**
+     * Returns the first extension of this stanza that has the given namespace.
+     * <p>
+     * When possible, use {@link #getExtension(String, String)} instead.
+     * </p>
      *
      * @param namespace the namespace of the extension that is desired.
-     * @return the packet extension with the given namespace.
+     * @return the stanza extension with the given namespace.
      */
-    public PacketExtension getExtension(String namespace) {
-        return getExtension(null, namespace);
-    }
+    ExtensionElement getExtension(String namespace);
 
     /**
-     * Returns the first packet extension that matches the specified element name and
+     * Returns the first stanza extension that matches the specified element name and
      * namespace, or <tt>null</tt> if it doesn't exist. If the provided elementName is null,
-     * only the namespace is matched. Packet extensions are
-     * are arbitrary XML sub-documents in standard XMPP packets. By default, a 
-     * DefaultPacketExtension instance will be returned for each extension. However, 
-     * PacketExtensionProvider instances can be registered with the 
+     * only the namespace is matched. Stanza extensions are
+     * are arbitrary XML sub-documents in standard XMPP packets. By default, a
+     * DefaultPacketExtension instance will be returned for each extension. However,
+     * PacketExtensionProvider instances can be registered with the
      * {@link org.jivesoftware.smack.provider.ProviderManager ProviderManager}
      * class to handle custom parsing. In that case, the type of the Object
      * will be determined by the provider.
      *
-     * @param elementName the XML element name of the packet extension. (May be null)
-     * @param namespace the XML element namespace of the packet extension.
+     * @param elementName the XML element name of the stanza extension. (May be null)
+     * @param namespace the XML element namespace of the stanza extension.
+     * @param <PE> type of the ExtensionElement.
      * @return the extension, or <tt>null</tt> if it doesn't exist.
      */
-    public PacketExtension getExtension(String elementName, String namespace) {
-        if (namespace == null) {
-            return null;
-        }
-        for (PacketExtension ext : packetExtensions) {
-            if ((elementName == null || elementName.equals(ext.getElementName()))
-                    && namespace.equals(ext.getNamespace()))
-            {
-                return ext;
-            }
-        }
-        return null;
-    }
-
+    <PE extends ExtensionElement> PE getExtension(String elementName, String namespace);
     /**
-     * Adds a packet extension to the packet. Does nothing if extension is null.
+     * Adds a stanza extension to the packet. Does nothing if extension is null.
      *
-     * @param extension a packet extension.
+     * @param extension a stanza extension.
      */
-    public void addExtension(PacketExtension extension) {
-        if (extension == null) return;
-        packetExtensions.add(extension);
-    }
+    void addExtension(ExtensionElement extension);
 
     /**
-     * Adds a collection of packet extensions to the packet. Does nothing if extensions is null.
-     * 
-     * @param extensions a collection of packet extensions
-     */
-    public void addExtensions(Collection<PacketExtension> extensions) {
-        if (extensions == null) return;
-        packetExtensions.addAll(extensions);
-    }
-
-    /**
-     * Removes a packet extension from the packet.
+     * Adds a collection of stanza extensions to the packet. Does nothing if extensions is null.
      *
-     * @param extension the packet extension to remove.
+     * @param extensions a collection of stanza extensions
      */
-    public void removeExtension(PacketExtension extension)  {
-        packetExtensions.remove(extension);
-    }
+    void addExtensions(Collection<ExtensionElement> extensions);
 
     /**
-     * Returns the packet as XML. Every concrete extension of Packet must implement
-     * this method. In addition to writing out packet-specific data, every sub-class
-     * should also write out the error and the extensions data if they are defined.
+     * Check if a stanza extension with the given element and namespace exists.
+     * <p>
+     * The argument <code>elementName</code> may be null.
+     * </p>
      *
-     * @return the XML format of the packet as a String.
+     * @param elementName
+     * @param namespace
+     * @return true if a stanza extension exists, false otherwise.
      */
-    public abstract CharSequence toXML();
+    boolean hasExtension(String elementName, String namespace);
 
     /**
-     * Returns the extension sub-packets (including properties data) as an XML
-     * String, or the Empty String if there are no packet extensions.
+     * Check if a stanza extension with the given namespace exists.
      *
-     * @return the extension sub-packets as XML or the Empty String if there
-     * are no packet extensions.
+     * @param namespace
+     * @return true if a stanza extension exists, false otherwise.
      */
-    protected synchronized CharSequence getExtensionsXML() {
-        XmlStringBuilder xml = new XmlStringBuilder();
-        // Add in all standard extension sub-packets.
-        for (PacketExtension extension : getExtensions()) {
-            xml.append(extension.toXML());
-        }
-        return xml;
-    }
-
-    public String getXmlns() {
-        return this.xmlns;
-    }
+    boolean hasExtension(String namespace);
 
     /**
-     * Returns the default language used for all messages containing localized content.
-     * 
-     * @return the default language
+     * Remove the stanza extension with the given elementName and namespace.
+     *
+     * @param elementName
+     * @param namespace
+     * @return the removed stanza extension or null.
      */
-    public static String getDefaultLanguage() {
-        return DEFAULT_LANGUAGE;
-    }
+    ExtensionElement removeExtension(String elementName, String namespace);
+
+    /**
+     * Removes a stanza extension from the packet.
+     *
+     * @param extension the stanza extension to remove.
+     * @return the removed stanza extension or null.
+     */
+    ExtensionElement removeExtension(ExtensionElement extension);
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+    // NOTE When Smack is using Java 8, then this method should be moved in Element as "Default Method".
+    String toString();
 
-        Packet packet = (Packet) o;
-
-        if (error != null ? !error.equals(packet.error) : packet.error != null) { return false; }
-        if (from != null ? !from.equals(packet.from) : packet.from != null) { return false; }
-        if (!packetExtensions.equals(packet.packetExtensions)) { return false; }
-        if (packetID != null ? !packetID.equals(packet.packetID) : packet.packetID != null) {
-            return false;
-        }
-        if (to != null ? !to.equals(packet.to) : packet.to != null)  { return false; }
-        return !(xmlns != null ? !xmlns.equals(packet.xmlns) : packet.xmlns != null);
-    }
-
-    @Override
-    public int hashCode() {
-        int result;
-        result = (xmlns != null ? xmlns.hashCode() : 0);
-        result = 31 * result + (packetID != null ? packetID.hashCode() : 0);
-        result = 31 * result + (to != null ? to.hashCode() : 0);
-        result = 31 * result + (from != null ? from.hashCode() : 0);
-        result = 31 * result + packetExtensions.hashCode();
-        result = 31 * result + (error != null ? error.hashCode() : 0);
-        return result;
-    }
-
-    @Override
-    public String toString() {
-        return toXML().toString();
-    }
-
-    /**
-     * Add to, from and id attributes
-     *
-     * @param xml
-     */
-    protected void addCommonAttributes(XmlStringBuilder xml) {
-        xml.optAttribute("id", getPacketID());
-        xml.optAttribute("to", getTo());
-        xml.optAttribute("from", getFrom());
-    }
 }

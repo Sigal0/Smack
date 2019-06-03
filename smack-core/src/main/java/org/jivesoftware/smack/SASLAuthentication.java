@@ -17,264 +17,157 @@
 
 package org.jivesoftware.smack;
 
-import org.jivesoftware.smack.SmackException.NoResponseException;
-import org.jivesoftware.smack.SmackException.NotConnectedException;
-import org.jivesoftware.smack.SmackException.ResourceBindingNotOfferedException;
-import org.jivesoftware.smack.XMPPException.XMPPErrorException;
-import org.jivesoftware.smack.packet.Packet;
-import org.jivesoftware.smack.sasl.SASLAnonymous;
-import org.jivesoftware.smack.sasl.SASLCramMD5Mechanism;
-import org.jivesoftware.smack.sasl.SASLDigestMD5Mechanism;
-import org.jivesoftware.smack.sasl.SASLErrorException;
-import org.jivesoftware.smack.sasl.SASLExternalMechanism;
-import org.jivesoftware.smack.sasl.SASLGSSAPIMechanism;
-import org.jivesoftware.smack.sasl.SASLMechanism;
-import org.jivesoftware.smack.sasl.SASLMechanism.SASLFailure;
-import org.jivesoftware.smack.sasl.SASLPlainMechanism;
-
-import javax.security.auth.callback.CallbackHandler;
-import javax.security.sasl.SaslException;
-
 import java.io.IOException;
-import java.lang.reflect.Constructor;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.logging.Logger;
+
+import javax.net.ssl.SSLSession;
+import javax.security.auth.callback.CallbackHandler;
+
+import org.jivesoftware.smack.SmackException.NoResponseException;
+import org.jivesoftware.smack.SmackException.NotConnectedException;
+import org.jivesoftware.smack.SmackException.SmackSaslException;
+import org.jivesoftware.smack.XMPPException.XMPPErrorException;
+import org.jivesoftware.smack.packet.Mechanisms;
+import org.jivesoftware.smack.sasl.SASLErrorException;
+import org.jivesoftware.smack.sasl.SASLMechanism;
+import org.jivesoftware.smack.sasl.core.ScramSha1PlusMechanism;
+import org.jivesoftware.smack.sasl.packet.SaslStreamElements.SASLFailure;
+import org.jivesoftware.smack.sasl.packet.SaslStreamElements.Success;
+
+import org.jxmpp.jid.DomainBareJid;
+import org.jxmpp.jid.EntityBareJid;
 
 /**
  * <p>This class is responsible authenticating the user using SASL, binding the resource
  * to the connection and establishing a session with the server.</p>
  *
  * <p>Once TLS has been negotiated (i.e. the connection has been secured) it is possible to
- * register with the server, authenticate using Non-SASL or authenticate using SASL. If the
- * server supports SASL then Smack will first try to authenticate using SASL. But if that
- * fails then Non-SASL will be tried.</p>
+ * register with the server or authenticate using SASL. If the
+ * server supports SASL then Smack will try to authenticate using SASL..</p>
  *
  * <p>The server may support many SASL mechanisms to use for authenticating. Out of the box
  * Smack provides several SASL mechanisms, but it is possible to register new SASL Mechanisms. Use
- * {@link #registerSASLMechanism(String, Class)} to register a new mechanisms. A registered
- * mechanism wont be used until {@link #supportSASLMechanism(String, int)} is called. By default,
- * the list of supported SASL mechanisms is determined from the {@link SmackConfiguration}. </p>
- *
- * <p>Once the user has been authenticated with SASL, it is necessary to bind a resource for
- * the connection. If no resource is passed in {@link #authenticate(String, String, String)}
- * then the server will assign a resource for the connection. In case a resource is passed
- * then the server will receive the desired resource but may assign a modified resource for
- * the connection.</p>
- *
- * <p>Once a resource has been binded and if the server supports sessions then Smack will establish
- * a session so that instant messaging and presence functionalities may be used.</p>
+ * {@link #registerSASLMechanism(SASLMechanism)} to register a new mechanisms.
  *
  * @see org.jivesoftware.smack.sasl.SASLMechanism
  *
  * @author Gaston Dombiak
  * @author Jay Kline
  */
-public class SASLAuthentication {
+public final class SASLAuthentication {
 
-    private static Map<String, Class<? extends SASLMechanism>> implementedMechanisms = new HashMap<String, Class<? extends SASLMechanism>>();
-    private static List<String> mechanismsPreferences = new ArrayList<String>();
+    private static final Logger LOGGER = Logger.getLogger(SASLAuthentication.class.getName());
 
-    private XMPPConnection connection;
-    private Collection<String> serverMechanisms = new ArrayList<String>();
-    private SASLMechanism currentMechanism = null;
-    /**
-     * Boolean indicating if SASL negotiation has finished and was successful.
-     */
-    private boolean saslNegotiated;
+    private static final List<SASLMechanism> REGISTERED_MECHANISMS = new ArrayList<>();
 
-    /**
-     * The SASL related error condition if there was one provided by the server.
-     */
-    private SASLFailure saslFailure;
+    private static final Set<String> BLACKLISTED_MECHANISMS = new HashSet<>();
 
     static {
-
-        // Register SASL mechanisms supported by Smack
-        registerSASLMechanism("EXTERNAL", SASLExternalMechanism.class);
-        registerSASLMechanism("GSSAPI", SASLGSSAPIMechanism.class);
-        registerSASLMechanism("DIGEST-MD5", SASLDigestMD5Mechanism.class);
-        registerSASLMechanism("CRAM-MD5", SASLCramMD5Mechanism.class);
-        registerSASLMechanism("PLAIN", SASLPlainMechanism.class);
-        registerSASLMechanism("ANONYMOUS", SASLAnonymous.class);
-
-        supportSASLMechanism("GSSAPI",0);
-        supportSASLMechanism("DIGEST-MD5",1);
-        supportSASLMechanism("CRAM-MD5",2);
-        supportSASLMechanism("PLAIN",3);
-        supportSASLMechanism("ANONYMOUS",4);
-
+        // Blacklist SCRAM-SHA-1-PLUS for now.
+        blacklistSASLMechanism(ScramSha1PlusMechanism.NAME);
     }
 
     /**
-     * Registers a new SASL mechanism
+     * Registers a new SASL mechanism.
      *
-     * @param name   common name of the SASL mechanism. E.g.: PLAIN, DIGEST-MD5 or KERBEROS_V4.
-     * @param mClass a SASLMechanism subclass.
+     * @param mechanism a SASLMechanism subclass.
      */
-    public static void registerSASLMechanism(String name, Class<? extends SASLMechanism> mClass) {
-        implementedMechanisms.put(name, mClass);
+    public static void registerSASLMechanism(SASLMechanism mechanism) {
+        synchronized (REGISTERED_MECHANISMS) {
+            REGISTERED_MECHANISMS.add(mechanism);
+            Collections.sort(REGISTERED_MECHANISMS);
+        }
     }
 
     /**
-     * Unregisters an existing SASL mechanism. Once the mechanism has been unregistered it won't
-     * be possible to authenticate users using the removed SASL mechanism. It also removes the
-     * mechanism from the supported list.
+     * Returns the registered SASLMechanism sorted by the level of preference.
      *
-     * @param name common name of the SASL mechanism. E.g.: PLAIN, DIGEST-MD5 or KERBEROS_V4.
+     * @return the registered SASLMechanism sorted by the level of preference.
      */
-    public static void unregisterSASLMechanism(String name) {
-        implementedMechanisms.remove(name);
-        mechanismsPreferences.remove(name);
-    }
-
-
-    /**
-     * Registers a new SASL mechanism in the specified preference position. The client will try
-     * to authenticate using the most prefered SASL mechanism that is also supported by the server.
-     * The SASL mechanism must be registered via {@link #registerSASLMechanism(String, Class)}
-     *
-     * @param name common name of the SASL mechanism. E.g.: PLAIN, DIGEST-MD5 or KERBEROS_V4.
-     */
-    public static void supportSASLMechanism(String name) {
-        mechanismsPreferences.add(0, name);
-    }
-
-    /**
-     * Registers a new SASL mechanism in the specified preference position. The client will try
-     * to authenticate using the most prefered SASL mechanism that is also supported by the server.
-     * Use the <tt>index</tt> parameter to set the level of preference of the new SASL mechanism.
-     * A value of 0 means that the mechanism is the most prefered one. The SASL mechanism must be
-     * registered via {@link #registerSASLMechanism(String, Class)}
-     *
-     * @param name common name of the SASL mechanism. E.g.: PLAIN, DIGEST-MD5 or KERBEROS_V4.
-     * @param index preference position amongst all the implemented SASL mechanism. Starts with 0.
-     */
-    public static void supportSASLMechanism(String name, int index) {
-        mechanismsPreferences.add(index, name);
-    }
-
-    /**
-     * Un-supports an existing SASL mechanism. Once the mechanism has been unregistered it won't
-     * be possible to authenticate users using the removed SASL mechanism. Note that the mechanism
-     * is still registered, but will just not be used.
-     *
-     * @param name common name of the SASL mechanism. E.g.: PLAIN, DIGEST-MD5 or KERBEROS_V4.
-     */
-    public static void unsupportSASLMechanism(String name) {
-        mechanismsPreferences.remove(name);
-    }
-
-    /**
-     * Returns the registerd SASLMechanism classes sorted by the level of preference.
-     *
-     * @return the registerd SASLMechanism classes sorted by the level of preference.
-     */
-    public static List<Class<? extends SASLMechanism>> getRegisterSASLMechanisms() {
-        List<Class<? extends SASLMechanism>> answer = new ArrayList<Class<? extends SASLMechanism>>();
-        for (String mechanismsPreference : mechanismsPreferences) {
-            answer.add(implementedMechanisms.get(mechanismsPreference));
+    public static Map<String, String> getRegisterdSASLMechanisms() {
+        Map<String, String> answer = new LinkedHashMap<>();
+        synchronized (REGISTERED_MECHANISMS) {
+            for (SASLMechanism mechanism : REGISTERED_MECHANISMS) {
+                answer.put(mechanism.getClass().getName(), mechanism.toString());
+            }
         }
         return answer;
     }
 
-    SASLAuthentication(XMPPConnection connection) {
-        super();
+    public static boolean isSaslMechanismRegistered(String saslMechanism) {
+        synchronized (REGISTERED_MECHANISMS) {
+            for (SASLMechanism mechanism : REGISTERED_MECHANISMS) {
+                if (mechanism.getName().equals(saslMechanism)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Unregister a SASLMechanism by it's full class name. For example
+     * "org.jivesoftware.smack.sasl.javax.SASLCramMD5Mechanism".
+     *
+     * @param clazz the SASLMechanism class's name
+     * @return true if the given SASLMechanism was removed, false otherwise
+     */
+    public static boolean unregisterSASLMechanism(String clazz) {
+        synchronized (REGISTERED_MECHANISMS) {
+            Iterator<SASLMechanism> it = REGISTERED_MECHANISMS.iterator();
+            while (it.hasNext()) {
+                SASLMechanism mechanism = it.next();
+                if (mechanism.getClass().getName().equals(clazz)) {
+                    it.remove();
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public static boolean blacklistSASLMechanism(String mechanism) {
+        synchronized (BLACKLISTED_MECHANISMS) {
+            return BLACKLISTED_MECHANISMS.add(mechanism);
+        }
+    }
+
+    public static boolean unBlacklistSASLMechanism(String mechanism) {
+        synchronized (BLACKLISTED_MECHANISMS) {
+            return BLACKLISTED_MECHANISMS.remove(mechanism);
+        }
+    }
+
+    public static Set<String> getBlacklistedSASLMechanisms() {
+        return Collections.unmodifiableSet(BLACKLISTED_MECHANISMS);
+    }
+
+    private final AbstractXMPPConnection connection;
+    private final ConnectionConfiguration configuration;
+    private SASLMechanism currentMechanism = null;
+
+    /**
+     * Boolean indicating if SASL negotiation has finished and was successful.
+     */
+    private boolean authenticationSuccessful;
+
+    /**
+     * Either of type {@link SmackException} or {@link SASLErrorException}
+     */
+    private Exception saslException;
+
+    SASLAuthentication(AbstractXMPPConnection connection, ConnectionConfiguration configuration) {
+        this.configuration = configuration;
         this.connection = connection;
         this.init();
-    }
-
-    /**
-     * Returns true if the server offered ANONYMOUS SASL as a way to authenticate users.
-     *
-     * @return true if the server offered ANONYMOUS SASL as a way to authenticate users.
-     */
-    public boolean hasAnonymousAuthentication() {
-        return serverMechanisms.contains("ANONYMOUS");
-    }
-
-    /**
-     * Returns true if the server offered SASL authentication besides ANONYMOUS SASL.
-     *
-     * @return true if the server offered SASL authentication besides ANONYMOUS SASL.
-     */
-    public boolean hasNonAnonymousAuthentication() {
-        return !serverMechanisms.isEmpty() && (serverMechanisms.size() != 1 || !hasAnonymousAuthentication());
-    }
-
-    /**
-     * Performs SASL authentication of the specified user. If SASL authentication was successful
-     * then resource binding and session establishment will be performed. This method will return
-     * the full JID provided by the server while binding a resource to the connection.<p>
-     *
-     * The server may assign a full JID with a username or resource different than the requested
-     * by this method.
-     *
-     * @param resource the desired resource.
-     * @param cbh the CallbackHandler used to get information from the user
-     * @throws IOException 
-     * @throws XMPPErrorException 
-     * @throws NoResponseException 
-     * @throws SASLErrorException 
-     * @throws ResourceBindingNotOfferedException
-     * @throws NotConnectedException 
-     */
-    public void authenticate(String resource, CallbackHandler cbh) throws IOException,
-                    NoResponseException, XMPPErrorException, SASLErrorException, ResourceBindingNotOfferedException, NotConnectedException {
-        // Locate the SASLMechanism to use
-        String selectedMechanism = null;
-        for (String mechanism : mechanismsPreferences) {
-            if (implementedMechanisms.containsKey(mechanism)
-                            && serverMechanisms.contains(mechanism)) {
-                selectedMechanism = mechanism;
-                break;
-            }
-        }
-        if (selectedMechanism != null) {
-            // A SASL mechanism was found. Authenticate using the selected mechanism and then
-            // proceed to bind a resource
-            Class<? extends SASLMechanism> mechanismClass = implementedMechanisms.get(selectedMechanism);
-
-            Constructor<? extends SASLMechanism> constructor;
-            try {
-                constructor = mechanismClass.getConstructor(SASLAuthentication.class);
-                currentMechanism = constructor.newInstance(this);
-            }
-            catch (Exception e) {
-                throw new SaslException("Exception when creating the SASLAuthentication instance",
-                                e);
-            }
-
-            synchronized (this) {
-                // Trigger SASL authentication with the selected mechanism. We use
-                // connection.getHost() since GSAPI requires the FQDN of the server, which
-                // may not match the XMPP domain.
-                currentMechanism.authenticate(connection.getHost(), cbh);
-                try {
-                    // Wait until SASL negotiation finishes
-                    wait(connection.getPacketReplyTimeout());
-                }
-                catch (InterruptedException e) {
-                    // Ignore
-                }
-            }
-
-            if (saslFailure != null) {
-                // SASL authentication failed and the server may have closed the connection
-                // so throw an exception
-                throw new SASLErrorException(selectedMechanism, saslFailure);
-            }
-
-            if (!saslNegotiated) {
-                throw new NoResponseException();
-            }
-        }
-        else {
-            throw new SaslException(
-                            "SASL Authentication failed. No known authentication mechanisims.");
-        }
     }
 
     /**
@@ -287,158 +180,111 @@ public class SASLAuthentication {
      *
      * @param username the username that is authenticating with the server.
      * @param password the password to send to the server.
-     * @param resource the desired resource.
-     * @throws XMPPErrorException 
-     * @throws SASLErrorException 
-     * @throws IOException 
-     * @throws SaslException 
-     * @throws SmackException 
+     * @param authzid the authorization identifier (typically null).
+     * @param sslSession the optional SSL/TLS session (if one was established)
+     * @return the used SASLMechanism.
+     * @throws XMPPErrorException
+     * @throws SASLErrorException
+     * @throws IOException
+     * @throws InterruptedException
+     * @throws SmackSaslException
+     * @throws NotConnectedException
+     * @throws NoResponseException
      */
-    public void authenticate(String username, String password, String resource)
-                    throws XMPPErrorException, SASLErrorException, SaslException, IOException,
-                    SmackException {
-        // Locate the SASLMechanism to use
-        String selectedMechanism = null;
-        for (String mechanism : mechanismsPreferences) {
-            if (implementedMechanisms.containsKey(mechanism)
-                            && serverMechanisms.contains(mechanism)) {
-                selectedMechanism = mechanism;
-                break;
-            }
-        }
-        if (selectedMechanism != null) {
-            // A SASL mechanism was found. Authenticate using the selected mechanism and then
-            // proceed to bind a resource
-            Class<? extends SASLMechanism> mechanismClass = implementedMechanisms.get(selectedMechanism);
-            try {
-                Constructor<? extends SASLMechanism> constructor = mechanismClass.getConstructor(SASLAuthentication.class);
-                currentMechanism = constructor.newInstance(this);
-            }
-            catch (Exception e) {
-                throw new SaslException("Exception when creating the SASLAuthentication instance",
-                                e);
-            }
+    public SASLMechanism authenticate(String username, String password, EntityBareJid authzid, SSLSession sslSession)
+                    throws XMPPErrorException, SASLErrorException, IOException,
+                    InterruptedException, SmackSaslException, NotConnectedException, NoResponseException {
+        currentMechanism = selectMechanism(authzid);
+        final CallbackHandler callbackHandler = configuration.getCallbackHandler();
+        final String host = connection.getHost();
+        final DomainBareJid xmppServiceDomain = connection.getXMPPServiceDomain();
 
-            synchronized (this) {
-                // Trigger SASL authentication with the selected mechanism. We use
-                // connection.getHost() since GSAPI requires the FQDN of the server, which
-                // may not match the XMPP domain.
-
-                // The serviceName is basically the value that XMPP server sends to the client as
-                // being
-                // the location of the XMPP service we are trying to connect to. This should have
-                // the
-                // format: host ["/" serv-name ] as per RFC-2831 guidelines
-                String serviceName = connection.getServiceName();
-                currentMechanism.authenticate(username, connection.getHost(), serviceName, password);
-
-                try {
-                    // Wait until SASL negotiation finishes
-                    wait(connection.getPacketReplyTimeout());
-                }
-                catch (InterruptedException e) {
-                    // Ignore
-                }
-
-            }
-
-            if (saslFailure != null) {
-                // SASL authentication failed and the server may have closed the connection
-                // so throw an exception
-                throw new SASLErrorException(selectedMechanism, saslFailure);
-            }
-
-            if (!saslNegotiated) {
-                throw new NoResponseException();
-            }
-        }
-        else {
-            throw new SaslException(
-                            "SASL Authentication failed. No known authentication mechanisims.");
-        }
-    }
-
-    /**
-     * Performs ANONYMOUS SASL authentication. If SASL authentication was successful
-     * then resource binding and session establishment will be performed. This method will return
-     * the full JID provided by the server while binding a resource to the connection.<p>
-     *
-     * The server will assign a full JID with a randomly generated resource and possibly with
-     * no username.
-     *
-     * @throws SASLErrorException 
-     * @throws IOException 
-     * @throws SaslException 
-     * @throws XMPPErrorException if an error occures while authenticating.
-     * @throws SmackException if there was no response from the server.
-     */
-    public void authenticateAnonymously() throws SASLErrorException, SaslException, IOException,
-                    SmackException, XMPPErrorException {
-        currentMechanism = new SASLAnonymous(this);
-
-        // Wait until SASL negotiation finishes
         synchronized (this) {
-            currentMechanism.authenticate(null, null, null, "");
-            try {
-                wait(connection.getPacketReplyTimeout());
+            if (callbackHandler != null) {
+                currentMechanism.authenticate(host, xmppServiceDomain, callbackHandler, authzid, sslSession);
             }
-            catch (InterruptedException e) {
-                // Ignore
+            else {
+                currentMechanism.authenticate(username, host, xmppServiceDomain, password, authzid, sslSession);
+            }
+            final long deadline = System.currentTimeMillis() + connection.getReplyTimeout();
+            while (!authenticationSuccessful && saslException == null) {
+                final long now = System.currentTimeMillis();
+                if (now >= deadline) break;
+                // Wait until SASL negotiation finishes
+                wait(deadline - now);
             }
         }
 
-        if (saslFailure != null) {
-            // SASL authentication failed and the server may have closed the connection
-            // so throw an exception
-            throw new SASLErrorException(currentMechanism.toString(), saslFailure);
+        if (saslException != null) {
+            if (saslException instanceof SmackSaslException) {
+                throw (SmackSaslException) saslException;
+            } else if (saslException instanceof SASLErrorException) {
+                throw (SASLErrorException) saslException;
+            } else if (saslException instanceof NotConnectedException) {
+                throw (NotConnectedException) saslException;
+            } else {
+                throw new IllegalStateException("Unexpected exception type" , saslException);
+            }
         }
 
-        if (!saslNegotiated) {
-            throw new NoResponseException();
+        if (!authenticationSuccessful) {
+            throw NoResponseException.newWith(connection, "successful SASL authentication");
         }
+
+        return currentMechanism;
     }
 
     /**
-     * Sets the available SASL mechanism reported by the server. The server will report the
-     * available SASL mechanism once the TLS negotiation was successful. This information is
-     * stored and will be used when doing the authentication for logging in the user.
+     * Wrapper for {@link #challengeReceived(String, boolean)}, with <code>finalChallenge</code> set
+     * to <code>false</code>.
      *
-     * @param mechanisms collection of strings with the available SASL mechanism reported
-     *                   by the server.
+     * @param challenge a base64 encoded string representing the challenge.
+     * @throws SmackException
+     * @throws InterruptedException
      */
-    public void setAvailableSASLMethods(Collection<String> mechanisms) {
-        this.serverMechanisms = mechanisms;
-    }
-
-    /**
-     * Returns true if the user was able to authenticate with the server usins SASL.
-     *
-     * @return true if the user was able to authenticate with the server usins SASL.
-     */
-    public boolean isAuthenticated() {
-        return saslNegotiated;
+    public void challengeReceived(String challenge) throws SmackException, InterruptedException {
+        challengeReceived(challenge, false);
     }
 
     /**
      * The server is challenging the SASL authentication we just sent. Forward the challenge
-     * to the current SASLMechanism we are using. The SASLMechanism will send a response to
+     * to the current SASLMechanism we are using. The SASLMechanism will eventually send a response to
      * the server. The length of the challenge-response sequence varies according to the
      * SASLMechanism in use.
      *
      * @param challenge a base64 encoded string representing the challenge.
-     * @throws IOException If a network error occures while authenticating.
-     * @throws NotConnectedException 
+     * @param finalChallenge true if this is the last challenge send by the server within the success stanza
+     * @throws SmackSaslException
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public void challengeReceived(String challenge) throws IOException, NotConnectedException {
-        currentMechanism.challengeReceived(challenge);
+    public void challengeReceived(String challenge, boolean finalChallenge) throws SmackSaslException, NotConnectedException, InterruptedException {
+        try {
+            currentMechanism.challengeReceived(challenge, finalChallenge);
+        } catch (InterruptedException | SmackSaslException | NotConnectedException e) {
+            authenticationFailed(e);
+            throw e;
+        }
     }
 
     /**
      * Notification message saying that SASL authentication was successful. The next step
      * would be to bind the resource.
+     * @param success result of the authentication.
+     * @throws SmackException
+     * @throws InterruptedException
      */
-    public void authenticated() {
-        saslNegotiated = true;
+    public void authenticated(Success success) throws SmackException, InterruptedException {
+        // RFC6120 6.3.10 "At the end of the authentication exchange, the SASL server (the XMPP
+        // "receiving entity") can include "additional data with success" if appropriate for the
+        // SASL mechanism in use. In XMPP, this is done by including the additional data as the XML
+        // character data of the <success/> element." The used SASL mechanism should be able to
+        // verify the data send by the server in the success stanza, if any.
+        if (success.getData() != null) {
+            challengeReceived(success.getData(), true);
+        }
+        currentMechanism.checkIfSuccessfulOrThrow();
+        authenticationSuccessful = true;
         // Wake up the thread that is waiting in the #authenticate method
         synchronized (this) {
             notify();
@@ -448,30 +294,92 @@ public class SASLAuthentication {
     /**
      * Notification message saying that SASL authentication has failed. The server may have
      * closed the connection depending on the number of possible retries.
-     * 
+     *
      * @param saslFailure the SASL failure as reported by the server
      * @see <a href="https://tools.ietf.org/html/rfc6120#section-6.5">RFC6120 6.5</a>
      */
     public void authenticationFailed(SASLFailure saslFailure) {
-        this.saslFailure = saslFailure;
+        authenticationFailed(new SASLErrorException(currentMechanism.getName(), saslFailure));
+    }
+
+    private void authenticationFailed(Exception exception) {
+        saslException = exception;
         // Wake up the thread that is waiting in the #authenticate method
         synchronized (this) {
             notify();
         }
     }
 
-    public void send(Packet stanza) throws NotConnectedException {
-        connection.sendPacket(stanza);
+    public boolean authenticationSuccessful() {
+        return authenticationSuccessful;
     }
 
-    
     /**
      * Initializes the internal state in order to be able to be reused. The authentication
      * is used by the connection at the first login and then reused after the connection
      * is disconnected and then reconnected.
      */
-    protected void init() {
-        saslNegotiated = false;
-        saslFailure = null;
+    void init() {
+        authenticationSuccessful = false;
+        saslException = null;
+    }
+
+    String getNameOfLastUsedSaslMechansism() {
+        SASLMechanism lastUsedMech = currentMechanism;
+        if (lastUsedMech == null) {
+            return null;
+        }
+        return lastUsedMech.getName();
+    }
+
+    private SASLMechanism selectMechanism(EntityBareJid authzid) throws SmackException.SmackSaslException {
+        Iterator<SASLMechanism> it = REGISTERED_MECHANISMS.iterator();
+        final List<String> serverMechanisms = getServerMechanisms();
+        if (serverMechanisms.isEmpty()) {
+            LOGGER.warning("Server did not report any SASL mechanisms");
+        }
+        // Iterate in SASL Priority order over registered mechanisms
+        while (it.hasNext()) {
+            SASLMechanism mechanism = it.next();
+            String mechanismName = mechanism.getName();
+            synchronized (BLACKLISTED_MECHANISMS) {
+                if (BLACKLISTED_MECHANISMS.contains(mechanismName)) {
+                    continue;
+                }
+            }
+            if (!configuration.isEnabledSaslMechanism(mechanismName)) {
+                continue;
+            }
+            if (authzid != null) {
+                if (!mechanism.authzidSupported()) {
+                    LOGGER.fine("Skipping " + mechanism + " because authzid is required by not supported by this SASL mechanism");
+                    continue;
+                }
+            }
+            if (serverMechanisms.contains(mechanismName)) {
+                // Create a new instance of the SASLMechanism for every authentication attempt.
+                return mechanism.instanceForAuthentication(connection, configuration);
+            }
+        }
+
+        synchronized (BLACKLISTED_MECHANISMS) {
+            // @formatter:off
+            throw new SmackException.SmackSaslException(
+                            "No supported and enabled SASL Mechanism provided by server. " +
+                            "Server announced mechanisms: " + serverMechanisms + ". " +
+                            "Registered SASL mechanisms with Smack: " + REGISTERED_MECHANISMS + ". " +
+                            "Enabled SASL mechanisms for this connection: " + configuration.getEnabledSaslMechanisms() + ". " +
+                            "Blacklisted SASL mechanisms: " + BLACKLISTED_MECHANISMS + '.'
+                            );
+            // @formatter;on
+        }
+    }
+
+    private List<String> getServerMechanisms() {
+        Mechanisms mechanisms = connection.getFeature(Mechanisms.ELEMENT, Mechanisms.NAMESPACE);
+        if (mechanisms == null) {
+            return Collections.emptyList();
+        }
+        return mechanisms.getMechanisms();
     }
 }

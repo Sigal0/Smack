@@ -17,27 +17,33 @@
 
 package org.jivesoftware.smackx.workgroup.agent;
 
-import org.jivesoftware.smackx.workgroup.packet.AgentStatus;
-import org.jivesoftware.smackx.workgroup.packet.AgentStatusRequest;
-import org.jivesoftware.smack.PacketListener;
-import org.jivesoftware.smack.SmackException.NotConnectedException;
-import org.jivesoftware.smack.XMPPConnection;
-import org.jivesoftware.smack.filter.PacketFilter;
-import org.jivesoftware.smack.filter.PacketTypeFilter;
-import org.jivesoftware.smack.packet.Packet;
-import org.jivesoftware.smack.packet.Presence;
-import org.jxmpp.util.XmppStringUtils;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Logger;
+
+import org.jivesoftware.smack.SmackException.NotConnectedException;
+import org.jivesoftware.smack.StanzaListener;
+import org.jivesoftware.smack.XMPPConnection;
+import org.jivesoftware.smack.filter.StanzaFilter;
+import org.jivesoftware.smack.filter.StanzaTypeFilter;
+import org.jivesoftware.smack.packet.Presence;
+import org.jivesoftware.smack.packet.Stanza;
+
+import org.jivesoftware.smackx.workgroup.packet.AgentStatus;
+import org.jivesoftware.smackx.workgroup.packet.AgentStatusRequest;
+
+import org.jxmpp.jid.EntityBareJid;
+import org.jxmpp.jid.EntityFullJid;
+import org.jxmpp.jid.Jid;
+import org.jxmpp.jid.impl.JidCreate;
+import org.jxmpp.jid.parts.Resourcepart;
+import org.jxmpp.stringprep.XmppStringprepException;
 
 /**
  * Manges information about the agents in a workgroup and their presence.
@@ -51,11 +57,11 @@ public class AgentRoster {
     private static final int EVENT_AGENT_REMOVED = 1;
     private static final int EVENT_PRESENCE_CHANGED = 2;
 
-    private XMPPConnection connection;
-    private String workgroupJID;
-    private List<String> entries;
-    private List<AgentRosterListener> listeners;
-    private Map<String, Map<String, Presence>> presenceMap;
+    private final XMPPConnection connection;
+    private final EntityBareJid workgroupJID;
+    private final List<EntityBareJid> entries = new ArrayList<>();
+    private final List<AgentRosterListener> listeners = new ArrayList<>();
+    private final Map<Jid, Map<Resourcepart, Presence>> presenceMap = new HashMap<>();
     // The roster is marked as initialized when at least a single roster packet
     // has been recieved and processed.
     boolean rosterInitialized = false;
@@ -64,37 +70,36 @@ public class AgentRoster {
      * Constructs a new AgentRoster.
      *
      * @param connection an XMPP connection.
-     * @throws NotConnectedException 
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    AgentRoster(XMPPConnection connection, String workgroupJID) throws NotConnectedException {
+    AgentRoster(XMPPConnection connection, EntityBareJid workgroupJID) throws NotConnectedException, InterruptedException {
         this.connection = connection;
         this.workgroupJID = workgroupJID;
-        entries = new ArrayList<String>();
-        listeners = new ArrayList<AgentRosterListener>();
-        presenceMap = new HashMap<String, Map<String, Presence>>();
         // Listen for any roster packets.
-        PacketFilter rosterFilter = new PacketTypeFilter(AgentStatusRequest.class);
-        connection.addPacketListener(new AgentStatusListener(), rosterFilter);
+        StanzaFilter rosterFilter = new StanzaTypeFilter(AgentStatusRequest.class);
+        connection.addAsyncStanzaListener(new AgentStatusListener(), rosterFilter);
         // Listen for any presence packets.
-        connection.addPacketListener(new PresencePacketListener(),
-                new PacketTypeFilter(Presence.class));
+        connection.addAsyncStanzaListener(new PresencePacketListener(),
+                new StanzaTypeFilter(Presence.class));
 
         // Send request for roster.
         AgentStatusRequest request = new AgentStatusRequest();
         request.setTo(workgroupJID);
-        connection.sendPacket(request);
+        connection.sendStanza(request);
     }
 
     /**
      * Reloads the entire roster from the server. This is an asynchronous operation,
      * which means the method will return immediately, and the roster will be
      * reloaded at a later point when the server responds to the reload request.
-     * @throws NotConnectedException 
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public void reload() throws NotConnectedException {
+    public void reload() throws NotConnectedException, InterruptedException {
         AgentStatusRequest request = new AgentStatusRequest();
         request.setTo(workgroupJID);
-        connection.sendPacket(request);
+        connection.sendStanza(request);
     }
 
     /**
@@ -109,14 +114,20 @@ public class AgentRoster {
                 listeners.add(listener);
 
                 // Fire events for the existing entries and presences in the roster
-                for (Iterator<String> it = getAgents().iterator(); it.hasNext();) {
-                    String jid = it.next();
+                for (EntityBareJid jid : getAgents()) {
                     // Check again in case the agent is no longer in the roster (highly unlikely
                     // but possible)
                     if (entries.contains(jid)) {
                         // Fire the agent added event
                         listener.agentAdded(jid);
-                        Map<String,Presence> userPresences = presenceMap.get(jid);
+                        Jid j;
+                        try {
+                            j = JidCreate.from(jid);
+                        }
+                        catch (XmppStringprepException e) {
+                            throw new IllegalStateException(e);
+                        }
+                        Map<Resourcepart, Presence> userPresences = presenceMap.get(j);
                         if (userPresences != null) {
                             Iterator<Presence> presences = userPresences.values().iterator();
                             while (presences.hasNext()) {
@@ -156,10 +167,10 @@ public class AgentRoster {
      *
      * @return all entries in the roster.
      */
-    public Set<String> getAgents() {
-        Set<String> agents = new HashSet<String>();
+    public Set<EntityBareJid> getAgents() {
+        Set<EntityBareJid> agents = new HashSet<>();
         synchronized (entries) {
-            for (Iterator<String> i = entries.iterator(); i.hasNext();) {
+            for (Iterator<EntityBareJid> i = entries.iterator(); i.hasNext();) {
                 agents.add(i.next());
             }
         }
@@ -174,14 +185,14 @@ public class AgentRoster {
      *            or "user@domain/resource").
      * @return true if the XMPP address is an agent in the workgroup.
      */
-    public boolean contains(String jid) {
+    public boolean contains(Jid jid) {
         if (jid == null) {
             return false;
         }
         synchronized (entries) {
-            for (Iterator<String> i = entries.iterator(); i.hasNext();) {
-                String entry = i.next();
-                if (entry.toLowerCase(Locale.US).equals(jid.toLowerCase())) {
+            for (Iterator<EntityBareJid> i = entries.iterator(); i.hasNext();) {
+                EntityBareJid entry = i.next();
+                if (entry.equals(jid)) {
                     return true;
                 }
             }
@@ -198,9 +209,9 @@ public class AgentRoster {
      * @return the agent's current presence, or <tt>null</tt> if the agent is unavailable
      *         or if no presence information is available..
      */
-    public Presence getPresence(String user) {
-        String key = getPresenceMapKey(user);
-        Map<String, Presence> userPresences = presenceMap.get(key);
+    public Presence getPresence(Jid user) {
+        Jid key = getPresenceMapKey(user);
+        Map<Resourcepart, Presence> userPresences = presenceMap.get(key);
         if (userPresences == null) {
             Presence presence = new Presence(Presence.Type.unavailable);
             presence.setFrom(user);
@@ -209,13 +220,13 @@ public class AgentRoster {
         else {
             // Find the resource with the highest priority
             // Might be changed to use the resource with the highest availability instead.
-            Iterator<String> it = userPresences.keySet().iterator();
+            Iterator<Resourcepart> it = userPresences.keySet().iterator();
             Presence p;
             Presence presence = null;
 
             while (it.hasNext()) {
-                p = (Presence)userPresences.get(it.next());
-                if (presence == null){
+                p = userPresences.get(it.next());
+                if (presence == null) {
                     presence = p;
                 }
                 else {
@@ -246,10 +257,10 @@ public class AgentRoster {
      * @param user the fully qualified xmpp ID, e.g. jdoe@example.com/Work.
      * @return the key to use in the presenceMap for the fully qualified xmpp ID.
      */
-    private String getPresenceMapKey(String user) {
-        String key = user;
+    private Jid getPresenceMapKey(Jid user) {
+        Jid key = user;
         if (!contains(user)) {
-            key = XmppStringUtils.parseBareAddress(user).toLowerCase(Locale.US);
+            key = user.asEntityBareJidIfPossible();
         }
         return key;
     }
@@ -258,7 +269,7 @@ public class AgentRoster {
      * Fires event to listeners.
      */
     private void fireEvent(int eventType, Object eventObject) {
-        AgentRosterListener[] listeners = null;
+        AgentRosterListener[] listeners;
         synchronized (this.listeners) {
             listeners = new AgentRosterListener[this.listeners.size()];
             this.listeners.toArray(listeners);
@@ -266,13 +277,13 @@ public class AgentRoster {
         for (int i = 0; i < listeners.length; i++) {
             switch (eventType) {
                 case EVENT_AGENT_ADDED:
-                    listeners[i].agentAdded((String)eventObject);
+                    listeners[i].agentAdded((EntityBareJid) eventObject);
                     break;
                 case EVENT_AGENT_REMOVED:
-                    listeners[i].agentRemoved((String)eventObject);
+                    listeners[i].agentRemoved((EntityBareJid) eventObject);
                     break;
                 case EVENT_PRESENCE_CHANGED:
-                    listeners[i].presenceChanged((Presence)eventObject);
+                    listeners[i].presenceChanged((Presence) eventObject);
                     break;
             }
         }
@@ -281,22 +292,23 @@ public class AgentRoster {
     /**
      * Listens for all presence packets and processes them.
      */
-    private class PresencePacketListener implements PacketListener {
-        public void processPacket(Packet packet) {
-            Presence presence = (Presence)packet;
-            String from = presence.getFrom();
+    private class PresencePacketListener implements StanzaListener {
+        @Override
+        public void processStanza(Stanza packet) {
+            Presence presence = (Presence) packet;
+            EntityFullJid from = presence.getFrom().asEntityFullJidIfPossible();
             if (from == null) {
                 // TODO Check if we need to ignore these presences or this is a server bug?
-                LOGGER.warning("Presence with no FROM: " + presence.toXML());
+                LOGGER.warning("Presence with non full JID from: " + presence.toXML());
                 return;
             }
-            String key = getPresenceMapKey(from);
+            Jid key = getPresenceMapKey(from);
 
             // If an "available" packet, add it to the presence map. Each presence map will hold
             // for a particular user a map with the presence packets saved for each resource.
             if (presence.getType() == Presence.Type.available) {
                 // Ignore the presence packet unless it has an agent status extension.
-                AgentStatus agentStatus = (AgentStatus)presence.getExtension(
+                AgentStatus agentStatus = presence.getExtension(
                         AgentStatus.ELEMENT_NAME, AgentStatus.NAMESPACE);
                 if (agentStatus == null) {
                     return;
@@ -306,10 +318,10 @@ public class AgentRoster {
                 else if (!workgroupJID.equals(agentStatus.getWorkgroupJID())) {
                     return;
                 }
-                Map<String, Presence> userPresences;
+                Map<Resourcepart, Presence> userPresences;
                 // Get the user presence map
                 if (presenceMap.get(key) == null) {
-                    userPresences = new HashMap<String, Presence>();
+                    userPresences = new HashMap<>();
                     presenceMap.put(key, userPresences);
                 }
                 else {
@@ -317,13 +329,13 @@ public class AgentRoster {
                 }
                 // Add the new presence, using the resources as a key.
                 synchronized (userPresences) {
-                    userPresences.put(XmppStringUtils.parseResource(from), presence);
+                    userPresences.put(from.getResourcepart(), presence);
                 }
                 // Fire an event.
                 synchronized (entries) {
-                    for (Iterator<String> i = entries.iterator(); i.hasNext();) {
-                        String entry = i.next();
-                        if (entry.toLowerCase(Locale.US).equals(XmppStringUtils.parseBareAddress(key).toLowerCase())) {
+                    for (Iterator<EntityBareJid> i = entries.iterator(); i.hasNext();) {
+                        EntityBareJid entry = i.next();
+                        if (entry.equals(key.asEntityBareJidIfPossible())) {
                             fireEvent(EVENT_PRESENCE_CHANGED, packet);
                         }
                     }
@@ -332,9 +344,9 @@ public class AgentRoster {
             // If an "unavailable" packet, remove any entries in the presence map.
             else if (presence.getType() == Presence.Type.unavailable) {
                 if (presenceMap.get(key) != null) {
-                    Map<String,Presence> userPresences = presenceMap.get(key);
+                    Map<Resourcepart, Presence> userPresences = presenceMap.get(key);
                     synchronized (userPresences) {
-                        userPresences.remove(XmppStringUtils.parseResource(from));
+                        userPresences.remove(from.getResourcepart());
                     }
                     if (userPresences.isEmpty()) {
                         presenceMap.remove(key);
@@ -342,9 +354,8 @@ public class AgentRoster {
                 }
                 // Fire an event.
                 synchronized (entries) {
-                    for (Iterator<String> i = entries.iterator(); i.hasNext();) {
-                        String entry = (String)i.next();
-                        if (entry.toLowerCase(Locale.US).equals(XmppStringUtils.parseBareAddress(key).toLowerCase())) {
+                    for (EntityBareJid entry : entries) {
+                        if (entry.equals(key.asEntityBareJidIfPossible())) {
                             fireEvent(EVENT_PRESENCE_CHANGED, packet);
                         }
                     }
@@ -356,21 +367,20 @@ public class AgentRoster {
     /**
      * Listens for all roster packets and processes them.
      */
-    private class AgentStatusListener implements PacketListener {
+    private class AgentStatusListener implements StanzaListener {
 
-        public void processPacket(Packet packet) {
+        @Override
+        public void processStanza(Stanza packet) {
             if (packet instanceof AgentStatusRequest) {
-                AgentStatusRequest statusRequest = (AgentStatusRequest)packet;
+                AgentStatusRequest statusRequest = (AgentStatusRequest) packet;
                 for (Iterator<AgentStatusRequest.Item> i = statusRequest.getAgents().iterator(); i.hasNext();) {
                     AgentStatusRequest.Item item = i.next();
-                    String agentJID = item.getJID();
+                    EntityBareJid agentJID = item.getJID();
                     if ("remove".equals(item.getType())) {
 
                         // Removing the user from the roster, so remove any presence information
                         // about them.
-                        String key = XmppStringUtils.parseLocalpart(XmppStringUtils.parseLocalpart(agentJID) + "@" +
-                                XmppStringUtils.parseDomain(agentJID));
-                        presenceMap.remove(key);
+                        presenceMap.remove(agentJID.asBareJid());
                         // Fire event for roster listeners.
                         fireEvent(EVENT_AGENT_REMOVED, agentJID);
                     }

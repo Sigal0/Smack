@@ -17,51 +17,61 @@
 
 package org.jivesoftware.smackx.workgroup.packet;
 
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.parsing.SmackParsingException;
+import org.jivesoftware.smack.provider.IQProvider;
+import org.jivesoftware.smack.util.PacketParserUtils;
+import org.jivesoftware.smack.util.ParserUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
 import org.jivesoftware.smackx.workgroup.MetaData;
 import org.jivesoftware.smackx.workgroup.agent.InvitationRequest;
 import org.jivesoftware.smackx.workgroup.agent.OfferContent;
 import org.jivesoftware.smackx.workgroup.agent.TransferRequest;
 import org.jivesoftware.smackx.workgroup.agent.UserRequest;
 import org.jivesoftware.smackx.workgroup.util.MetaDataUtils;
-import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.provider.IQProvider;
-import org.jivesoftware.smack.util.PacketParserUtils;
-import org.xmlpull.v1.XmlPullParser;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import org.jxmpp.jid.Jid;
 
 /**
  * An IQProvider for agent offer requests.
  *
  * @author loki der quaeler
  */
-public class OfferRequestProvider implements IQProvider {
+public class OfferRequestProvider extends IQProvider<IQ> {
+    // FIXME It seems because OfferRequestPacket is also defined here, we can
+    // not add it as generic to the provider, the provider and the packet should
+    // be split, but since this is legacy code, I don't think that this will
+    // happen anytime soon.
 
-    public OfferRequestProvider() {
-    }
-
-    public IQ parseIQ(XmlPullParser parser) throws Exception {
-        int eventType = parser.getEventType();
+    @Override
+    public OfferRequestPacket parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException, SmackParsingException {
+        XmlPullParser.Event eventType = parser.getEventType();
         String sessionID = null;
         int timeout = -1;
         OfferContent content = null;
         boolean done = false;
-        Map<String, List<String>> metaData = new HashMap<String, List<String>>();
+        Map<String, List<String>> metaData = new HashMap<>();
 
-        if (eventType != XmlPullParser.START_TAG) {
+        if (eventType != XmlPullParser.Event.START_ELEMENT) {
             // throw exception
         }
 
-        String userJID = parser.getAttributeValue("", "jid");
+        Jid userJID = ParserUtils.getJidAttribute(parser);
         // Default userID to the JID.
-        String userID = userJID;
+        Jid userID = userJID;
 
         while (!done) {
             eventType = parser.next();
 
-            if (eventType == XmlPullParser.START_TAG) {
+            if (eventType == XmlPullParser.Event.START_ELEMENT) {
                 String elemName = parser.getName();
 
                 if ("timeout".equals(elemName)) {
@@ -74,24 +84,24 @@ public class OfferRequestProvider implements IQProvider {
                    sessionID = parser.getAttributeValue("", "id");
                 }
                 else if (UserID.ELEMENT_NAME.equals(elemName)) {
-                    userID = parser.getAttributeValue("", "id");
+                    userID = ParserUtils.getJidAttribute(parser, "id");
                 }
                 else if ("user-request".equals(elemName)) {
                     content = UserRequest.getInstance();
                 }
                 else if (RoomInvitation.ELEMENT_NAME.equals(elemName)) {
                     RoomInvitation invitation = (RoomInvitation) PacketParserUtils
-                            .parsePacketExtension(RoomInvitation.ELEMENT_NAME, RoomInvitation.NAMESPACE, parser);
+                            .parseExtensionElement(RoomInvitation.ELEMENT_NAME, RoomInvitation.NAMESPACE, parser, xmlEnvironment);
                     content = new InvitationRequest(invitation.getInviter(), invitation.getRoom(),
                             invitation.getReason());
                 }
                 else if (RoomTransfer.ELEMENT_NAME.equals(elemName)) {
                     RoomTransfer transfer = (RoomTransfer) PacketParserUtils
-                            .parsePacketExtension(RoomTransfer.ELEMENT_NAME, RoomTransfer.NAMESPACE, parser);
+                            .parseExtensionElement(RoomTransfer.ELEMENT_NAME, RoomTransfer.NAMESPACE, parser, xmlEnvironment);
                     content = new TransferRequest(transfer.getInviter(), transfer.getRoom(), transfer.getReason());
                 }
             }
-            else if (eventType == XmlPullParser.END_TAG) {
+            else if (eventType == XmlPullParser.Event.END_ELEMENT) {
                 if ("offer".equals(parser.getName())) {
                     done = true;
                 }
@@ -107,16 +117,19 @@ public class OfferRequestProvider implements IQProvider {
 
     public static class OfferRequestPacket extends IQ {
 
-        private int timeout;
-        private String userID;
-        private String userJID;
-        private Map<String, List<String>> metaData;
-        private String sessionID;
-        private OfferContent content;
+        public static final String ELEMENT = "offer";
+        public static final String NAMESPACE = "http://jabber.org/protocol/workgroup";
 
-        public OfferRequestPacket(String userJID, String userID, int timeout, Map<String, List<String>> metaData,
-                String sessionID, OfferContent content)
-        {
+        private final int timeout;
+        private final Jid userID;
+        private final Jid userJID;
+        private final Map<String, List<String>> metaData;
+        private final String sessionID;
+        private final OfferContent content;
+
+        public OfferRequestPacket(Jid userJID, Jid userID, int timeout, Map<String, List<String>> metaData,
+                String sessionID, OfferContent content) {
+            super(ELEMENT, NAMESPACE);
             this.userJID = userJID;
             this.userID = userID;
             this.timeout = timeout;
@@ -131,7 +144,7 @@ public class OfferRequestProvider implements IQProvider {
          *
          * @return the user ID.
          */
-        public String getUserID() {
+        public Jid getUserID() {
             return userID;
         }
 
@@ -140,7 +153,7 @@ public class OfferRequestProvider implements IQProvider {
          *
          * @return the user JID.
          */
-        public String getUserJID() {
+        public Jid getUserJID() {
             return userJID;
         }
 
@@ -177,11 +190,10 @@ public class OfferRequestProvider implements IQProvider {
             return this.metaData;
         }
 
-        public String getChildElementXML () {
-            StringBuilder buf = new StringBuilder();
-
-            buf.append("<offer xmlns=\"http://jabber.org/protocol/workgroup\" jid=\"").append(userJID).append("\">");
-            buf.append("<timeout>").append(timeout).append("</timeout>");
+        @Override
+        protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder buf) {
+            buf.append(" jid=\"").append(userJID).append("\">");
+            buf.append("<timeout>").append(Integer.toString(timeout)).append("</timeout>");
 
             if (sessionID != null) {
                 buf.append('<').append(SessionID.ELEMENT_NAME);
@@ -201,9 +213,7 @@ public class OfferRequestProvider implements IQProvider {
                 buf.append(UserID.NAMESPACE).append("\"/>");
             }
 
-            buf.append("</offer>");
-
-            return buf.toString();
+            return buf;
         }
     }
 }

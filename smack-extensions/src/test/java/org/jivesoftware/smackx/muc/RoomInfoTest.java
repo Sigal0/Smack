@@ -16,20 +16,19 @@
  */
 package org.jivesoftware.smackx.muc;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
 import org.jivesoftware.smackx.disco.packet.DiscoverInfo;
-import org.jivesoftware.smackx.muc.RoomInfo;
 import org.jivesoftware.smackx.xdata.FormField;
 import org.jivesoftware.smackx.xdata.packet.DataForm;
-
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
 
 public class RoomInfoTest {
     @Test
     public void validateRoomWithEmptyForm() {
-        DataForm dataForm = new DataForm("result");
+        DataForm dataForm = new DataForm(DataForm.Type.result);
 
         DiscoverInfo discoInfo = new DiscoverInfo();
         discoInfo.addExtension(dataForm);
@@ -41,7 +40,7 @@ public class RoomInfoTest {
 
     @Test
     public void validateRoomWithForm() {
-        DataForm dataForm = new DataForm("result");
+        DataForm dataForm = new DataForm(DataForm.Type.result);
 
         FormField desc = new FormField("muc#roominfo_description");
         desc.addValue("The place for all good witches!");

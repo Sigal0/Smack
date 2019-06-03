@@ -16,30 +16,28 @@
  */
 package org.jivesoftware.smackx.bytestreams.ibb.provider;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
-import java.io.IOException;
-import java.io.StringReader;
 import java.util.Properties;
 
+import org.jivesoftware.smack.util.PacketParserUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+
+import org.jivesoftware.smackx.InitExtensions;
 import org.jivesoftware.smackx.bytestreams.ibb.InBandBytestreamManager.StanzaType;
 import org.jivesoftware.smackx.bytestreams.ibb.packet.Open;
-import org.jivesoftware.smackx.bytestreams.ibb.provider.OpenIQProvider;
-import org.junit.Test;
-import org.xmlpull.v1.XmlPullParserFactory;
-import org.xmlpull.v1.XmlPullParser;
-import org.xmlpull.v1.XmlPullParserException;
 
 import com.jamesmurty.utils.XMLBuilder;
+import org.junit.Test;
 
 /**
  * Test for the OpenIQProvider class.
- * 
+ *
  * @author Henning Staib
  */
-public class OpenIQProviderTest {
+public class OpenIQProviderTest extends InitExtensions {
 
-    private static Properties outputProperties = new Properties();
+    private static final Properties outputProperties = new Properties();
     {
         outputProperties.put(javax.xml.transform.OutputKeys.OMIT_XML_DECLARATION, "yes");
     }
@@ -52,10 +50,11 @@ public class OpenIQProviderTest {
             .a("sid", "i781hf64")
             .a("stanza", "iq")
             .asString(outputProperties);
-        
+
         OpenIQProvider oip = new OpenIQProvider();
-        Open open = (Open) oip.parseIQ(getParser(control));
-        
+        XmlPullParser parser = PacketParserUtils.getParserFor(control);
+        Open open = oip.parse(parser);
+
         assertEquals(StanzaType.IQ, open.getStanza());
     }
 
@@ -67,24 +66,11 @@ public class OpenIQProviderTest {
             .a("sid", "i781hf64")
             .a("stanza", "message")
             .asString(outputProperties);
-        
+
         OpenIQProvider oip = new OpenIQProvider();
-        Open open = (Open) oip.parseIQ(getParser(control));
-        
+        XmlPullParser parser = PacketParserUtils.getParserFor(control);
+        Open open = oip.parse(parser);
+
         assertEquals(StanzaType.MESSAGE, open.getStanza());
     }
-
-    private XmlPullParser getParser(String control) throws XmlPullParserException,
-                    IOException {
-        XmlPullParser parser = XmlPullParserFactory.newInstance().newPullParser();
-        parser.setInput(new StringReader(control));
-        while (true) {
-            if (parser.next() == XmlPullParser.START_TAG
-                            && parser.getName().equals("open")) {
-                break;
-            }
-        }
-        return parser;
-    }
-
 }

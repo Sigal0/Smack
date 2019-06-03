@@ -16,24 +16,28 @@
  */
 package org.jivesoftware.smack.util;
 
-import java.io.*;
-import java.util.*;
+import java.io.IOException;
+import java.io.Reader;
+import java.util.ArrayList;
+import java.util.List;
+
 
 /**
  * An ObservableReader is a wrapper on a Reader that notifies to its listeners when
  * reading character streams.
- * 
+ *
  * @author Gaston Dombiak
  */
 public class ObservableReader extends Reader {
 
     Reader wrappedReader = null;
-    List<ReaderListener> listeners = new ArrayList<ReaderListener>();
+    final List<ReaderListener> listeners = new ArrayList<ReaderListener>();
 
     public ObservableReader(Reader wrappedReader) {
         this.wrappedReader = wrappedReader;
     }
-        
+
+    @Override
     public int read(char[] cbuf, int off, int len) throws IOException {
         int count = wrappedReader.read(cbuf, off, len);
         if (count > 0) {
@@ -51,34 +55,42 @@ public class ObservableReader extends Reader {
         return count;
     }
 
+    @Override
     public void close() throws IOException {
         wrappedReader.close();
     }
 
+    @Override
     public int read() throws IOException {
         return wrappedReader.read();
     }
 
-    public int read(char cbuf[]) throws IOException {
+    @Override
+    public int read(char[] cbuf) throws IOException {
         return wrappedReader.read(cbuf);
     }
 
+    @Override
     public long skip(long n) throws IOException {
         return wrappedReader.skip(n);
     }
 
+    @Override
     public boolean ready() throws IOException {
         return wrappedReader.ready();
     }
 
+    @Override
     public boolean markSupported() {
         return wrappedReader.markSupported();
     }
 
+    @Override
     public void mark(int readAheadLimit) throws IOException {
         wrappedReader.mark(readAheadLimit);
     }
 
+    @Override
     public void reset() throws IOException {
         wrappedReader.reset();
     }

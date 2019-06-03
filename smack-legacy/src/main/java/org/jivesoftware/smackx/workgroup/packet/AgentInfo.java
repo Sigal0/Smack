@@ -17,27 +17,35 @@
 
 package org.jivesoftware.smackx.workgroup.packet;
 
+import java.io.IOException;
+
 import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
 import org.jivesoftware.smack.provider.IQProvider;
-import org.xmlpull.v1.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
 
 /**
- * IQ packet for retrieving and changing the Agent personal information.
+ * IQ stanza for retrieving and changing the Agent personal information.
  */
 public class AgentInfo extends IQ {
 
     /**
-    * Element name of the packet extension.
+    * Element name of the stanza extension.
     */
    public static final String ELEMENT_NAME = "agent-info";
 
    /**
-    * Namespace of the packet extension.
+    * Namespace of the stanza extension.
     */
    public static final String NAMESPACE = "http://jivesoftware.com/protocol/workgroup";
 
     private String jid;
     private String name;
+
+    public AgentInfo() {
+        super(ELEMENT_NAME, NAMESPACE);
+    }
 
     /**
      * Returns the Agent's jid.
@@ -77,19 +85,18 @@ public class AgentInfo extends IQ {
         this.name = name;
     }
 
-    public String getChildElementXML() {
-        StringBuilder buf = new StringBuilder();
+    @Override
+    protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder buf) {
+        buf.rightAngleBracket();
 
-        buf.append("<").append(ELEMENT_NAME).append(" xmlns=\"").append(NAMESPACE).append("\">");
         if (jid != null) {
             buf.append("<jid>").append(getJid()).append("</jid>");
         }
         if (name != null) {
             buf.append("<name>").append(getName()).append("</name>");
         }
-        buf.append("</").append(ELEMENT_NAME).append("> ");
 
-        return buf.toString();
+        return buf;
     }
 
     /**
@@ -97,19 +104,16 @@ public class AgentInfo extends IQ {
      *
      * @author Gaston Dombiak
      */
-    public static class Provider implements IQProvider {
+    public static class Provider extends IQProvider<AgentInfo> {
 
-        public Provider() {
-            super();
-        }
-
-        public IQ parseIQ(XmlPullParser parser) throws Exception {
+        @Override
+        public AgentInfo parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException {
             AgentInfo answer = new AgentInfo();
 
             boolean done = false;
             while (!done) {
-                int eventType = parser.next();
-                if (eventType == XmlPullParser.START_TAG) {
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT) {
                     if (parser.getName().equals("jid")) {
                         answer.setJid(parser.nextText());
                     }
@@ -117,7 +121,7 @@ public class AgentInfo extends IQ {
                         answer.setName(parser.nextText());
                     }
                 }
-                else if (eventType == XmlPullParser.END_TAG) {
+                else if (eventType == XmlPullParser.Event.END_ELEMENT) {
                     if (parser.getName().equals(ELEMENT_NAME)) {
                         done = true;
                     }

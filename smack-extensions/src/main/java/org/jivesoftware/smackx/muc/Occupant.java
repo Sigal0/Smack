@@ -17,10 +17,16 @@
 
 package org.jivesoftware.smackx.muc;
 
-import org.jivesoftware.smackx.muc.packet.MUCAdmin;
-import org.jivesoftware.smackx.muc.packet.MUCUser;
+import java.util.logging.Logger;
+
 import org.jivesoftware.smack.packet.Presence;
-import org.jxmpp.util.XmppStringUtils;
+
+import org.jivesoftware.smackx.muc.packet.MUCItem;
+import org.jivesoftware.smackx.muc.packet.MUCUser;
+
+import org.jxmpp.jid.EntityFullJid;
+import org.jxmpp.jid.Jid;
+import org.jxmpp.jid.parts.Resourcepart;
 
 /**
  * Represents the information about an occupant in a given room. The information will always have
@@ -29,15 +35,17 @@ import org.jxmpp.util.XmppStringUtils;
  * @author Gaston Dombiak
  */
 public class Occupant {
-    // Fields that must have a value
-    private String affiliation;
-    private String role;
-    // Fields that may have a value
-    private String jid;
-    private String nick;
 
-    Occupant(MUCAdmin.Item item) {
-        super();
+    private static final Logger LOGGER = Logger.getLogger(Occupant.class.getName());
+
+    // Fields that must have a value
+    private final MUCAffiliation affiliation;
+    private final MUCRole role;
+    // Fields that may have a value
+    private final Jid jid;
+    private final Resourcepart nick;
+
+    Occupant(MUCItem item) {
         this.jid = item.getJid();
         this.affiliation = item.getAffiliation();
         this.role = item.getRole();
@@ -45,15 +53,20 @@ public class Occupant {
     }
 
     Occupant(Presence presence) {
-        super();
         MUCUser mucUser = (MUCUser) presence.getExtension("x",
                 "http://jabber.org/protocol/muc#user");
-        MUCUser.Item item = mucUser.getItem();
+        MUCItem item = mucUser.getItem();
         this.jid = item.getJid();
         this.affiliation = item.getAffiliation();
         this.role = item.getRole();
         // Get the nickname from the FROM attribute of the presence
-        this.nick = XmppStringUtils.parseResource(presence.getFrom());
+        EntityFullJid from = presence.getFrom().asEntityFullJidIfPossible();
+        if (from == null) {
+            LOGGER.warning("Occupant presence without resource: " + presence.getFrom());
+            this.nick = null;
+        } else {
+            this.nick = from.getResourcepart();
+        }
     }
 
     /**
@@ -64,7 +77,7 @@ public class Occupant {
      *
      * @return the full JID of the occupant.
      */
-    public String getJid() {
+    public Jid getJid() {
         return jid;
     }
 
@@ -74,7 +87,7 @@ public class Occupant {
      *
      * @return the affiliation of the occupant.
      */
-    public String getAffiliation() {
+    public MUCAffiliation getAffiliation() {
         return affiliation;
     }
 
@@ -84,7 +97,7 @@ public class Occupant {
      *
      * @return the current role of the occupant in the room.
      */
-    public String getRole() {
+    public MUCRole getRole() {
         return role;
     }
 
@@ -95,23 +108,25 @@ public class Occupant {
      * @return the current nickname of the occupant in the room or null if this information was
      *         obtained from a presence.
      */
-    public String getNick() {
+    public Resourcepart getNick() {
         return nick;
     }
 
+    @Override
     public boolean equals(Object obj) {
-        if(!(obj instanceof Occupant)) {
+        if (!(obj instanceof Occupant)) {
             return false;
         }
-        Occupant occupant = (Occupant)obj;
+        Occupant occupant = (Occupant) obj;
         return jid.equals(occupant.jid);
     }
 
+    @Override
     public int hashCode() {
         int result;
         result = affiliation.hashCode();
         result = 17 * result + role.hashCode();
-        result = 17 * result + jid.hashCode();
+        result = 17 * result + (jid != null ? jid.hashCode() : 0);
         result = 17 * result + (nick != null ? nick.hashCode() : 0);
         return result;
     }

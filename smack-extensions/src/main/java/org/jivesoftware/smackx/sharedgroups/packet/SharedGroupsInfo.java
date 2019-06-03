@@ -16,15 +16,18 @@
  */
 package org.jivesoftware.smackx.sharedgroups.packet;
 
-import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.provider.IQProvider;
-import org.xmlpull.v1.XmlPullParser;
-
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.IQProvider;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
 /**
- * IQ packet used for discovering the user's shared groups and for getting the answer back
+ * IQ stanza used for discovering the user's shared groups and for getting the answer back
  * from the server.<p>
  *
  * Important note: This functionality is not part of the XMPP spec and it will only work
@@ -34,7 +37,14 @@ import java.util.List;
  */
 public class SharedGroupsInfo extends IQ {
 
-    private List<String> groups = new ArrayList<String>();
+    public static final String ELEMENT = "sharedgroup";
+    public static final String NAMESPACE = "http://www.jivesoftware.org/protocol/sharedgroup";
+
+    private final List<String> groups = new ArrayList<>();
+
+    public SharedGroupsInfo() {
+        super(ELEMENT, NAMESPACE);
+    }
 
     /**
      * Returns a collection with the shared group names returned from the server.
@@ -45,38 +55,32 @@ public class SharedGroupsInfo extends IQ {
         return groups;
     }
 
-    public String getChildElementXML() {
-        StringBuilder buf = new StringBuilder();
-        buf.append("<sharedgroup xmlns=\"http://www.jivesoftware.org/protocol/sharedgroup\">");
+    @Override
+    protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder buf) {
+        buf.rightAngleBracket();
         for (String group : groups) {
-            buf.append("<group>").append(group).append("</group>");
+            buf.element("group", group);
         }
-        buf.append("</sharedgroup>");
-        return buf.toString();
+        return buf;
     }
 
     /**
      * Internal Search service Provider.
      */
-    public static class Provider implements IQProvider {
+    public static class Provider extends IQProvider<SharedGroupsInfo> {
 
-        /**
-         * Provider Constructor.
-         */
-        public Provider() {
-            super();
-        }
-
-        public IQ parseIQ(XmlPullParser parser) throws Exception {
+        @Override
+        public SharedGroupsInfo parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment)
+                        throws XmlPullParserException, IOException {
             SharedGroupsInfo groupsInfo = new SharedGroupsInfo();
 
             boolean done = false;
             while (!done) {
-                int eventType = parser.next();
-                if (eventType == XmlPullParser.START_TAG && parser.getName().equals("group")) {
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT && parser.getName().equals("group")) {
                     groupsInfo.getGroups().add(parser.nextText());
                 }
-                else if (eventType == XmlPullParser.END_TAG) {
+                else if (eventType == XmlPullParser.Event.END_ELEMENT) {
                     if (parser.getName().equals("sharedgroup")) {
                         done = true;
                     }

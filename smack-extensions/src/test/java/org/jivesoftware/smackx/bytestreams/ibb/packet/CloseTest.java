@@ -16,24 +16,26 @@
  */
 package org.jivesoftware.smackx.bytestreams.ibb.packet;
 
+import static org.jivesoftware.smack.test.util.XmlUnitUtils.assertXmlSimilar;
 import static org.junit.Assert.assertEquals;
-
-import static org.custommonkey.xmlunit.XMLAssert.assertXMLEqual;
 
 import java.util.Properties;
 
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smackx.bytestreams.ibb.packet.Close;
-import org.junit.Test;
+import org.jivesoftware.smack.packet.StreamOpen;
+
+import org.jivesoftware.smackx.InitExtensions;
 
 import com.jamesmurty.utils.XMLBuilder;
+import org.junit.Test;
+import org.jxmpp.jid.impl.JidCreate;
 
 /**
  * Test for the Close class.
- * 
+ *
  * @author Henning Staib
  */
-public class CloseTest {
+public class CloseTest extends InitExtensions {
 
     @Test(expected = IllegalArgumentException.class)
     public void shouldNotInstantiateWithInvalidArguments1() {
@@ -57,7 +59,7 @@ public class CloseTest {
         assertEquals("sessionID", close.getSessionID());
     }
 
-    private static Properties outputProperties = new Properties();
+    private static final Properties outputProperties = new Properties();
     {
         outputProperties.put(javax.xml.transform.OutputKeys.OMIT_XML_DECLARATION, "yes");
     }
@@ -65,8 +67,8 @@ public class CloseTest {
     @Test
     public void shouldReturnValidIQStanzaXML() throws Exception {
         String control = XMLBuilder.create("iq")
-            .a("from", "romeo@montague.lit/orchard")
             .a("to", "juliet@capulet.lit/balcony")
+            .a("from", "romeo@montague.lit/orchard")
             .a("id", "us71g45j")
             .a("type", "set")
             .e("close")
@@ -75,11 +77,11 @@ public class CloseTest {
             .asString(outputProperties);
 
         Close close = new Close("i781hf64");
-        close.setFrom("romeo@montague.lit/orchard");
-        close.setTo("juliet@capulet.lit/balcony");
-        close.setPacketID("us71g45j");
-        
-        assertXMLEqual(control, close.toXML().toString());
+        close.setFrom(JidCreate.from("romeo@montague.lit/orchard"));
+        close.setTo(JidCreate.from("juliet@capulet.lit/balcony"));
+        close.setStanzaId("us71g45j");
+
+        assertXmlSimilar(control, close.toXML(StreamOpen.CLIENT_NAMESPACE).toString());
     }
 
 }

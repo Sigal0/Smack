@@ -1,6 +1,6 @@
 /**
  *
- * Copyright the original author or authors
+ * Copyright 2013-2018 the original author or authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +19,10 @@ package org.jivesoftware.smackx.receipts;
 import java.util.List;
 import java.util.Map;
 
-import org.jivesoftware.smack.packet.PacketExtension;
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.packet.Message;
 import org.jivesoftware.smack.provider.EmbeddedExtensionProvider;
+import org.jivesoftware.smack.util.XmlStringBuilder;
 
 /**
  * Represents a <b>message delivery receipt</b> entry as specified by
@@ -28,51 +30,76 @@ import org.jivesoftware.smack.provider.EmbeddedExtensionProvider;
  *
  * @author Georg Lukas
  */
-public class DeliveryReceipt implements PacketExtension
-{
+public class DeliveryReceipt implements ExtensionElement {
     public static final String NAMESPACE = "urn:xmpp:receipts";
     public static final String ELEMENT = "received";
 
-    private String id; /// original ID of the delivered message
+    /**
+     * original ID of the delivered message
+     */
+    private final String id;
 
-    public DeliveryReceipt(String id)
-    {
+    public DeliveryReceipt(String id) {
         this.id = id;
     }
 
-    public String getId()
-    {
+    /**
+     * Get the id of the message that has been delivered.
+     *
+     * @return id of the delivered message or {@code null}.
+     */
+    public String getId() {
         return id;
     }
 
     @Override
-    public String getElementName()
-    {
+    public String getElementName() {
         return ELEMENT;
     }
 
     @Override
-    public String getNamespace()
-    {
+    public String getNamespace() {
         return NAMESPACE;
     }
 
     @Override
-    public String toXML()
-    {
-        return "<received xmlns='" + NAMESPACE + "' id='" + id + "'/>";
+    public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
+        XmlStringBuilder xml = new XmlStringBuilder(this);
+        xml.optAttribute("id", id);
+        xml.closeEmptyElement();
+        return xml;
+    }
+
+    /**
+     * Get the {@link DeliveryReceipt} extension of the packet, if any.
+     *
+     * @param p the packet
+     * @return the {@link DeliveryReceipt} extension or {@code null}
+     * @deprecated use {@link #from(Message)} instead
+     */
+    @Deprecated
+    public static DeliveryReceipt getFrom(Message p) {
+        return from(p);
+    }
+
+    /**
+     * Get the {@link DeliveryReceipt} extension of the message, if any.
+     *
+     * @param message the message.
+     * @return the {@link DeliveryReceipt} extension or {@code null}
+     */
+    public static DeliveryReceipt from(Message message) {
+        return message.getExtension(ELEMENT, NAMESPACE);
     }
 
     /**
      * This Provider parses and returns DeliveryReceipt packets.
      */
-    public static class Provider extends EmbeddedExtensionProvider
-    {
+    public static class Provider extends EmbeddedExtensionProvider<DeliveryReceipt> {
 
         @Override
-        protected PacketExtension createReturnExtension(String currentElement, String currentNamespace,
-                Map<String, String> attributeMap, List<? extends PacketExtension> content)
-        {
+        protected DeliveryReceipt createReturnExtension(String currentElement, String currentNamespace,
+                Map<String, String> attributeMap, List<? extends ExtensionElement> content) {
             return new DeliveryReceipt(attributeMap.get("id"));
         }
 

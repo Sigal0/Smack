@@ -16,35 +16,34 @@
  */
 package org.jivesoftware.smackx.amp.provider;
 
+import java.io.IOException;
 import java.util.logging.Logger;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.ExtensionElementProvider;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
 import org.jivesoftware.smackx.amp.AMPDeliverCondition;
 import org.jivesoftware.smackx.amp.AMPExpireAtCondition;
 import org.jivesoftware.smackx.amp.AMPMatchResourceCondition;
 import org.jivesoftware.smackx.amp.packet.AMPExtension;
-import org.xmlpull.v1.XmlPullParser;
 
 
-public class AMPExtensionProvider implements PacketExtensionProvider {
+public class AMPExtensionProvider extends ExtensionElementProvider<AMPExtension> {
     private static final Logger LOGGER = Logger.getLogger(AMPExtensionProvider.class.getName());
 
     /**
-     * Creates a new AMPExtensionProvider.
-     * ProviderManager requires that every PacketExtensionProvider has a public, no-argument constructor
-     */
-    public AMPExtensionProvider() {}
-
-    /**
-     * Parses a AMPExtension packet (extension sub-packet).
+     * Parses a AMPExtension stanza (extension sub-packet).
      *
      * @param parser the XML parser, positioned at the starting element of the extension.
      * @return a PacketExtension.
-     * @throws Exception if a parsing error occurs.
+     * @throws IOException
+     * @throws XmlPullParserException
      */
     @Override
-    public PacketExtension parseExtension(XmlPullParser parser) throws Exception {
+    public AMPExtension parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment)
+                    throws XmlPullParserException, IOException {
         final String from = parser.getAttributeValue(null, "from");
         final String to = parser.getAttributeValue(null, "to");
         final String statusString = parser.getAttributeValue(null, "status");
@@ -67,8 +66,8 @@ public class AMPExtensionProvider implements PacketExtensionProvider {
 
         boolean done = false;
         while (!done) {
-            int eventType = parser.next();
-            if (eventType == XmlPullParser.START_TAG) {
+            XmlPullParser.Event eventType = parser.next();
+            if (eventType == XmlPullParser.Event.START_ELEMENT) {
                 if (parser.getName().equals(AMPExtension.Rule.ELEMENT)) {
                     String actionString = parser.getAttributeValue(null, AMPExtension.Action.ATTRIBUTE_NAME);
                     String conditionName = parser.getAttributeValue(null, AMPExtension.Condition.ATTRIBUTE_NAME);
@@ -91,7 +90,7 @@ public class AMPExtensionProvider implements PacketExtensionProvider {
                         ampExtension.addRule(rule);
                     }
                 }
-            } else if (eventType == XmlPullParser.END_TAG) {
+            } else if (eventType == XmlPullParser.Event.END_ELEMENT) {
                 if (parser.getName().equals(AMPExtension.ELEMENT)) {
                     done = true;
                 }
@@ -101,7 +100,7 @@ public class AMPExtensionProvider implements PacketExtensionProvider {
         return ampExtension;
     }
 
-    private AMPExtension.Condition createCondition(String name, String value) {
+    private static AMPExtension.Condition createCondition(String name, String value) {
         if (name == null || value == null) {
             LOGGER.severe("Can't create rule condition from null name and/or value");
             return null;

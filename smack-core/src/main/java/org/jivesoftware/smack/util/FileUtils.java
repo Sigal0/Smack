@@ -18,7 +18,9 @@ package org.jivesoftware.smack.util;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -27,6 +29,8 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.net.MalformedURLException;
 import java.net.URI;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -37,31 +41,31 @@ public final class FileUtils {
 
     private static final Logger LOGGER = Logger.getLogger(FileUtils.class.getName());
 
-    public static InputStream getStreamForUrl(String url, ClassLoader loader) throws MalformedURLException, IOException {
-        URI fileUri = URI.create(url);
-
-        if (fileUri.getScheme() == null) {
-            throw new MalformedURLException("No protocol found in file URL: " + url);
+    public static InputStream getStreamForClasspathFile(String path, ClassLoader loader) throws IOException {
+        // Get an array of class loaders to try loading the providers files from.
+        List<ClassLoader> classLoaders = getClassLoaders();
+        if (loader != null) {
+            classLoaders.add(0, loader);
         }
+        for (ClassLoader classLoader : classLoaders) {
+            InputStream is = classLoader.getResourceAsStream(path);
 
-        if (fileUri.getScheme().equals("classpath")) {
-            // Get an array of class loaders to try loading the providers files from.
-            List<ClassLoader> classLoaders = getClassLoaders();
-            if (loader != null) {
-                classLoaders.add(0, loader);
-            }
-            for (ClassLoader classLoader : classLoaders) {
-                InputStream is = classLoader.getResourceAsStream(fileUri.getSchemeSpecificPart());
-
-                if (is != null) {
-                    return is;
-                }
+            if (is != null) {
+                return is;
             }
         }
-        else {
-            return fileUri.toURL().openStream();
+        throw new IOException("Unable to get '" + path + "' from classpath. Tried ClassLoaders:" + classLoaders);
+    }
+
+    public static InputStream getStreamForUri(URI uri, ClassLoader loader) throws IOException {
+        String protocol = uri.getScheme();
+        if (protocol.equals("classpath")) {
+            String path = uri.getSchemeSpecificPart();
+            return getStreamForClasspathFile(path, loader);
         }
-        return null;
+
+        URL url = uri.toURL();
+        return url.openStream();
     }
 
     /**
@@ -84,29 +88,34 @@ public final class FileUtils {
         return loaders;
     }
 
-    public static boolean addLines(String url, Set<String> set) throws MalformedURLException, IOException {
-        InputStream is = getStreamForUrl(url, null);
-        if (is == null) return false;
-        BufferedReader br = new BufferedReader(new InputStreamReader(is));
-        String line;
-        while ((line = br.readLine()) != null) {
-            set.add(line);
+    public static boolean addLines(String uriString, Set<String> set) throws MalformedURLException, IOException {
+        URI uri = URI.create(uriString);
+        InputStream is = getStreamForUri(uri, null);
+        InputStreamReader sr = new InputStreamReader(is, StandardCharsets.UTF_8);
+        BufferedReader br = new BufferedReader(sr);
+        try {
+            String line;
+            while ((line = br.readLine()) != null) {
+                set.add(line);
+            }
+        }
+        finally {
+            br.close();
         }
         return true;
     }
 
     /**
-     * Reads the contents of a File
+     * Reads the contents of a File.
      *
      * @param file
      * @return the content of file or null in case of an error
-     * @throws IOException 
+     * @throws IOException
      */
-    public static String readFileOrThrow(File file) throws FileNotFoundException, IOException {
-        Reader reader = null;
-        try {
-            reader = new FileReader(file);
-            char buf[] = new char[8192];
+    @SuppressWarnings("DefaultCharset")
+    public static String readFileOrThrow(File file) throws IOException {
+        try (Reader reader = new FileReader(file)) {
+            char[] buf = new char[8192];
             int len;
             StringBuilder s = new StringBuilder();
             while ((len = reader.read(buf)) >= 0) {
@@ -114,29 +123,30 @@ public final class FileUtils {
             }
             return s.toString();
         }
-        finally {
-            if (reader != null) {
-                reader.close();
-            }
-        }
     }
 
     public static String readFile(File file) {
         try {
             return readFileOrThrow(file);
-        } catch (Exception e) {
+        } catch (FileNotFoundException e) {
+            LOGGER.log(Level.FINE, "readFile", e);
+        } catch (IOException e) {
             LOGGER.log(Level.WARNING, "readFile", e);
         }
         return null;
     }
 
-    public static void writeFileOrThrow(File file, String content) throws IOException {
+    @SuppressWarnings("DefaultCharset")
+    public static void writeFileOrThrow(File file, CharSequence content) throws IOException {
         FileWriter writer = new FileWriter(file, false);
-        writer.write(content);
-        writer.close();
+        try {
+            writer.write(content.toString());
+        } finally {
+            writer.close();
+        }
     }
 
-    public static boolean writeFile(File file, String content) {
+    public static boolean writeFile(File file, CharSequence content) {
         try {
             writeFileOrThrow(file, content);
             return true;
@@ -144,6 +154,75 @@ public final class FileUtils {
         catch (IOException e) {
             LOGGER.log(Level.WARNING, "writeFile", e);
             return false;
+        }
+    }
+
+    public static FileOutputStream prepareFileOutputStream(File file) throws IOException {
+        if (!file.exists()) {
+
+            // Create parent directory
+            File parent = file.getParentFile();
+            if (!parent.exists() && !parent.mkdirs()) {
+                throw new IOException("Cannot create directory " + parent.getAbsolutePath());
+            }
+
+            // Create file
+            if (!file.createNewFile()) {
+                throw new IOException("Cannot create file " + file.getAbsolutePath());
+            }
+        }
+
+        if (file.isDirectory()) {
+            throw new AssertionError("File " + file.getAbsolutePath() + " is not a file!");
+        }
+
+        return new FileOutputStream(file);
+    }
+
+    public static FileInputStream prepareFileInputStream(File file) throws IOException {
+        if (file.exists()) {
+            if (file.isFile()) {
+                return new FileInputStream(file);
+            } else {
+                throw new IOException("File " + file.getAbsolutePath() + " is not a file!");
+            }
+        } else {
+            throw new FileNotFoundException("File " + file.getAbsolutePath() + " not found.");
+        }
+    }
+
+    public static void maybeDeleteFileOrThrow(File file) throws IOException {
+        if (!file.exists()) {
+            return;
+        }
+
+        boolean successfullyDeleted = file.delete();
+        if (!successfullyDeleted) {
+            throw new IOException("Could not delete file " + file);
+        }
+    }
+
+    public static void maybeCreateFileWithParentDirectories(File file) throws IOException {
+        File parent = file.getParentFile();
+        if (!parent.exists() && !parent.mkdirs()) {
+            throw new IOException("Cannot create directory " + parent);
+        }
+
+        if (file.isFile()) {
+            return;
+        }
+
+        if (!file.exists()) {
+            if (file.createNewFile()) {
+                return;
+            }
+            throw new IOException("Cannot create file " + file);
+        }
+
+        if (file.isDirectory()) {
+            throw new IOException("File " + file + " exists, but is a directory.");
+        } else {
+            throw new IOException("File " + file + " exists, but is neither a file nor a directory");
         }
     }
 }

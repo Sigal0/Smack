@@ -44,7 +44,7 @@ public class XHTMLManagerTest extends SmackTestCase {
 
     /**
      * High level API test.
-     * This is a simple test to use with a XMPP client and check if the client receives the message
+     * This is a simple test to use with an XMPP client and check if the client receives the message
      * 1. User_1 will send a message with formatted text (XHTML) to user_2
      */
     public void testSendSimpleXHTMLMessage() {
@@ -82,15 +82,15 @@ public class XHTMLManagerTest extends SmackTestCase {
     /**
     * High level API test.
     * 1. User_1 will send a message with XHTML to user_2
-    * 2. User_2 will receive the message and iterate over the XHTML bodies to check if everything 
+    * 2. User_2 will receive the message and iterate over the XHTML bodies to check if everything
     *    is fine
-    * 3. User_1 will wait several seconds for an ACK from user_2, if none is received then 
+    * 3. User_1 will wait several seconds for an ACK from user_2, if none is received then
     *    something is wrong
     */
     public void testSendSimpleXHTMLMessageAndDisplayReceivedXHTMLMessage() {
         // Create a chat for each connection
         Chat chat1 = getConnection(0).getChatManager().createChat(getBareJID(1), null);
-        final PacketCollector chat2 = getConnection(1).createPacketCollector(
+        final StanzaCollector chat2 = getConnection(1).createStanzaCollector(
                     new ThreadFilter(chat1.getThreadID()));
 
         // User1 creates a message to send to user2
@@ -142,15 +142,15 @@ public class XHTMLManagerTest extends SmackTestCase {
     /**
     * Low level API test. Test a message with two XHTML bodies and several XHTML tags.
     * 1. User_1 will send a message with XHTML to user_2
-    * 2. User_2 will receive the message and iterate over the XHTML bodies to check if everything 
+    * 2. User_2 will receive the message and iterate over the XHTML bodies to check if everything
     *    is fine
-    * 3. User_1 will wait several seconds for an ACK from user_2, if none is received then 
+    * 3. User_1 will wait several seconds for an ACK from user_2, if none is received then
     *    something is wrong
     */
     public void testSendComplexXHTMLMessageAndDisplayReceivedXHTMLMessage() {
         // Create a chat for each connection
         Chat chat1 = getConnection(0).getChatManager().createChat(getBareJID(1), null);
-        final PacketCollector chat2 = getConnection(1).createPacketCollector(
+        final StanzaCollector chat2 = getConnection(1).createStanzaCollector(
                     new ThreadFilter(chat1.getThreadID()));
 
         // User1 creates a message to send to user2

@@ -19,13 +19,13 @@ package org.jivesoftware.smackx.commands;
 
 /**
  * Notes can be added to a command execution response. A note has a type and value.
- * 
+ *
  * @author Gabriel Guardincerri
  */
 public class AdHocCommandNote {
 
-    private Type type;
-    private String value;
+    private final Type type;
+    private final String value;
 
     /**
      * Creates a new adhoc command note with the specified type and value.
@@ -40,7 +40,7 @@ public class AdHocCommandNote {
 
     /**
      * Returns the value or message of the note.
-     * 
+     *
      * @return the value or message of the note.
      */
     public String getValue() {
@@ -49,7 +49,7 @@ public class AdHocCommandNote {
 
     /**
      * Return the type of the note.
-     * 
+     *
      * @return the type of the note.
      */
     public Type getType() {

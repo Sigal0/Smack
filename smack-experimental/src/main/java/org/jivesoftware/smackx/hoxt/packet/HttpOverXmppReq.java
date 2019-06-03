@@ -1,6 +1,6 @@
 /**
  *
- * Copyright 2014 Andriy Tsykholyas
+ * Copyright 2014 Andriy Tsykholyas, 2015 Florian Schmaus
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,188 +16,217 @@
  */
 package org.jivesoftware.smackx.hoxt.packet;
 
-import org.jivesoftware.smack.util.StringUtils;
-import org.jivesoftware.smackx.hoxt.HOXTManager;
-
 /**
  * Represents Req IQ packet.
  *
  * @author Andriy Tsykholyas
  * @see <a href="http://xmpp.org/extensions/xep-0332.html">XEP-0332: HTTP over XMPP transport</a>
  */
-public class HttpOverXmppReq extends AbstractHttpOverXmpp {
+public final class HttpOverXmppReq extends AbstractHttpOverXmpp {
 
-    private Req req;
+    public static final String ELEMENT = "req";
+
+    private HttpOverXmppReq(Builder builder) {
+        super(ELEMENT, builder);
+        this.method = builder.method;
+        this.resource = builder.resource;
+        this.maxChunkSize = builder.maxChunkSize;
+        this.ibb = builder.ibb;
+        this.jingle = builder.jingle;
+        this.sipub = builder.sipub;
+        setType(Type.set);
+    }
+
+    private final HttpMethod method;
+    private final String resource;
+
+    private final int maxChunkSize;
+
+    private final boolean sipub;
+
+    private final boolean ibb;
+    private final boolean jingle;
 
     @Override
-    public String getChildElementXML() {
-        return req.toXML();
+    protected IQChildElementXmlStringBuilder getIQHoxtChildElementBuilder(IQChildElementXmlStringBuilder builder) {
+        builder.attribute("method", method);
+        builder.attribute("resource", resource);
+        builder.attribute("version", getVersion());
+        builder.optIntAttribute("maxChunkSize", maxChunkSize);
+        builder.optBooleanAttributeDefaultTrue("sipub", sipub);
+        builder.optBooleanAttributeDefaultTrue("ibb", ibb);
+        builder.optBooleanAttributeDefaultTrue("jingle", jingle);
+        builder.rightAngleBracket();
+        return builder;
     }
 
     /**
-     * Returns Req element.
+     * Returns method attribute.
      *
-     * @return Req element
+     * @return method attribute
      */
-    public Req getReq() {
-        return req;
+    public HttpMethod getMethod() {
+        return method;
     }
 
     /**
-     * Sets Req element.
+     * Returns resource attribute.
      *
-     * @param req Req element
+     * @return resource attribute
      */
-    public void setReq(Req req) {
-        this.req = req;
+    public String getResource() {
+        return resource;
     }
 
     /**
-     * Represents Req element.
+     * Returns maxChunkSize attribute.
+     *
+     * @return maxChunkSize attribute
      */
-    public static class Req extends AbstractBody {
+    public int getMaxChunkSize() {
+        return maxChunkSize;
+    }
+
+    /**
+     * Returns sipub attribute.
+     *
+     * @return sipub attribute
+     */
+    public boolean isSipub() {
+        return sipub;
+    }
+
+    /**
+     * Returns ibb attribute.
+     *
+     * @return ibb attribute
+     */
+    public boolean isIbb() {
+        return ibb;
+    }
+
+    /**
+     * Returns jingle attribute.
+     *
+     * @return jingle attribute
+     */
+    public boolean isJingle() {
+        return jingle;
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    /**
+     * A configuration builder for HttpOverXmppReq. Use {@link HttpOverXmppReq#builder()} to obtain a new instance and
+     * {@link #build} to build the configuration.
+     */
+    public static final class Builder extends AbstractHttpOverXmpp.Builder<Builder, HttpOverXmppReq> {
 
         private HttpMethod method;
         private String resource;
 
-        // TODO: validate:  xs:minInclusive value='256' xs:maxInclusive value='65536'
-        private int maxChunkSize = 0; // 0 means not set
+        private int maxChunkSize = -1;
 
         private boolean sipub = true;
 
         private boolean ibb = true;
         private boolean jingle = true;
 
+        private Builder() {
+        }
+
         /**
-         * Creates this object.
+         * Sets method attribute.
          *
-         * @param method   method attribute
-         * @param resource resource attribute
+         * @param method attribute
+         *
+         * @return the builder
          */
-        public Req(HttpMethod method, String resource) {
+        public Builder setMethod(HttpMethod method) {
             this.method = method;
+            return this;
+        }
+
+        /**
+         * Sets resource attribute.
+         *
+         * @param resource attribute
+         *
+         * @return the builder
+         */
+        public Builder setResource(String resource) {
             this.resource = resource;
-        }
-
-        @Override
-        protected String getStartTag() {
-            StringBuilder builder = new StringBuilder();
-            builder.append("<req");
-            builder.append(" ");
-            builder.append("xmlns='").append(HOXTManager.NAMESPACE).append("'");
-            builder.append(" ");
-            builder.append("method='").append(method.toString()).append("'");
-            builder.append(" ");
-            builder.append("resource='").append(StringUtils.escapeForXML(resource)).append("'");
-            builder.append(" ");
-            builder.append("version='").append(StringUtils.escapeForXML(version)).append("'");
-            if (maxChunkSize != 0) {
-                builder.append(" ");
-                builder.append("maxChunkSize='").append(Integer.toString(maxChunkSize)).append("'");
-            }
-            builder.append(" ");
-            builder.append("sipub='").append(Boolean.toString(sipub)).append("'");
-            builder.append(" ");
-            builder.append("ibb='").append(Boolean.toString(ibb)).append("'");
-            builder.append(" ");
-            builder.append("jingle='").append(Boolean.toString(jingle)).append("'");
-            builder.append(">");
-            return builder.toString();
-        }
-
-        @Override
-        protected String getEndTag() {
-            return "</req>";
-        }
-
-        /**
-         * Returns method attribute.
-         *
-         * @return method attribute
-         */
-        public HttpMethod getMethod() {
-            return method;
-        }
-
-        /**
-         * Returns resource attribute.
-         *
-         * @return resource attribute
-         */
-        public String getResource() {
-            return resource;
-        }
-
-        /**
-         * Returns maxChunkSize attribute.
-         *
-         * @return maxChunkSize attribute
-         */
-        public int getMaxChunkSize() {
-            return maxChunkSize;
-        }
-
-        /**
-         * Sets maxChunkSize attribute.
-         *
-         * @param maxChunkSize maxChunkSize attribute
-         */
-        public void setMaxChunkSize(int maxChunkSize) {
-            this.maxChunkSize = maxChunkSize;
-        }
-
-        /**
-         * Returns sipub attribute.
-         *
-         * @return sipub attribute
-         */
-        public boolean isSipub() {
-            return sipub;
-        }
-
-        /**
-         * Sets sipub attribute.
-         *
-         * @param sipub sipub attribute
-         */
-        public void setSipub(boolean sipub) {
-            this.sipub = sipub;
-        }
-
-        /**
-         * Returns ibb attribute.
-         *
-         * @return ibb attribute
-         */
-        public boolean isIbb() {
-            return ibb;
-        }
-
-        /**
-         * Sets ibb attribute.
-         *
-         * @param ibb ibb attribute
-         */
-        public void setIbb(boolean ibb) {
-            this.ibb = ibb;
-        }
-
-        /**
-         * Returns jingle attribute.
-         *
-         * @return jingle attribute
-         */
-        public boolean isJingle() {
-            return jingle;
+            return this;
         }
 
         /**
          * Sets jingle attribute.
          *
          * @param jingle jingle attribute
+         *
+         * @return the builder
          */
-        public void setJingle(boolean jingle) {
+        public Builder setJingle(boolean jingle) {
             this.jingle = jingle;
+            return this;
         }
+
+        /**
+         * Sets ibb attribute.
+         *
+         * @param ibb ibb attribute
+         *
+         * @return the builder
+         */
+        public Builder setIbb(boolean ibb) {
+            this.ibb = ibb;
+            return this;
+        }
+
+        /**
+         * Sets sipub attribute.
+         *
+         * @param sipub sipub attribute
+         *
+         * @return the builder
+         */
+        public Builder setSipub(boolean sipub) {
+            this.sipub = sipub;
+            return this;
+        }
+
+        /**
+         * Sets maxChunkSize attribute.
+         *
+         * @param maxChunkSize maxChunkSize attribute
+         *
+         * @return the builder
+         */
+        public Builder setMaxChunkSize(int maxChunkSize) {
+            if (maxChunkSize < 256 || maxChunkSize > 65536) {
+                throw new IllegalArgumentException("maxChunkSize must be within [256, 65536]");
+            }
+            this.maxChunkSize = maxChunkSize;
+            return this;
+        }
+
+        @Override
+        public HttpOverXmppReq build() {
+            if (method == null) {
+                throw new IllegalArgumentException("Method cannot be null");
+            }
+            if (resource == null) {
+                throw new IllegalArgumentException("Resource cannot be null");
+            }
+            return new HttpOverXmppReq(this);
+        }
+
+        @Override
+        protected Builder getThis() {
+            return this;
+        }
+
     }
 }

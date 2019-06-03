@@ -17,20 +17,23 @@
 package org.jivesoftware.smackx.jiveproperties.provider;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
-import org.jivesoftware.smack.util.StringUtils;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.ExtensionElementProvider;
+import org.jivesoftware.smack.util.stringencoder.Base64;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
 import org.jivesoftware.smackx.jiveproperties.JivePropertiesManager;
 import org.jivesoftware.smackx.jiveproperties.packet.JivePropertiesExtension;
-import org.xmlpull.v1.XmlPullParser;
 
-public class JivePropertiesExtensionProvider implements PacketExtensionProvider {
+public class JivePropertiesExtensionProvider extends ExtensionElementProvider<JivePropertiesExtension> {
 
     private static final Logger LOGGER = Logger.getLogger(JivePropertiesExtensionProvider.class.getName());
 
@@ -38,21 +41,24 @@ public class JivePropertiesExtensionProvider implements PacketExtensionProvider 
      * Parse a properties sub-packet. If any errors occur while de-serializing Java object
      * properties, an exception will be printed and not thrown since a thrown exception will shut
      * down the entire connection. ClassCastExceptions will occur when both the sender and receiver
-     * of the packet don't have identical versions of the same class.
+     * of the stanza don't have identical versions of the same class.
      * <p>
      * Note that you have to explicitly enabled Java object deserialization with @{link
      * {@link JivePropertiesManager#setJavaObjectEnabled(boolean)}
-     * 
+     *
      * @param parser the XML parser, positioned at the start of a properties sub-packet.
      * @return a map of the properties.
-     * @throws Exception if an error occurs while parsing the properties.
+     * @throws IOException
+     * @throws XmlPullParserException
      */
     @Override
-    public PacketExtension parseExtension(XmlPullParser parser) throws Exception {
-        Map<String, Object> properties = new HashMap<String, Object>();
+    public JivePropertiesExtension parse(XmlPullParser parser,
+                    int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException,
+                    IOException {
+        Map<String, Object> properties = new HashMap<>();
         while (true) {
-            int eventType = parser.next();
-            if (eventType == XmlPullParser.START_TAG && parser.getName().equals("property")) {
+            XmlPullParser.Event eventType = parser.next();
+            if (eventType == XmlPullParser.Event.START_ELEMENT && parser.getName().equals("property")) {
                 // Parse a property
                 boolean done = false;
                 String name = null;
@@ -61,7 +67,7 @@ public class JivePropertiesExtensionProvider implements PacketExtensionProvider 
                 Object value = null;
                 while (!done) {
                     eventType = parser.next();
-                    if (eventType == XmlPullParser.START_TAG) {
+                    if (eventType == XmlPullParser.Event.START_ELEMENT) {
                         String elementName = parser.getName();
                         if (elementName.equals("name")) {
                             name = parser.nextText();
@@ -71,7 +77,7 @@ public class JivePropertiesExtensionProvider implements PacketExtensionProvider 
                             valueText = parser.nextText();
                         }
                     }
-                    else if (eventType == XmlPullParser.END_TAG) {
+                    else if (eventType == XmlPullParser.Event.END_ELEMENT) {
                         if (parser.getName().equals("property")) {
                             if ("integer".equals(type)) {
                                 value = Integer.valueOf(valueText);
@@ -86,7 +92,9 @@ public class JivePropertiesExtensionProvider implements PacketExtensionProvider 
                                 value = Double.valueOf(valueText);
                             }
                             else if ("boolean".equals(type)) {
+                                // CHECKSTYLE:OFF
                                 value = Boolean.valueOf(valueText);
+                                // CHECKSTYLE:ON
                             }
                             else if ("string".equals(type)) {
                                 value = valueText;
@@ -94,7 +102,7 @@ public class JivePropertiesExtensionProvider implements PacketExtensionProvider 
                             else if ("java-object".equals(type)) {
                                 if (JivePropertiesManager.isJavaObjectEnabled()) {
                                     try {
-                                        byte[] bytes = StringUtils.decodeBase64(valueText);
+                                        byte[] bytes = Base64.decode(valueText);
                                         ObjectInputStream in = new ObjectInputStream(
                                                         new ByteArrayInputStream(bytes));
                                         value = in.readObject();
@@ -115,7 +123,7 @@ public class JivePropertiesExtensionProvider implements PacketExtensionProvider 
                     }
                 }
             }
-            else if (eventType == XmlPullParser.END_TAG) {
+            else if (eventType == XmlPullParser.Event.END_ELEMENT) {
                 if (parser.getName().equals(JivePropertiesExtension.ELEMENT)) {
                     break;
                 }

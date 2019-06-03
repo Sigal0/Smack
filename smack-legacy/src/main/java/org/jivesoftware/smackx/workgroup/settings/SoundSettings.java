@@ -17,12 +17,16 @@
 
 package org.jivesoftware.smackx.workgroup.settings;
 
-import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.provider.IQProvider;
-import org.jivesoftware.smack.util.StringUtils;
-import org.xmlpull.v1.XmlPullParser;
+import java.io.IOException;
 
-public class SoundSettings extends IQ {
+import org.jivesoftware.smack.packet.SimpleIQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.IQProvider;
+import org.jivesoftware.smack.util.stringencoder.Base64;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
+public class SoundSettings extends SimpleIQ {
     private String outgoingSound;
     private String incomingSound;
 
@@ -36,60 +40,49 @@ public class SoundSettings extends IQ {
     }
 
     public byte[] getIncomingSoundBytes() {
-        return StringUtils.decodeBase64(incomingSound);
+        return Base64.decode(incomingSound);
     }
 
     public byte[] getOutgoingSoundBytes() {
-        return StringUtils.decodeBase64(outgoingSound);
+        return Base64.decode(outgoingSound);
     }
 
 
     /**
-     * Element name of the packet extension.
+     * Element name of the stanza extension.
      */
     public static final String ELEMENT_NAME = "sound-settings";
 
     /**
-     * Namespace of the packet extension.
+     * Namespace of the stanza extension.
      */
     public static final String NAMESPACE = "http://jivesoftware.com/protocol/workgroup";
 
-    public String getChildElementXML() {
-        StringBuilder buf = new StringBuilder();
-
-        buf.append("<").append(ELEMENT_NAME).append(" xmlns=");
-        buf.append('"');
-        buf.append(NAMESPACE);
-        buf.append('"');
-        buf.append("></").append(ELEMENT_NAME).append("> ");
-        return buf.toString();
+    public SoundSettings() {
+        super(ELEMENT_NAME, NAMESPACE);
     }
 
-
     /**
-     * Packet extension provider for SoundSetting Packets.
+     * Stanza extension provider for SoundSetting Packets.
      */
-    public static class InternalProvider implements IQProvider {
+    public static class InternalProvider extends IQProvider<SoundSettings> {
 
-        public IQ parseIQ(XmlPullParser parser) throws Exception {
-            if (parser.getEventType() != XmlPullParser.START_TAG) {
-                throw new IllegalStateException("Parser not in proper position, or bad XML.");
-            }
-
+        @Override
+        public SoundSettings parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException {
             SoundSettings soundSettings = new SoundSettings();
 
             boolean done = false;
 
 
             while (!done) {
-                int eventType = parser.next();
-                if ((eventType == XmlPullParser.START_TAG) && ("outgoingSound".equals(parser.getName()))) {
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT && "outgoingSound".equals(parser.getName())) {
                     soundSettings.setOutgoingSound(parser.nextText());
                 }
-                else if ((eventType == XmlPullParser.START_TAG) && ("incomingSound".equals(parser.getName()))) {
+                else if ((eventType == XmlPullParser.Event.START_ELEMENT) && "incomingSound".equals(parser.getName())) {
                     soundSettings.setIncomingSound(parser.nextText());
                 }
-                else if (eventType == XmlPullParser.END_TAG && "sound-settings".equals(parser.getName())) {
+                else if (eventType == XmlPullParser.Event.END_ELEMENT && "sound-settings".equals(parser.getName())) {
                     done = true;
                 }
             }

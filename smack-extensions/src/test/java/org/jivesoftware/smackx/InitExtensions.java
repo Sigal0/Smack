@@ -16,12 +16,13 @@
  */
 package org.jivesoftware.smackx;
 
-import org.jivesoftware.smack.initializer.extensions.ExtensionsInitializer;
+import org.jivesoftware.smack.extensions.ExtensionsInitializer;
+import org.jivesoftware.smack.test.util.SmackTestSuite;
 
-public class InitExtensions {
+public class InitExtensions extends SmackTestSuite {
 
     static {
-        (new ExtensionsInitializer()).initialize();
+        new ExtensionsInitializer().initialize();
     }
 
 }

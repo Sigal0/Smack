@@ -17,14 +17,16 @@
 
 package org.jivesoftware.smackx.workgroup.agent;
 
-import org.jivesoftware.smack.SmackException.NotConnectedException;
-import org.jivesoftware.smack.XMPPConnection;
-import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.Packet;
-
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+
+import org.jivesoftware.smack.SmackException.NotConnectedException;
+import org.jivesoftware.smack.XMPPConnection;
+import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.Stanza;
+
+import org.jxmpp.jid.Jid;
 
 /**
  * A class embodying the semantic agent chat offer; specific instances allow the acceptance or
@@ -36,16 +38,16 @@ import java.util.Map;
  */
 public class Offer {
 
-    private XMPPConnection connection;
-    private AgentSession session;
+    private final XMPPConnection connection;
+    private final AgentSession session;
 
-    private String sessionID;
-    private String userJID;
-    private String userID;
-    private String workgroupName;
-    private Date expiresDate;
-    private Map<String, List<String>> metaData;
-    private OfferContent content;
+    private final String sessionID;
+    private final Jid userJID;
+    private final Jid userID;
+    private final Jid workgroupName;
+    private final Date expiresDate;
+    private final Map<String, List<String>> metaData;
+    private final OfferContent content;
 
     private boolean accepted = false;
     private boolean rejected = false;
@@ -63,10 +65,9 @@ public class Offer {
      * @param content content of the offer. The content explains the reason for the offer
      *        (e.g. user request, transfer)
      */
-    Offer(XMPPConnection conn, AgentSession agentSession, String userID,
-            String userJID, String workgroupName, Date expiresDate,
-            String sessionID, Map<String, List<String>> metaData, OfferContent content)
-    {
+    Offer(XMPPConnection conn, AgentSession agentSession, Jid userID,
+            Jid userJID, Jid workgroupName, Date expiresDate,
+            String sessionID, Map<String, List<String>> metaData, OfferContent content) {
         this.connection = conn;
         this.session = agentSession;
         this.userID = userID;
@@ -80,22 +81,24 @@ public class Offer {
 
     /**
      * Accepts the offer.
-     * @throws NotConnectedException 
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public void accept() throws NotConnectedException {
-        Packet acceptPacket = new AcceptPacket(this.session.getWorkgroupJID());
-        connection.sendPacket(acceptPacket);
+    public void accept() throws NotConnectedException, InterruptedException {
+        Stanza acceptPacket = new AcceptPacket(this.session.getWorkgroupJID());
+        connection.sendStanza(acceptPacket);
         // TODO: listen for a reply.
         accepted = true;
     }
 
     /**
      * Rejects the offer.
-     * @throws NotConnectedException 
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public void reject() throws NotConnectedException {
+    public void reject() throws NotConnectedException, InterruptedException {
         RejectPacket rejectPacket = new RejectPacket(this.session.getWorkgroupJID());
-        connection.sendPacket(rejectPacket);
+        connection.sendStanza(rejectPacket);
         // TODO: listen for a reply.
         rejected = true;
     }
@@ -108,7 +111,7 @@ public class Offer {
      *
      * @return the userID of the user from which the offer originates.
      */
-    public String getUserID() {
+    public Jid getUserID() {
         return userID;
     }
 
@@ -117,7 +120,7 @@ public class Offer {
      *
      * @return the user's JID.
      */
-    public String getUserJID() {
+    public Jid getUserJID() {
         return userJID;
     }
 
@@ -126,7 +129,7 @@ public class Offer {
      *
      * @return the name of the workgroup.
      */
-    public String getWorkgroupName() {
+    public Jid getWorkgroupName() {
         return this.workgroupName;
     }
 
@@ -189,34 +192,40 @@ public class Offer {
     }
 
     /**
-     * Packet for rejecting offers.
+     * Stanza for rejecting offers.
      */
     private class RejectPacket extends IQ {
 
-        RejectPacket(String workgroup) {
+        RejectPacket(Jid workgroup) {
+            super("offer-reject", "http://jabber.org/protocol/workgroup");
             this.setTo(workgroup);
             this.setType(IQ.Type.set);
         }
 
-        public String getChildElementXML() {
-            return "<offer-reject id=\"" + Offer.this.getSessionID() +
-                    "\" xmlns=\"http://jabber.org/protocol/workgroup" + "\"/>";
+        @Override
+        protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder xml) {
+            xml.attribute("id", Offer.this.getSessionID());
+            xml.setEmptyElement();
+            return xml;
         }
     }
 
     /**
-     * Packet for accepting an offer.
+     * Stanza for accepting an offer.
      */
     private class AcceptPacket extends IQ {
 
-        AcceptPacket(String workgroup) {
+        AcceptPacket(Jid workgroup) {
+            super("offer-accept", "http://jabber.org/protocol/workgroup");
             this.setTo(workgroup);
             this.setType(IQ.Type.set);
         }
 
-        public String getChildElementXML() {
-            return "<offer-accept id=\"" + Offer.this.getSessionID() +
-                    "\" xmlns=\"http://jabber.org/protocol/workgroup" + "\"/>";
+        @Override
+        protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder xml) {
+            xml.attribute("id", Offer.this.getSessionID());
+            xml.setEmptyElement();
+            return xml;
         }
     }
 

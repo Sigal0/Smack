@@ -20,24 +20,24 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.jivesoftware.smack.XMPPException;
-import org.jivesoftware.smack.sasl.SASLMechanism.SASLFailure;
+import org.jivesoftware.smack.sasl.packet.SaslStreamElements.SASLFailure;
 
 public class SASLErrorException extends XMPPException {
 
     /**
-     * 
+     *
      */
     private static final long serialVersionUID = 6247573875760717257L;
 
     private final SASLFailure saslFailure;
     private final String mechanism;
-    private final Map<String,String> texts;
+    private final Map<String, String> texts;
 
     public SASLErrorException(String mechanism, SASLFailure saslFailure) {
         this(mechanism, saslFailure, new HashMap<String, String>());
     }
 
-    public SASLErrorException(String mechanism, SASLFailure saslFailure, Map<String,String> texts) {
+    public SASLErrorException(String mechanism, SASLFailure saslFailure, Map<String, String> texts) {
         super("SASLError using " + mechanism + ": " + saslFailure.getSASLErrorString());
         this.mechanism = mechanism;
         this.saslFailure = saslFailure;
@@ -52,7 +52,7 @@ public class SASLErrorException extends XMPPException {
         return mechanism;
     }
 
-    public Map<String,String> getTexts() {
+    public Map<String, String> getTexts() {
         return texts;
     }
 }

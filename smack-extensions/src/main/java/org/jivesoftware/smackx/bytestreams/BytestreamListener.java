@@ -30,21 +30,21 @@ import org.jivesoftware.smackx.bytestreams.socks5.Socks5BytestreamManager;
  * <p>
  * There are two ways to add this listener. See
  * {@link BytestreamManager#addIncomingBytestreamListener(BytestreamListener)} and
- * {@link BytestreamManager#addIncomingBytestreamListener(BytestreamListener, String)} for further
+ * {@link BytestreamManager#addIncomingBytestreamListener(BytestreamListener, org.jxmpp.jid.Jid)} for further
  * details.
  * <p>
  * {@link Socks5BytestreamListener} or {@link InBandBytestreamListener} provide a more specific
  * interface of the BytestreamListener.
- * 
+ *
  * @author Henning Staib
  */
 public interface BytestreamListener {
 
     /**
      * This listener is notified if a bytestream request from another user has been received.
-     * 
+     *
      * @param request the incoming bytestream request
      */
-    public void incomingBytestreamRequest(BytestreamRequest request);
+    void incomingBytestreamRequest(BytestreamRequest request);
 
 }

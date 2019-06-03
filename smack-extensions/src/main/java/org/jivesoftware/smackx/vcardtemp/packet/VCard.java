@@ -38,24 +38,28 @@ import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException.XMPPErrorException;
 import org.jivesoftware.smack.packet.IQ;
 import org.jivesoftware.smack.util.StringUtils;
+import org.jivesoftware.smack.util.stringencoder.Base64;
+
 import org.jivesoftware.smackx.vcardtemp.VCardManager;
+
+import org.jxmpp.jid.EntityBareJid;
 
 /**
  * A VCard class for use with the
  * <a href="http://www.jivesoftware.org/smack/" target="_blank">SMACK jabber library</a>.<p>
- * <p/>
+ *
  * You should refer to the
  * <a href="http://www.xmpp.org/extensions/jep-0054.html" target="_blank">XEP-54 documentation</a>.<p>
- * <p/>
+ *
  * Please note that this class is incomplete but it does provide the most commonly found
  * information in vCards. Also remember that VCard transfer is not a standard, and the protocol
  * may change or be replaced.<p>
- * <p/>
+ *
  * <b>Usage:</b>
  * <pre>
- * <p/>
+ *
  * // To save VCard:
- * <p/>
+ *
  * VCard vCard = new VCard();
  * vCard.setFirstName("kir");
  * vCard.setLastName("max");
@@ -63,16 +67,16 @@ import org.jivesoftware.smackx.vcardtemp.VCardManager;
  * vCard.setJabberId("jabber@id.org");
  * vCard.setOrganization("Jetbrains, s.r.o");
  * vCard.setNickName("KIR");
- * <p/>
+ *
  * vCard.setField("TITLE", "Mr");
  * vCard.setAddressFieldHome("STREET", "Some street");
  * vCard.setAddressFieldWork("CTRY", "US");
  * vCard.setPhoneWork("FAX", "3443233");
- * <p/>
+ *
  * vCard.save(connection);
- * <p/>
+ *
  * // To load VCard:
- * <p/>
+ *
  * VCard vCard = new VCard();
  * vCard.load(conn); // load own VCard
  * vCard.load(conn, "joe@foo.bar"); // load someone's VCard
@@ -80,29 +84,34 @@ import org.jivesoftware.smackx.vcardtemp.VCardManager;
  *
  * @author Kirill Maximov (kir@maxkir.com)
  */
-public class VCard extends IQ {
+public final class VCard extends IQ {
+    public static final String ELEMENT = "vCard";
+    public static final String NAMESPACE = "vcard-temp";
+
     private static final Logger LOGGER = Logger.getLogger(VCard.class.getName());
-    
+
     private static final String DEFAULT_MIME_TYPE = "image/jpeg";
-    
+
     /**
      * Phone types:
      * VOICE?, FAX?, PAGER?, MSG?, CELL?, VIDEO?, BBS?, MODEM?, ISDN?, PCS?, PREF?
      */
-    private Map<String, String> homePhones = new HashMap<String, String>();
-    private Map<String, String> workPhones = new HashMap<String, String>();
+    private final Map<String, String> homePhones = new HashMap<>();
+    private final Map<String, String> workPhones = new HashMap<>();
 
     /**
      * Address types:
      * POSTAL?, PARCEL?, (DOM | INTL)?, PREF?, POBOX?, EXTADR?, STREET?, LOCALITY?,
      * REGION?, PCODE?, CTRY?
      */
-    private Map<String, String> homeAddr = new HashMap<String, String>();
-    private Map<String, String> workAddr = new HashMap<String, String>();
+    private final Map<String, String> homeAddr = new HashMap<>();
+    private final Map<String, String> workAddr = new HashMap<>();
 
     private String firstName;
     private String lastName;
     private String middleName;
+    private String prefix;
+    private String suffix;
 
     private String emailHome;
     private String emailWork;
@@ -116,19 +125,21 @@ public class VCard extends IQ {
     /**
      * Such as DESC ROLE GEO etc.. see XEP-0054
      */
-    private Map<String, String> otherSimpleFields = new HashMap<String, String>();
+    private final Map<String, String> otherSimpleFields = new HashMap<>();
 
     // fields that, as they are should not be escaped before forwarding to the server
-    private Map<String, String> otherUnescapableFields = new HashMap<String, String>();
+    private final Map<String, String> otherUnescapableFields = new HashMap<>();
 
     public VCard() {
+        super(ELEMENT, NAMESPACE);
     }
 
     /**
-     * Set generic VCard field.
+     * Get the content of a generic VCard field.
      *
      * @param field value of field. Possible values: NICKNAME, PHOTO, BDAY, JABBERID, MAILER, TZ,
      *              GEO, TITLE, ROLE, LOGO, NOTE, PRODID, REV, SORT-STRING, SOUND, UID, URL, DESC.
+     * @return content of field.
      */
     public String getField(String field) {
         return otherSimpleFields.get(field);
@@ -146,7 +157,7 @@ public class VCard extends IQ {
     }
 
     /**
-     * Set generic, unescapable VCard field. If unescabale is set to true, XML maybe a part of the
+     * Set generic, unescapable VCard field. If unescapable is set to true, XML maybe a part of the
      * value.
      *
      * @param value         value of field
@@ -192,6 +203,24 @@ public class VCard extends IQ {
         updateFN();
     }
 
+    public String getPrefix() {
+        return prefix;
+    }
+
+    public void setPrefix(String prefix) {
+        this.prefix = prefix;
+        updateFN();
+    }
+
+    public String getSuffix() {
+        return suffix;
+    }
+
+    public void setSuffix(String suffix) {
+        this.suffix = suffix;
+        updateFN();
+    }
+
     public String getNickName() {
         return otherSimpleFields.get("NICKNAME");
     }
@@ -220,8 +249,8 @@ public class VCard extends IQ {
         return otherSimpleFields.get("JABBERID");
     }
 
-    public void setJabberId(String jabberId) {
-        otherSimpleFields.put("JABBERID", jabberId);
+    public void setJabberId(CharSequence jabberId) {
+        otherSimpleFields.put("JABBERID", jabberId.toString());
     }
 
     public String getOrganization() {
@@ -241,40 +270,44 @@ public class VCard extends IQ {
     }
 
     /**
-     * Get home address field
+     * Get home address field.
      *
      * @param addrField one of POSTAL, PARCEL, (DOM | INTL), PREF, POBOX, EXTADR, STREET,
      *                  LOCALITY, REGION, PCODE, CTRY
+     * @return content of home address field.
      */
     public String getAddressFieldHome(String addrField) {
         return homeAddr.get(addrField);
     }
 
     /**
-     * Set home address field
+     * Set home address field.
      *
      * @param addrField one of POSTAL, PARCEL, (DOM | INTL), PREF, POBOX, EXTADR, STREET,
      *                  LOCALITY, REGION, PCODE, CTRY
+     * @param value new value for the field.
      */
     public void setAddressFieldHome(String addrField, String value) {
         homeAddr.put(addrField, value);
     }
 
     /**
-     * Get work address field
+     * Get work address field.
      *
      * @param addrField one of POSTAL, PARCEL, (DOM | INTL), PREF, POBOX, EXTADR, STREET,
      *                  LOCALITY, REGION, PCODE, CTRY
+     * @return content of work address field.
      */
     public String getAddressFieldWork(String addrField) {
         return workAddr.get(addrField);
     }
 
     /**
-     * Set work address field
+     * Set work address field.
      *
      * @param addrField one of POSTAL, PARCEL, (DOM | INTL), PREF, POBOX, EXTADR, STREET,
      *                  LOCALITY, REGION, PCODE, CTRY
+     * @param value new value for the field.
      */
     public void setAddressFieldWork(String addrField, String value) {
         workAddr.put(addrField, value);
@@ -282,7 +315,7 @@ public class VCard extends IQ {
 
 
     /**
-     * Set home phone number
+     * Set home phone number.
      *
      * @param phoneType one of VOICE, FAX, PAGER, MSG, CELL, VIDEO, BBS, MODEM, ISDN, PCS, PREF
      * @param phoneNum  phone number
@@ -292,16 +325,17 @@ public class VCard extends IQ {
     }
 
     /**
-     * Get home phone number
+     * Get home phone number.
      *
      * @param phoneType one of VOICE, FAX, PAGER, MSG, CELL, VIDEO, BBS, MODEM, ISDN, PCS, PREF
+     * @return content of home phone number.
      */
     public String getPhoneHome(String phoneType) {
         return homePhones.get(phoneType);
     }
 
     /**
-     * Set work phone number
+     * Set work phone number.
      *
      * @param phoneType one of VOICE, FAX, PAGER, MSG, CELL, VIDEO, BBS, MODEM, ISDN, PCS, PREF
      * @param phoneNum  phone number
@@ -311,9 +345,10 @@ public class VCard extends IQ {
     }
 
     /**
-     * Get work phone number
+     * Get work phone number.
      *
      * @param phoneType one of VOICE, FAX, PAGER, MSG, CELL, VIDEO, BBS, MODEM, ISDN, PCS, PREF
+     * @return content of work phone number.
      */
     public String getPhoneWork(String phoneType) {
         return workPhones.get(phoneType);
@@ -322,7 +357,7 @@ public class VCard extends IQ {
     /**
      * Set the avatar for the VCard by specifying the url to the image.
      *
-     * @param avatarURL the url to the image(png,jpeg,gif,bmp)
+     * @param avatarURL the url to the image(png, jpeg, gif, bmp)
      */
     public void setAvatar(URL avatarURL) {
         byte[] bytes = new byte[0];
@@ -337,7 +372,7 @@ public class VCard extends IQ {
     }
 
     /**
-     * Removes the avatar from the vCard
+     * Removes the avatar from the vCard.
      *
      *  This is done by setting the PHOTO value to the empty string as defined in XEP-0153
      */
@@ -372,7 +407,7 @@ public class VCard extends IQ {
         }
 
         // Otherwise, add to mappings.
-        String encodedImage = StringUtils.encodeBase64(bytes);
+        String encodedImage = Base64.encodeToString(bytes);
 
         setAvatar(encodedImage, mimeType);
     }
@@ -394,10 +429,11 @@ public class VCard extends IQ {
      * @param encodedAvatar the encoded avatar string.
      * @deprecated Use {@link #setAvatar(String, String)} instead.
      */
+    @Deprecated
     public void setEncodedImage(String encodedAvatar) {
         setAvatar(encodedAvatar, DEFAULT_MIME_TYPE);
     }
-    
+
     /**
      * Return the byte representation of the avatar(if one exists), otherwise returns null if
      * no avatar could be found.
@@ -405,10 +441,10 @@ public class VCard extends IQ {
      * <pre>
      * // Load Avatar from VCard
      * byte[] avatarBytes = vCard.getAvatar();
-     * <p/>
+     *
      * // To create an ImageIcon for Swing applications
      * ImageIcon icon = new ImageIcon(avatar);
-     * <p/>
+     *
      * // To create just an image object from the bytes
      * ByteArrayInputStream bais = new ByteArrayInputStream(avatar);
      * try {
@@ -425,11 +461,11 @@ public class VCard extends IQ {
         if (photoBinval == null) {
             return null;
         }
-        return StringUtils.decodeBase64(photoBinval);
+        return Base64.decode(photoBinval);
     }
 
     /**
-     * Returns the MIME Type of the avatar or null if none is set
+     * Returns the MIME Type of the avatar or null if none is set.
      *
      * @return the MIME Type of the avatar or null
      */
@@ -441,6 +477,8 @@ public class VCard extends IQ {
      * Common code for getting the bytes of a url.
      *
      * @param url the url to read.
+     * @return bytes of the file pointed to by URL.
+     * @throws IOException if an IOException occurs while reading the file.
      */
     public static byte[] getBytes(URL url) throws IOException {
         final String path = url.getPath();
@@ -453,9 +491,7 @@ public class VCard extends IQ {
     }
 
     private static byte[] getFileBytes(File file) throws IOException {
-        BufferedInputStream bis = null;
-        try {
-            bis = new BufferedInputStream(new FileInputStream(file));
+        try (BufferedInputStream bis = new BufferedInputStream(new FileInputStream(file))) {
             int bytes = (int) file.length();
             byte[] buffer = new byte[bytes];
             int readBytes = bis.read(buffer);
@@ -463,11 +499,6 @@ public class VCard extends IQ {
                 throw new IOException("Entire file not read");
             }
             return buffer;
-        }
-        finally {
-            if (bis != null) {
-                bis.close();
-            }
         }
     }
 
@@ -498,73 +529,170 @@ public class VCard extends IQ {
     private void updateFN() {
         StringBuilder sb = new StringBuilder();
         if (firstName != null) {
-            sb.append(StringUtils.escapeForXML(firstName)).append(' ');
+            sb.append(StringUtils.escapeForXml(firstName)).append(' ');
         }
         if (middleName != null) {
-            sb.append(StringUtils.escapeForXML(middleName)).append(' ');
+            sb.append(StringUtils.escapeForXml(middleName)).append(' ');
         }
         if (lastName != null) {
-            sb.append(StringUtils.escapeForXML(lastName));
+            sb.append(StringUtils.escapeForXml(lastName));
         }
         setField("FN", sb.toString());
     }
 
     /**
      * Save this vCard for the user connected by 'connection'. XMPPConnection should be authenticated
-     * and not anonymous.<p>
-     * <p/>
-     * NOTE: the method is asynchronous and does not wait for the returned value.
+     * and not anonymous.
      *
      * @param connection the XMPPConnection to use.
      * @throws XMPPErrorException thrown if there was an issue setting the VCard in the server.
      * @throws NoResponseException if there was no response from the server.
-     * @throws NotConnectedException 
+     * @throws NotConnectedException
+     * @throws InterruptedException
+     * @deprecated use {@link VCardManager#saveVCard(VCard)} instead.
      */
-    public void save(XMPPConnection connection) throws NoResponseException, XMPPErrorException, NotConnectedException {
-        checkAuthenticated(connection, true);
-
-        setType(IQ.Type.set);
-        setFrom(connection.getUser());
-        connection.createPacketCollectorAndSend(this).nextResultOrThrow();
+    @Deprecated
+    public void save(XMPPConnection connection) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
+        VCardManager.getInstanceFor(connection).saveVCard(this);
     }
 
     /**
      * Load VCard information for a connected user. XMPPConnection should be authenticated
      * and not anonymous.
-     * @throws XMPPErrorException 
-     * @throws NoResponseException 
-     * @throws NotConnectedException 
+     *
+     * @param connection connection.
+     * @throws XMPPErrorException
+     * @throws NoResponseException
+     * @throws NotConnectedException
+     * @throws InterruptedException
+     * @deprecated use {@link VCardManager#loadVCard()} instead.
      */
-    public void load(XMPPConnection connection) throws NoResponseException, XMPPErrorException, NotConnectedException  {
-        checkAuthenticated(connection, true);
-
-        setFrom(connection.getUser());
-        doLoad(connection, connection.getUser());
+    @Deprecated
+    public void load(XMPPConnection connection) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException  {
+        load(connection, null);
     }
 
     /**
      * Load VCard information for a given user. XMPPConnection should be authenticated and not anonymous.
-     * @throws XMPPErrorException 
+     *
+     * @param connection connection.
+     * @param user user whos information we want to load.
+     *
+     * @throws XMPPErrorException
      * @throws NoResponseException if there was no response from the server.
-     * @throws NotConnectedException 
+     * @throws NotConnectedException
+     * @throws InterruptedException
+     * @deprecated use {@link VCardManager#loadVCard(EntityBareJid)} instead.
      */
-    public void load(XMPPConnection connection, String user) throws NoResponseException, XMPPErrorException, NotConnectedException {
-        checkAuthenticated(connection, false);
-
-        setTo(user);
-        doLoad(connection, user);
-    }
-
-    private void doLoad(XMPPConnection connection, String user) throws NoResponseException, XMPPErrorException, NotConnectedException {
-        setType(Type.get);
-        VCard result = (VCard) connection.createPacketCollectorAndSend(this).nextResultOrThrow();
+    @Deprecated
+    public void load(XMPPConnection connection, EntityBareJid user) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
+        VCard result = VCardManager.getInstanceFor(connection).loadVCard(user);
         copyFieldsFrom(result);
     }
 
-    public String getChildElementXML() {
-        StringBuilder sb = new StringBuilder();
-        new VCardWriter(sb).write();
-        return sb.toString();
+    @Override
+    protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder xml) {
+        if (!hasContent()) {
+            xml.setEmptyElement();
+            return xml;
+        }
+        xml.rightAngleBracket();
+        if (hasNameField()) {
+            xml.openElement("N");
+            xml.optElement("FAMILY", lastName);
+            xml.optElement("GIVEN", firstName);
+            xml.optElement("MIDDLE", middleName);
+            xml.optElement("PREFIX", prefix);
+            xml.optElement("SUFFIX", suffix);
+            xml.closeElement("N");
+        }
+        if (hasOrganizationFields()) {
+            xml.openElement("ORG");
+            xml.optElement("ORGNAME", organization);
+            xml.optElement("ORGUNIT", organizationUnit);
+            xml.closeElement("ORG");
+        }
+        for (Entry<String, String> entry : otherSimpleFields.entrySet()) {
+            xml.optElement(entry.getKey(), entry.getValue());
+        }
+        for (Entry<String, String> entry : otherUnescapableFields.entrySet()) {
+            final String value = entry.getValue();
+            if (value == null) {
+                continue;
+            }
+            xml.openElement(entry.getKey());
+            xml.append(value);
+            xml.closeElement(entry.getKey());
+        }
+        if (photoBinval != null) {
+            xml.openElement("PHOTO");
+            xml.escapedElement("BINVAL", photoBinval);
+            xml.element("TYPE", photoMimeType);
+            xml.closeElement("PHOTO");
+        }
+        if (emailWork != null) {
+            xml.openElement("EMAIL");
+            xml.emptyElement("WORK");
+            xml.emptyElement("INTERNET");
+            xml.emptyElement("PREF");
+            xml.element("USERID", emailWork);
+            xml.closeElement("EMAIL");
+        }
+        if (emailHome != null) {
+            xml.openElement("EMAIL");
+            xml.emptyElement("HOME");
+            xml.emptyElement("INTERNET");
+            xml.emptyElement("PREF");
+            xml.element("USERID", emailHome);
+            xml.closeElement("EMAIL");
+        }
+        for (Entry<String, String> phone : workPhones.entrySet()) {
+            final String number = phone.getValue();
+            if (number == null) {
+                continue;
+            }
+            xml.openElement("TEL");
+            xml.emptyElement("WORK");
+            xml.emptyElement(phone.getKey());
+            xml.element("NUMBER", number);
+            xml.closeElement("TEL");
+        }
+        for (Entry<String, String> phone : homePhones.entrySet()) {
+            final String number = phone.getValue();
+            if (number == null) {
+                continue;
+            }
+            xml.openElement("TEL");
+            xml.emptyElement("HOME");
+            xml.emptyElement(phone.getKey());
+            xml.element("NUMBER", number);
+            xml.closeElement("TEL");
+        }
+        if (!workAddr.isEmpty()) {
+            xml.openElement("ADR");
+            xml.emptyElement("WORK");
+            for (Entry<String, String> entry : workAddr.entrySet()) {
+                final String value = entry.getValue();
+                if (value == null) {
+                    continue;
+                }
+                xml.element(entry.getKey(), value);
+            }
+            xml.closeElement("ADR");
+        }
+        if (!homeAddr.isEmpty()) {
+            xml.openElement("ADR");
+            xml.emptyElement("HOME");
+            for (Entry<String, String> entry : homeAddr.entrySet()) {
+                final String value = entry.getValue();
+                if (value == null) {
+                    continue;
+                }
+                xml.element(entry.getKey(), value);
+            }
+            xml.closeElement("ADR");
+        }
+        return xml;
     }
 
     private void copyFieldsFrom(VCard from) {
@@ -583,20 +711,8 @@ public class VCard extends IQ {
         }
     }
 
-    private void checkAuthenticated(XMPPConnection connection, boolean checkForAnonymous) {
-        if (connection == null) {
-            throw new IllegalArgumentException("No connection was provided");
-        }
-        if (!connection.isAuthenticated()) {
-            throw new IllegalArgumentException("XMPPConnection is not authenticated");
-        }
-        if (checkForAnonymous && connection.isAnonymous()) {
-            throw new IllegalArgumentException("XMPPConnection cannot be anonymous");
-        }
-    }
-
     private boolean hasContent() {
-        //noinspection OverlyComplexBooleanExpression
+        // noinspection OverlyComplexBooleanExpression
         return hasNameField()
                 || hasOrganizationFields()
                 || emailHome != null
@@ -612,7 +728,8 @@ public class VCard extends IQ {
     }
 
     private boolean hasNameField() {
-        return firstName != null || lastName != null || middleName != null;
+        return firstName != null || lastName != null || middleName != null
+                || prefix != null || suffix != null;
     }
 
     private boolean hasOrganizationFields() {
@@ -621,6 +738,7 @@ public class VCard extends IQ {
 
     // Used in tests:
 
+    @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
@@ -669,6 +787,7 @@ public class VCard extends IQ {
         return workPhones.equals(vCard.workPhones);
     }
 
+    @Override
     public int hashCode() {
         int result;
         result = homePhones.hashCode();
@@ -687,173 +806,5 @@ public class VCard extends IQ {
         return result;
     }
 
-    public String toString() {
-        return getChildElementXML();
-    }
-
-    //==============================================================
-
-    private class VCardWriter {
-
-        private final StringBuilder sb;
-
-        VCardWriter(StringBuilder sb) {
-            this.sb = sb;
-        }
-
-        public void write() {
-            appendTag(VCardManager.ELEMENT, "xmlns", VCardManager.NAMESPACE, hasContent(), new ContentBuilder() {
-                public void addTagContent() {
-                    buildActualContent();
-                }
-            });
-        }
-
-        private void buildActualContent() {
-            if (hasNameField()) {
-                appendN();
-            }
-
-            appendOrganization();
-            appendGenericFields();
-            appendPhoto();
-
-            appendEmail(emailWork, "WORK");
-            appendEmail(emailHome, "HOME");
-
-            appendPhones(workPhones, "WORK");
-            appendPhones(homePhones, "HOME");
-
-            appendAddress(workAddr, "WORK");
-            appendAddress(homeAddr, "HOME");
-        }
-
-        private void appendPhoto() {
-            if (photoBinval == null)
-                return;
-
-            appendTag("PHOTO", true, new ContentBuilder() {
-                public void addTagContent() {
-                    appendTag("BINVAL", photoBinval); // No need to escape photoBinval, as it's already Base64 encoded
-                    appendTag("TYPE", StringUtils.escapeForXML(photoMimeType));
-                }
-            });
-        }
-        private void appendEmail(final String email, final String type) {
-            if (email != null) {
-                appendTag("EMAIL", true, new ContentBuilder() {
-                    public void addTagContent() {
-                        appendEmptyTag(type);
-                        appendEmptyTag("INTERNET");
-                        appendEmptyTag("PREF");
-                        appendTag("USERID", StringUtils.escapeForXML(email));
-                    }
-                });
-            }
-        }
-
-        private void appendPhones(Map<String, String> phones, final String code) {
-            for (final Map.Entry<String,String> entry : phones.entrySet()) {
-                appendTag("TEL", true, new ContentBuilder() {
-                    public void addTagContent() {
-                        appendEmptyTag(entry.getKey());
-                        appendEmptyTag(code);
-                        appendTag("NUMBER", StringUtils.escapeForXML(entry.getValue()));
-                    }
-                });
-            }
-        }
-
-        private void appendAddress(final Map<String, String> addr, final String code) {
-            if (addr.size() > 0) {
-                appendTag("ADR", true, new ContentBuilder() {
-                    public void addTagContent() {
-                        appendEmptyTag(code);
-
-                        for (final Entry<String, String> entry : addr.entrySet()) {
-                            appendTag(entry.getKey(), StringUtils.escapeForXML(entry.getValue()));
-                        }
-                    }
-                });
-            }
-        }
-
-        private void appendEmptyTag(Object tag) {
-            sb.append('<').append(tag).append("/>");
-        }
-
-        private void appendGenericFields() {
-            for (Map.Entry<String, String> entry : otherSimpleFields.entrySet()) {
-                appendTag(entry.getKey().toString(),
-                        StringUtils.escapeForXML(entry.getValue()));
-            }
-
-            for (Map.Entry<String, String> entry : otherUnescapableFields.entrySet()) {
-                appendTag(entry.getKey().toString(),entry.getValue());
-            }
-        }
-
-        private void appendOrganization() {
-            if (hasOrganizationFields()) {
-                appendTag("ORG", true, new ContentBuilder() {
-                    public void addTagContent() {
-                        appendTag("ORGNAME", StringUtils.escapeForXML(organization));
-                        appendTag("ORGUNIT", StringUtils.escapeForXML(organizationUnit));
-                    }
-                });
-            }
-        }
-
-        private void appendN() {
-            appendTag("N", true, new ContentBuilder() {
-                public void addTagContent() {
-                    appendTag("FAMILY", StringUtils.escapeForXML(lastName));
-                    appendTag("GIVEN", StringUtils.escapeForXML(firstName));
-                    appendTag("MIDDLE", StringUtils.escapeForXML(middleName));
-                }
-            });
-        }
-
-        private void appendTag(String tag, String attr, String attrValue, boolean hasContent,
-                ContentBuilder builder) {
-            sb.append('<').append(tag);
-            if (attr != null) {
-                sb.append(' ').append(attr).append('=').append('\'').append(attrValue).append('\'');
-            }
-
-            if (hasContent) {
-                sb.append('>');
-                builder.addTagContent();
-                sb.append("</").append(tag).append(">\n");
-            }
-            else {
-                sb.append("/>\n");
-            }
-        }
-
-        private void appendTag(String tag, boolean hasContent, ContentBuilder builder) {
-            appendTag(tag, null, null, hasContent, builder);
-        }
-
-        private void appendTag(String tag, final CharSequence tagText) {
-            if (tagText == null) return;
-            final ContentBuilder contentBuilder = new ContentBuilder() {
-                public void addTagContent() {
-                    sb.append(tagText.toString().trim());
-                }
-            };
-            appendTag(tag, true, contentBuilder);
-        }
-
-    }
-
-    //==============================================================
-
-    private interface ContentBuilder {
-
-        void addTagContent();
-    }
-
-    //==============================================================
 }
 

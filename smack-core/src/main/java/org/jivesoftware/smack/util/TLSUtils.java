@@ -1,6 +1,6 @@
 /**
  *
- * Copyright 2014 Florian Schmaus
+ * Copyright 2014-2016 Florian Schmaus
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,15 +17,21 @@
 package org.jivesoftware.smack.util;
 
 import java.security.KeyManagementException;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
+import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
@@ -49,14 +55,18 @@ public class TLSUtils {
      * According to the <a
      * href="https://raw.githubusercontent.com/stpeter/manifesto/master/manifesto.txt">Encrypted
      * XMPP Manifesto</a>, TLSv1.2 shall be deployed, providing fallback support for SSLv3 and
-     * TLSv1.1. This method goes one step boyond and upgrades the handshake to use TLSv1 or better.
+     * TLSv1.1. This method goes one step beyond and upgrades the handshake to use TLSv1 or better.
      * This method requires the underlying OS to support all of TLSv1.2 , 1.1 and 1.0.
      * </p>
-     * 
-     * @param conf the configuration to apply this setting to
+     *
+     * @param builder the configuration builder to apply this setting to
+     * @param <B> Type of the ConnectionConfiguration builder.
+     *
+     * @return the given builder
      */
-    public static void setTLSOnly(ConnectionConfiguration conf) {
-        conf.setEnabledSSLProtocols(new String[] { PROTO_TLSV1_2,  PROTO_TLSV1_1, PROTO_TLSV1 });
+    public static <B extends ConnectionConfiguration.Builder<B, ?>> B setTLSOnly(B builder) {
+        builder.setEnabledSSLProtocols(new String[] { PROTO_TLSV1_2,  PROTO_TLSV1_1, PROTO_TLSV1 });
+        return builder;
     }
 
     /**
@@ -68,27 +78,61 @@ public class TLSUtils {
      * XMPP Manifesto</a>, TLSv1.2 shall be deployed, providing fallback support for SSLv3 and
      * TLSv1.1.
      * </p>
-     * 
-     * @param conf the configuration to apply this setting to
+     *
+     * @param builder the configuration builder to apply this setting to
+     * @param <B> Type of the ConnectionConfiguration builder.
+     *
+     * @return the given builder
      */
-    public static void setSSLv3AndTLSOnly(ConnectionConfiguration conf) {
-        conf.setEnabledSSLProtocols(new String[] { PROTO_TLSV1_2,  PROTO_TLSV1_1, PROTO_TLSV1, PROTO_SSL3 });
+    public static <B extends ConnectionConfiguration.Builder<B, ?>> B setSSLv3AndTLSOnly(B builder) {
+        builder.setEnabledSSLProtocols(new String[] { PROTO_TLSV1_2,  PROTO_TLSV1_1, PROTO_TLSV1, PROTO_SSL3 });
+        return builder;
     }
 
     /**
-     * Accept all SSL/TLS certificates.
+     * Accept all TLS certificates.
      * <p>
-     * <b>Warning</b> Use with care. Only use this method if you understand the implications.
+     * <b>Warning:</b> Use with care. This method make the Connection use {@link AcceptAllTrustManager} and essentially
+     * <b>invalidates all security guarantees provided by TLS</b>. Only use this method if you understand the
+     * implications.
      * </p>
-     * 
-     * @param conf
+     *
+     * @param builder a connection configuration builder.
+     * @param <B> Type of the ConnectionConfiguration builder.
      * @throws NoSuchAlgorithmException
      * @throws KeyManagementException
+     * @return the given builder.
      */
-    public static void acceptAllCertificates(ConnectionConfiguration conf) throws NoSuchAlgorithmException, KeyManagementException {
+    public static <B extends ConnectionConfiguration.Builder<B, ?>> B acceptAllCertificates(B builder) throws NoSuchAlgorithmException, KeyManagementException {
         SSLContext context = SSLContext.getInstance(TLS);
         context.init(null, new TrustManager[] { new AcceptAllTrustManager() }, new SecureRandom());
-        conf.setCustomSSLContext(context);
+        builder.setCustomSSLContext(context);
+        return builder;
+    }
+
+    private static final HostnameVerifier DOES_NOT_VERIFY_VERIFIER = new HostnameVerifier() {
+        @Override
+        public boolean verify(String hostname, SSLSession session) {
+            // This verifier doesn't verify the hostname, it always returns true.
+            return true;
+        }
+    };
+
+    /**
+     * Disable the hostname verification of TLS certificates.
+     * <p>
+     * <b>Warning:</b> Use with care. This disables hostname verification of TLS certificates and essentially
+     * <b>invalidates all security guarantees provided by TLS</b>. Only use this method if you understand the
+     * implications.
+     * </p>
+     *
+     * @param builder a connection configuration builder.
+     * @param <B> Type of the ConnectionConfiguration builder.
+     * @return the given builder.
+     */
+    public static <B extends ConnectionConfiguration.Builder<B, ?>> B disableHostnameVerificationForTlsCertificates(B builder) {
+        builder.setHostnameVerifier(DOES_NOT_VERIFY_VERIFIER);
+        return builder;
     }
 
     public static void setEnabledProtocolsAndCiphers(final SSLSocket sslSocket,
@@ -134,6 +178,49 @@ public class TLSUtils {
         }
     }
 
+    /**
+     * Get the channel binding data for the 'tls-server-end-point' channel binding type. This channel binding type is
+     * defined in RFC 5929 § 4.
+     *
+     * @param sslSession the SSL/TLS session from which the data should be retrieved.
+     * @return the channel binding data.
+     * @throws SSLPeerUnverifiedException
+     * @throws CertificateEncodingException
+     * @throws NoSuchAlgorithmException
+     * @see <a href="https://tools.ietf.org/html/rfc5929#section-4">RFC 5929 § 4.</a>
+     */
+    public static byte[] getChannelBindingTlsServerEndPoint(final SSLSession sslSession)
+                    throws SSLPeerUnverifiedException, CertificateEncodingException, NoSuchAlgorithmException {
+        final Certificate[] peerCertificates = sslSession.getPeerCertificates();
+        final Certificate certificate = peerCertificates[0];
+        final String certificateAlgorithm = certificate.getPublicKey().getAlgorithm();
+
+        // RFC 5929 § 4.1 hash function selection.
+        String algorithm;
+        switch (certificateAlgorithm) {
+        case "MD5":
+        case "SHA-1":
+            algorithm = "SHA-256";
+            break;
+        default:
+            algorithm = certificateAlgorithm;
+            break;
+        }
+
+        final MessageDigest messageDigest = MessageDigest.getInstance(algorithm);
+        final byte[] certificateDerEncoded = certificate.getEncoded();
+        messageDigest.update(certificateDerEncoded);
+        return messageDigest.digest();
+    }
+
+    /**
+     * A {@link X509TrustManager} that <b>doesn't validate</b> X.509 certificates.
+     * <p>
+     * Connections that use this TrustManager will just be encrypted, without any guarantee that the
+     * counter part is actually the intended one. Man-in-the-Middle attacks will be possible, since
+     * any certificate presented by the attacker will be considered valid.
+     * </p>
+     */
     public static class AcceptAllTrustManager implements X509TrustManager {
 
         @Override
@@ -150,7 +237,7 @@ public class TLSUtils {
 
         @Override
         public X509Certificate[] getAcceptedIssuers() {
-            throw new UnsupportedOperationException();
+            return new X509Certificate[0];
         }
     }
 }

@@ -16,8 +16,7 @@
  */
 package org.jivesoftware.smackx.hoxt.packet;
 
-import org.jivesoftware.smack.util.StringUtils;
-import org.jivesoftware.smackx.hoxt.HOXTManager;
+import org.jivesoftware.smack.util.Objects;
 
 /**
  * Represents Resp IQ packet.
@@ -25,98 +24,96 @@ import org.jivesoftware.smackx.hoxt.HOXTManager;
  * @author Andriy Tsykholyas
  * @see <a href="http://xmpp.org/extensions/xep-0332.html">XEP-0332: HTTP over XMPP transport</a>
  */
-public class HttpOverXmppResp extends AbstractHttpOverXmpp {
+public final class HttpOverXmppResp extends AbstractHttpOverXmpp {
 
-    private Resp resp;
+    public static final String ELEMENT = "resp";
+
+    private HttpOverXmppResp(Builder builder) {
+        super(ELEMENT, builder);
+        this.statusCode = Objects.requireNonNull(builder.statusCode, "statusCode must not be null");
+        this.statusMessage = builder.statusMessage;
+    }
+
+    private final int statusCode;
+    private final String statusMessage;
 
     @Override
-    public String getChildElementXML() {
-        return resp.toXML();
+    protected IQChildElementXmlStringBuilder getIQHoxtChildElementBuilder(IQChildElementXmlStringBuilder builder) {
+        builder.attribute("version", getVersion());
+        builder.attribute("statusCode", statusCode);
+        builder.optAttribute("statusMessage", statusMessage);
+        builder.rightAngleBracket();
+        return builder;
     }
 
     /**
-     * Returns Resp element.
+     * Returns statusCode attribute.
      *
-     * @return Resp element
+     * @return statusCode attribute
      */
-    public Resp getResp() {
-        return resp;
+    public int getStatusCode() {
+        return statusCode;
     }
 
     /**
-     * Sets Resp element.
+     * Returns statusMessage attribute.
      *
-     * @param resp Resp element
+     * @return statusMessage attribute
      */
-    public void setResp(Resp resp) {
-        this.resp = resp;
+    public String getStatusMessage() {
+        return statusMessage;
+    }
+
+    public static Builder builder() {
+        return new Builder();
     }
 
     /**
-     * Represents Resp element.
+     * A configuration builder for HttpOverXmppReq. Use {@link HttpOverXmppResp#builder()} to obtain a new instance and
+     * {@link #build} to build the configuration.
      */
-    public static class Resp extends AbstractBody {
+    public static final class Builder extends AbstractHttpOverXmpp.Builder<Builder, HttpOverXmppResp> {
 
-        private int statusCode;
+        private int statusCode = 200;
         private String statusMessage = null;
 
-        @Override
-        protected String getStartTag() {
-            StringBuilder builder = new StringBuilder();
-            builder.append("<resp");
-            builder.append(" ");
-            builder.append("xmlns='").append(HOXTManager.NAMESPACE).append("'");
-            builder.append(" ");
-            builder.append("version='").append(StringUtils.escapeForXML(version)).append("'");
-            builder.append(" ");
-            builder.append("statusCode='").append(Integer.toString(statusCode)).append("'");
-            if (statusMessage != null) {
-                builder.append(" ");
-                builder.append("statusMessage='").append(StringUtils.escapeForXML(statusMessage)).append("'");
-            }
-            builder.append(">");
-            return builder.toString();
-        }
-
-        @Override
-        protected String getEndTag() {
-            return "</resp>";
-        }
-
-        /**
-         * Returns statusCode attribute.
-         *
-         * @return statusCode attribute
-         */
-        public int getStatusCode() {
-            return statusCode;
+        private Builder() {
         }
 
         /**
          * Sets statusCode attribute.
          *
          * @param statusCode statusCode attribute
-         */
-        public void setStatusCode(int statusCode) {
-            this.statusCode = statusCode;
-        }
-
-        /**
-         * Returns statusMessage attribute.
          *
-         * @return statusMessage attribute
+         * @return the builder
          */
-        public String getStatusMessage() {
-            return statusMessage;
+        public Builder setStatusCode(int statusCode) {
+            this.statusCode = statusCode;
+            return this;
         }
 
         /**
          * Sets statusMessage attribute.
          *
          * @param statusMessage statusMessage attribute
+         *
+         * @return the builder
          */
-        public void setStatusMessage(String statusMessage) {
+        public Builder setStatusMessage(String statusMessage) {
             this.statusMessage = statusMessage;
+            return this;
+
+        }
+
+        @Override
+        public HttpOverXmppResp build() {
+            return new HttpOverXmppResp(this);
+        }
+
+        @Override
+        protected Builder getThis() {
+            return this;
         }
     }
+
 }

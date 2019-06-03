@@ -16,25 +16,19 @@
  */
 package org.jivesoftware.smack.packet;
 
-import org.junit.Test;
-
-import static org.custommonkey.xmlunit.XMLAssert.assertXMLEqual;
+import static org.jivesoftware.smack.test.util.XmlUnitUtils.assertXmlSimilar;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import org.xml.sax.SAXException;
-
 import java.io.IOException;
 
-import javax.xml.parsers.ParserConfigurationException;
+import org.junit.Test;
+import org.xml.sax.SAXException;
 
-/**
- *
- */
 public class PresenceTest {
     @Test
-    public void setPresenceTypeTest() throws IOException, SAXException, ParserConfigurationException {
+    public void setPresenceTypeTest() throws IOException, SAXException {
         Presence.Type type = Presence.Type.unavailable;
         Presence.Type type2 = Presence.Type.subscribe;
 
@@ -47,9 +41,9 @@ public class PresenceTest {
         String control = controlBuilder.toString();
 
         Presence presenceTypeInConstructor = new Presence(type);
-        presenceTypeInConstructor.setPacketID(Packet.ID_NOT_AVAILABLE);
+        presenceTypeInConstructor.setStanzaId(null);
         assertEquals(type, presenceTypeInConstructor.getType());
-        assertXMLEqual(control, presenceTypeInConstructor.toXML().toString());
+        assertXmlSimilar(control, presenceTypeInConstructor.toXML(StreamOpen.CLIENT_NAMESPACE).toString());
 
         controlBuilder = new StringBuilder();
         controlBuilder.append("<presence")
@@ -62,10 +56,10 @@ public class PresenceTest {
         Presence presenceTypeSet = getNewPresence();
         presenceTypeSet.setType(type2);
         assertEquals(type2, presenceTypeSet.getType());
-        assertXMLEqual(control, presenceTypeSet.toXML().toString());
+        assertXmlSimilar(control, presenceTypeSet.toXML(StreamOpen.CLIENT_NAMESPACE).toString());
     }
 
-    @Test(expected=NullPointerException.class)
+    @Test(expected = NullPointerException.class)
     public void setNullPresenceTypeTest() {
         getNewPresence().setType(null);
     }
@@ -81,7 +75,7 @@ public class PresenceTest {
     }
 
     @Test
-    public void setPresenceStatusTest() throws IOException, SAXException, ParserConfigurationException {
+    public void setPresenceStatusTest() throws IOException, SAXException {
         final String status = "This is a test of the emergency broadcast system.";
 
         StringBuilder controlBuilder = new StringBuilder();
@@ -96,11 +90,11 @@ public class PresenceTest {
         presence.setStatus(status);
 
         assertEquals(status, presence.getStatus());
-        assertXMLEqual(control, presence.toXML().toString());
+        assertXmlSimilar(control, presence.toXML(StreamOpen.CLIENT_NAMESPACE).toString());
     }
 
     @Test
-    public void setPresencePriorityTest() throws IOException, SAXException, ParserConfigurationException {
+    public void setPresencePriorityTest() throws IOException, SAXException {
         final int priority = 10;
 
         StringBuilder controlBuilder = new StringBuilder();
@@ -115,16 +109,16 @@ public class PresenceTest {
         presence.setPriority(priority);
 
         assertEquals(priority, presence.getPriority());
-        assertXMLEqual(control, presence.toXML().toString());
+        assertXmlSimilar(control, presence.toXML(StreamOpen.CLIENT_NAMESPACE).toString());
     }
 
-    @Test(expected=IllegalArgumentException.class)
+    @Test(expected = IllegalArgumentException.class)
     public void setIllegalPriorityTest() {
         getNewPresence().setPriority(Integer.MIN_VALUE);
     }
 
     @Test
-    public void setPresenceModeTest() throws IOException, SAXException, ParserConfigurationException {
+    public void setPresenceModeTest() throws IOException, SAXException {
         Presence.Mode mode1 = Presence.Mode.dnd;
                 final int priority = 10;
         final String status = "This is a test of the emergency broadcast system.";
@@ -146,9 +140,9 @@ public class PresenceTest {
 
         Presence presenceModeInConstructor = new Presence(Presence.Type.available, status, priority,
                 mode1);
-        presenceModeInConstructor.setPacketID(Packet.ID_NOT_AVAILABLE);
+        presenceModeInConstructor.setStanzaId(null);
         assertEquals(mode1, presenceModeInConstructor.getMode());
-        assertXMLEqual(control, presenceModeInConstructor.toXML().toString());
+        assertXmlSimilar(control, presenceModeInConstructor.toXML(StreamOpen.CLIENT_NAMESPACE).toString());
 
         controlBuilder = new StringBuilder();
         controlBuilder.append("<presence>")
@@ -161,7 +155,7 @@ public class PresenceTest {
         Presence presenceModeSet = getNewPresence();
         presenceModeSet.setMode(mode2);
         assertEquals(mode2, presenceModeSet.getMode());
-        assertXMLEqual(control, presenceModeSet.toXML().toString());
+        assertXmlSimilar(control, presenceModeSet.toXML(StreamOpen.CLIENT_NAMESPACE).toString());
     }
 
     @Test
@@ -175,7 +169,7 @@ public class PresenceTest {
     }
 
     @Test
-    public void presenceXmlLangTest() throws IOException, SAXException, ParserConfigurationException {
+    public void presenceXmlLangTest() throws IOException, SAXException {
         final String lang = "sp";
 
         StringBuilder controlBuilder = new StringBuilder();
@@ -189,12 +183,12 @@ public class PresenceTest {
         Presence presence = getNewPresence();
         presence.setLanguage(lang);
 
-        assertXMLEqual(control, presence.toXML().toString());
+        assertXmlSimilar(control, presence.toXML(StreamOpen.CLIENT_NAMESPACE).toString());
     }
 
     private static Presence getNewPresence() {
         Presence presence = new Presence(Presence.Type.available);
-        presence.setPacketID(Packet.ID_NOT_AVAILABLE);
+        presence.setStanzaId(null);
         return presence;
     }
 }

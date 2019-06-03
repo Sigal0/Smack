@@ -17,12 +17,11 @@
 package org.jivesoftware.smackx.pubsub;
 
 /**
- * Defines the available types of nodes
- * 
+ * Defines the available types of nodes.
+ *
  * @author Robin Collier
  */
-public enum NodeType
-{
-	leaf,
-	collection;
+public enum NodeType {
+    leaf,
+    collection
 }

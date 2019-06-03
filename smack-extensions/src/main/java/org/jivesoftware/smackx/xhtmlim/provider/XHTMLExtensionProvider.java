@@ -1,6 +1,6 @@
 /**
  *
- * Copyright 2003-2007 Jive Software, 2014 Florian Schmaus
+ * Copyright 2003-2007 Jive Software, 2014-2019 Florian Schmaus
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,36 +16,37 @@
  */
 package org.jivesoftware.smackx.xhtmlim.provider;
 
-import org.jivesoftware.smack.packet.Message;
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
-import org.jivesoftware.smack.util.PacketParserUtils;
-import org.jivesoftware.smackx.xhtmlim.packet.XHTMLExtension;
-import org.xmlpull.v1.XmlPullParser;
-import org.xmlpull.v1.XmlPullParserException;
-
 import java.io.IOException;
+
+import org.jivesoftware.smack.packet.Message;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.ExtensionElementProvider;
+import org.jivesoftware.smack.util.PacketParserUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
+import org.jivesoftware.smackx.xhtmlim.packet.XHTMLExtension;
 
 /**
  * The XHTMLExtensionProvider parses XHTML packets.
  *
  * @author Florian Schmaus
  */
-public class XHTMLExtensionProvider implements PacketExtensionProvider {
+public class XHTMLExtensionProvider extends ExtensionElementProvider<XHTMLExtension> {
+
     @Override
-    public PacketExtension parseExtension(XmlPullParser parser) throws IOException, XmlPullParserException {
+    public XHTMLExtension parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws IOException, XmlPullParserException {
         XHTMLExtension xhtmlExtension = new XHTMLExtension();
 
-        int startDepth = parser.getDepth();
         while (true) {
-            int eventType = parser.getEventType();
+            XmlPullParser.Event eventType = parser.getEventType();
             String name = parser.getName();
-            if (eventType == XmlPullParser.START_TAG) {
+            if (eventType == XmlPullParser.Event.START_ELEMENT) {
                 if (name.equals(Message.BODY)) {
                     xhtmlExtension.addBody(PacketParserUtils.parseElement(parser));
                 }
-            } else if (eventType == XmlPullParser.END_TAG) {
-                if (name.equals(XHTMLExtension.ELEMENT) && parser.getDepth() <= startDepth) {
+            } else if (eventType == XmlPullParser.Event.END_ELEMENT) {
+                if (parser.getDepth() == initialDepth) {
                     return xhtmlExtension;
                 }
             }

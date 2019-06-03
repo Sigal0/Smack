@@ -16,28 +16,20 @@
  */
 package org.jivesoftware.util;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
-import java.io.StringReader;
-import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Source;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.stream.StreamResult;
-import javax.xml.transform.stream.StreamSource;
-
-import org.jivesoftware.smack.packet.Packet;
+import org.jivesoftware.smack.packet.Stanza;
+import org.jivesoftware.smack.util.XmlUtil;
 
 /**
  * This class can be used in conjunction with a mocked XMPP connection (
- * {@link ConnectionUtils#createMockedConnection(Protocol, String, String)}) to
- * verify a XMPP protocol. This can be accomplished in the following was:
+ * {@link ConnectionUtils#createMockedConnection(Protocol, org.jxmpp.jid.EntityFullJid, org.jxmpp.jid.DomainBareJid)}) to
+ * verify an XMPP protocol. This can be accomplished in the following was:
  * <ul>
  * <li>add responses to packets sent over the mocked XMPP connection by the
  * method to test in the order the tested method awaits them</li>
@@ -46,35 +38,37 @@ import org.jivesoftware.smack.packet.Packet;
  * </li>
  * </ul>
  * Example:
- * 
+ *
  * <pre>
  * <code>
  * public void methodToTest() {
- *   Packet packet = new Packet(); // create an XMPP packet
- *   PacketCollector collector = connection.createPacketCollector(new PacketIDFilter());
- *   connection.sendPacket(packet);
- *   Packet reply = collector.nextResult();
+ *   Stanza stanza = new Packet(); // create an XMPP packet
+ *   StanzaCollector collector = connection.createStanzaCollector(new StanzaIdFilter());
+ *   connection.sendStanza(packet);
+ *   Stanza reply = collector.nextResult();
  * }
- * 
+ *
  * public void testMethod() {
+ *   EntityFullJid userJid = JidCreate.entityFullFrom("user@xmpp-server.org");
+ *   DomainBareJid serverJid = JidCreate.domainBareFrom("user-server.org");
  *   // create protocol
  *   Protocol protocol = new Protocol();
  *   // create mocked connection
- *   XMPPConnection connection = ConnectionUtils.createMockedConnection(protocol, "user@xmpp-server", "xmpp-server");
- *   
- *   // add reply packet to protocol
- *   Packet reply = new Packet();
+ *   XMPPConnection connection = ConnectionUtils.createMockedConnection(protocol, userJid, serverJid);
+ *
+ *   // add reply stanza to protocol
+ *   Stanza reply = new Packet();
  *   protocol.add(reply);
- *   
+ *
  *   // call method to test
  *   methodToTest();
- *   
+ *
  *   // verify protocol
  *   protocol.verifyAll();
  * }
  * </code>
  * </pre>
- * 
+ *
  * Additionally to adding the response to the protocol instance you can pass
  * verifications that will be executed when {@link #verifyAll()} is invoked.
  * (See {@link Verification} for more details.)
@@ -82,7 +76,8 @@ import org.jivesoftware.smack.packet.Packet;
  * If the {@link #printProtocol} flag is set to true {@link #verifyAll()} will
  * also print out the XML messages in the order they are sent to the console.
  * This may be useful to inspect the whole protocol "by hand".
- * 
+ * </p>
+ *
  * @author Henning Staib
  */
 public class Protocol {
@@ -94,25 +89,25 @@ public class Protocol {
     public boolean printProtocol = false;
 
     // responses to requests are taken form this queue
-    Queue<Packet> responses = new LinkedList<Packet>();
+    private final Queue<Stanza> responses = new LinkedList<>();
 
     // list of verifications
-    List<Verification<?, ?>[]> verificationList = new ArrayList<Verification<?, ?>[]>();
+    private final List<Verification<?, ?>[]> verificationList = new ArrayList<>();
 
     // list of requests
-    List<Packet> requests = new ArrayList<Packet>();
+    private final List<Stanza> requests = new ArrayList<>();
 
     // list of all responses
-    List<Packet> responsesList = new ArrayList<Packet>();
+    private final List<Stanza> responsesList = new ArrayList<>();
 
     /**
      * Adds a responses and all verifications for the request/response pair to
      * the protocol.
-     * 
+     *
      * @param response the response for a request
      * @param verifications verifications for request/response pair
      */
-    public void addResponse(Packet response, Verification<?, ?>... verifications) {
+    public void addResponse(Stanza response, Verification<?, ?>... verifications) {
         responses.offer(response);
         verificationList.add(verifications);
         responsesList.add(response);
@@ -124,75 +119,56 @@ public class Protocol {
      */
     @SuppressWarnings("unchecked")
     public void verifyAll() {
+        // CHECKSTYLE:OFF
         assertEquals(requests.size(), responsesList.size());
 
         if (printProtocol)
             System.out.println("=================== Start ===============\n");
 
         for (int i = 0; i < requests.size(); i++) {
-            Packet request = requests.get(i);
-            Packet response = responsesList.get(i);
+            Stanza request = requests.get(i);
+            Stanza response = responsesList.get(i);
 
             if (printProtocol) {
                 System.out.println("------------------- Request -------------\n");
-                System.out.println(prettyFormat(request.toXML().toString()));
+                System.out.println(XmlUtil.prettyFormatXml(request.toXML()));
                 System.out.println("------------------- Response ------------\n");
                 if (response != null) {
-                    System.out.println(prettyFormat(response.toXML().toString()));
+                    System.out.println(XmlUtil.prettyFormatXml(response.toXML()));
                 }
                 else {
                     System.out.println("No response");
                 }
             }
 
-            Verification<Packet, Packet>[] verifications = (Verification<Packet, Packet>[]) verificationList.get(i);
+            Verification<Stanza, Stanza>[] verifications = (Verification<Stanza, Stanza>[]) verificationList.get(i);
             if (verifications != null) {
-                for (Verification<Packet, Packet> verification : verifications) {
+                for (Verification<Stanza, Stanza> verification : verifications) {
                     verification.verify(request, response);
                 }
             }
         }
         if (printProtocol)
             System.out.println("=================== End =================\n");
+        // CHECKSTYLE:ON
     }
 
     /**
      * Returns the responses queue.
-     * 
+     *
      * @return the responses queue
      */
-    protected Queue<Packet> getResponses() {
+    protected Queue<Stanza> getResponses() {
         return responses;
     }
 
     /**
      * Returns a list of all collected requests.
-     * 
+     *
      * @return list of requests
      */
-    public List<Packet> getRequests() {
+    public List<Stanza> getRequests() {
         return requests;
-    }
-
-    private String prettyFormat(String input, int indent) {
-        try {
-            Source xmlInput = new StreamSource(new StringReader(input));
-            StringWriter stringWriter = new StringWriter();
-            StreamResult xmlOutput = new StreamResult(stringWriter);
-            Transformer transformer = TransformerFactory.newInstance().newTransformer();
-            transformer.setOutputProperty(OutputKeys.INDENT, "yes");
-            transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount",
-                            String.valueOf(indent));
-            transformer.transform(xmlInput, xmlOutput);
-            return xmlOutput.getWriter().toString();
-        }
-        catch (Exception e) {
-            return "error while formatting the XML: " + e.getMessage();
-        }
-    }
-
-    private String prettyFormat(String input) {
-        return prettyFormat(input, 2);
     }
 
 }

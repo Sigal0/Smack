@@ -16,45 +16,38 @@
  */
 package org.jivesoftware.smackx.hoxt.provider;
 
-import org.jivesoftware.smack.packet.IQ;
+import java.io.IOException;
+
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.parsing.SmackParsingException;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
+import org.jivesoftware.smackx.hoxt.packet.AbstractHttpOverXmpp;
 import org.jivesoftware.smackx.hoxt.packet.HttpOverXmppResp;
-import org.xmlpull.v1.XmlPullParser;
+import org.jivesoftware.smackx.shim.packet.HeadersExtension;
 
 /**
- * Resp packet provider.
+ * Resp stanza provider.
  *
  * @author Andriy Tsykholyas
  * @see <a href="http://xmpp.org/extensions/xep-0332.html">XEP-0332: HTTP over XMPP transport</a>
  */
-public class HttpOverXmppRespProvider extends AbstractHttpOverXmppProvider {
-
-    private static final String ELEMENT_RESP = "resp";
+public class HttpOverXmppRespProvider extends AbstractHttpOverXmppProvider<HttpOverXmppResp> {
 
     private static final String ATTRIBUTE_STATUS_MESSAGE = "statusMessage";
     private static final String ATTRIBUTE_STATUS_CODE = "statusCode";
 
-    /**
-     * Mandatory no argument constructor.
-     */
-    public HttpOverXmppRespProvider() {
-    }
-
     @Override
-    public IQ parseIQ(XmlPullParser parser) throws Exception {
+    public HttpOverXmppResp parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws IOException, XmlPullParserException, SmackParsingException {
         String version = parser.getAttributeValue("", ATTRIBUTE_VERSION);
         String statusMessage = parser.getAttributeValue("", ATTRIBUTE_STATUS_MESSAGE);
         String statusCodeString = parser.getAttributeValue("", ATTRIBUTE_STATUS_CODE);
         int statusCode = Integer.parseInt(statusCodeString);
 
-        HttpOverXmppResp.Resp resp = new HttpOverXmppResp.Resp();
-        resp.setVersion(version);
-        resp.setStatusMessage(statusMessage);
-        resp.setStatusCode(statusCode);
+        HeadersExtension headers = parseHeaders(parser);
+        AbstractHttpOverXmpp.Data data = parseData(parser);
+        return HttpOverXmppResp.builder().setHeaders(headers).setData(data).setStatusCode(statusCode).setStatusMessage(statusMessage).setVersion(version).build();
 
-        parseHeadersAndData(parser, ELEMENT_RESP, resp);
-
-        HttpOverXmppResp packet = new HttpOverXmppResp();
-        packet.setResp(resp);
-        return packet;
     }
 }

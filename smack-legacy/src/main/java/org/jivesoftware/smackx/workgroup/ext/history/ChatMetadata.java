@@ -17,29 +17,37 @@
 
 package org.jivesoftware.smackx.workgroup.ext.history;
 
-import org.jivesoftware.smackx.workgroup.util.MetaDataUtils;
-import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.provider.IQProvider;
-import org.xmlpull.v1.XmlPullParser;
-
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.IQProvider;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
+import org.jivesoftware.smackx.workgroup.util.MetaDataUtils;
+
 public class ChatMetadata extends IQ {
 
     /**
-     * Element name of the packet extension.
+     * Element name of the stanza extension.
      */
     public static final String ELEMENT_NAME = "chat-metadata";
 
     /**
-     * Namespace of the packet extension.
+     * Namespace of the stanza extension.
      */
     public static final String NAMESPACE = "http://jivesoftware.com/protocol/workgroup";
 
 
     private String sessionID;
+
+    public ChatMetadata() {
+        super(ELEMENT_NAME, NAMESPACE);
+    }
 
     public String getSessionID() {
         return sessionID;
@@ -52,23 +60,20 @@ public class ChatMetadata extends IQ {
 
     private Map<String, List<String>> map = new HashMap<String, List<String>>();
 
-    public void setMetadata(Map<String, List<String>> metadata){
+    public void setMetadata(Map<String, List<String>> metadata) {
         this.map = metadata;
     }
 
-    public Map<String, List<String>> getMetadata(){
+    public Map<String, List<String>> getMetadata() {
         return map;
     }
 
-
-    public String getChildElementXML() {
-        StringBuilder buf = new StringBuilder();
-
-        buf.append("<").append(ELEMENT_NAME).append(" xmlns=\"").append(NAMESPACE).append("\">");
+    @Override
+    protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder buf) {
+        buf.rightAngleBracket();
         buf.append("<sessionID>").append(getSessionID()).append("</sessionID>");
-        buf.append("</").append(ELEMENT_NAME).append("> ");
 
-        return buf.toString();
+        return buf;
     }
 
     /**
@@ -76,19 +81,17 @@ public class ChatMetadata extends IQ {
      *
      * @author Derek DeMoro
      */
-    public static class Provider implements IQProvider {
+    public static class Provider extends IQProvider<ChatMetadata> {
 
-        public Provider() {
-            super();
-        }
-
-        public IQ parseIQ(XmlPullParser parser) throws Exception {
+        @Override
+        public ChatMetadata parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment)
+                        throws XmlPullParserException, IOException {
             final ChatMetadata chatM = new ChatMetadata();
 
             boolean done = false;
             while (!done) {
-                int eventType = parser.next();
-                if (eventType == XmlPullParser.START_TAG) {
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT) {
                     if (parser.getName().equals("sessionID")) {
                        chatM.setSessionID(parser.nextText());
                     }
@@ -97,7 +100,7 @@ public class ChatMetadata extends IQ {
                         chatM.setMetadata(map);
                     }
                 }
-                else if (eventType == XmlPullParser.END_TAG) {
+                else if (eventType == XmlPullParser.Event.END_ELEMENT) {
                     if (parser.getName().equals(ELEMENT_NAME)) {
                         done = true;
                     }

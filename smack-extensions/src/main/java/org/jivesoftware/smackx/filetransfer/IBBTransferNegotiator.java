@@ -23,12 +23,8 @@ import org.jivesoftware.smack.SmackException.NoResponseException;
 import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException.XMPPErrorException;
-import org.jivesoftware.smack.filter.AndFilter;
-import org.jivesoftware.smack.filter.FromMatchesFilter;
-import org.jivesoftware.smack.filter.PacketFilter;
-import org.jivesoftware.smack.filter.PacketTypeFilter;
-import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.Packet;
+import org.jivesoftware.smack.packet.Stanza;
+
 import org.jivesoftware.smackx.bytestreams.ibb.InBandBytestreamManager;
 import org.jivesoftware.smackx.bytestreams.ibb.InBandBytestreamRequest;
 import org.jivesoftware.smackx.bytestreams.ibb.InBandBytestreamSession;
@@ -36,11 +32,13 @@ import org.jivesoftware.smackx.bytestreams.ibb.packet.DataPacketExtension;
 import org.jivesoftware.smackx.bytestreams.ibb.packet.Open;
 import org.jivesoftware.smackx.si.packet.StreamInitiation;
 
+import org.jxmpp.jid.Jid;
+
 /**
  * The In-Band Bytestream file transfer method, or IBB for short, transfers the
  * file over the same XML Stream used by XMPP. It is the fall-back mechanism in
  * case the SOCKS5 bytestream method of transferring files is not available.
- * 
+ *
  * @author Alexander Wenckus
  * @author Henning Staib
  * @see <a href="http://xmpp.org/extensions/xep-0047.html">XEP-0047: In-Band
@@ -48,55 +46,56 @@ import org.jivesoftware.smackx.si.packet.StreamInitiation;
  */
 public class IBBTransferNegotiator extends StreamNegotiator {
 
-    private XMPPConnection connection;
-
-    private InBandBytestreamManager manager;
+    private final InBandBytestreamManager manager;
 
     /**
      * The default constructor for the In-Band Bytestream Negotiator.
-     * 
+     *
      * @param connection The connection which this negotiator works on.
      */
     protected IBBTransferNegotiator(XMPPConnection connection) {
-        this.connection = connection;
+        super(connection);
         this.manager = InBandBytestreamManager.getByteStreamManager(connection);
     }
 
-    public OutputStream createOutgoingStream(String streamID, String initiator,
-                    String target) throws NoResponseException, XMPPErrorException, NotConnectedException {
+    @Override
+    public OutputStream createOutgoingStream(String streamID, Jid initiator,
+                    Jid target) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
         InBandBytestreamSession session = this.manager.establishSession(target, streamID);
         session.setCloseBothStreamsEnabled(true);
         return session.getOutputStream();
     }
 
+    @Override
     public InputStream createIncomingStream(StreamInitiation initiation)
-                    throws NoResponseException, XMPPErrorException, NotConnectedException {
+                    throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
         /*
          * In-Band Bytestream initiation listener must ignore next in-band bytestream request with
          * given session ID
          */
         this.manager.ignoreBytestreamRequestOnce(initiation.getSessionID());
 
-        Packet streamInitiation = initiateIncomingStream(this.connection, initiation);
+        Stanza streamInitiation = initiateIncomingStream(connection(), initiation);
         return negotiateIncomingStream(streamInitiation);
     }
 
-    public PacketFilter getInitiationPacketFilter(String from, String streamID) {
+    @Override
+    public void newStreamInitiation(Jid from, String streamID) {
         /*
          * this method is always called prior to #negotiateIncomingStream() so
          * the In-Band Bytestream initiation listener must ignore the next
          * In-Band Bytestream request with the given session ID
          */
         this.manager.ignoreBytestreamRequestOnce(streamID);
-
-        return new AndFilter(FromMatchesFilter.create(from), new IBBOpenSidFilter(streamID));
     }
 
+    @Override
     public String[] getNamespaces() {
         return new String[] { DataPacketExtension.NAMESPACE };
     }
 
-    InputStream negotiateIncomingStream(Packet streamInitiation) throws NotConnectedException {
+    @Override
+    InputStream negotiateIncomingStream(Stanza streamInitiation) throws NotConnectedException, InterruptedException {
         // build In-Band Bytestream request
         InBandBytestreamRequest request = new ByteStreamRequest(this.manager,
                         (Open) streamInitiation);
@@ -108,37 +107,9 @@ public class IBBTransferNegotiator extends StreamNegotiator {
     }
 
     /**
-     * This PacketFilter accepts an incoming In-Band Bytestream open request
-     * with a specified session ID.
-     */
-    private static class IBBOpenSidFilter extends PacketTypeFilter {
-
-        private String sessionID;
-
-        public IBBOpenSidFilter(String sessionID) {
-            super(Open.class);
-            if (sessionID == null) {
-                throw new IllegalArgumentException("StreamID cannot be null");
-            }
-            this.sessionID = sessionID;
-        }
-
-        public boolean accept(Packet packet) {
-            if (super.accept(packet)) {
-                Open bytestream = (Open) packet;
-
-                // packet must by of type SET and contains the given session ID
-                return this.sessionID.equals(bytestream.getSessionID())
-                                && IQ.Type.set.equals(bytestream.getType());
-            }
-            return false;
-        }
-    }
-
-    /**
      * Derive from InBandBytestreamRequest to access protected constructor.
      */
-    private static class ByteStreamRequest extends InBandBytestreamRequest {
+    private static final class ByteStreamRequest extends InBandBytestreamRequest {
 
         private ByteStreamRequest(InBandBytestreamManager manager, Open byteStreamRequest) {
             super(manager, byteStreamRequest);

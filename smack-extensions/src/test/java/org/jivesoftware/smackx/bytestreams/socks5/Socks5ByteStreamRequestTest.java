@@ -16,7 +16,11 @@
  */
 package org.jivesoftware.smackx.bytestreams.socks5;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -26,66 +30,66 @@ import java.net.Socket;
 import org.jivesoftware.smack.SmackException;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException;
-import org.jivesoftware.smack.XMPPException.XMPPErrorException;
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.Packet;
-import org.jivesoftware.smack.packet.XMPPError;
-import org.jivesoftware.smackx.bytestreams.socks5.Socks5BytestreamManager;
-import org.jivesoftware.smackx.bytestreams.socks5.Socks5BytestreamRequest;
-import org.jivesoftware.smackx.bytestreams.socks5.Socks5Utils;
+import org.jivesoftware.smack.packet.Stanza;
+import org.jivesoftware.smack.packet.StanzaError;
+
 import org.jivesoftware.smackx.bytestreams.socks5.packet.Bytestream;
+
 import org.jivesoftware.util.ConnectionUtils;
 import org.jivesoftware.util.Protocol;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.jxmpp.jid.DomainBareJid;
+import org.jxmpp.jid.EntityFullJid;
+import org.jxmpp.jid.JidTestUtil;
+import org.jxmpp.jid.impl.JidCreate;
 
 /**
  * Tests for the Socks5BytestreamRequest class.
- * 
+ *
  * @author Henning Staib
  */
 public class Socks5ByteStreamRequestTest {
 
     // settings
-    String initiatorJID = "initiator@xmpp-server/Smack";
-    String targetJID = "target@xmpp-server/Smack";
-    String xmppServer = "xmpp-server";
-    String proxyJID = "proxy.xmpp-server";
-    String proxyAddress = "127.0.0.1";
-    String sessionID = "session_id";
+    private static final EntityFullJid initiatorJID = JidTestUtil.DUMMY_AT_EXAMPLE_ORG_SLASH_DUMMYRESOURCE;
+    private static final EntityFullJid targetJID = JidTestUtil.FULL_JID_1_RESOURCE_1;
+    private static final DomainBareJid proxyJID = JidTestUtil.MUC_EXAMPLE_ORG;
+    private static final String proxyAddress = "127.0.0.1";
+    private static final String sessionID = "session_id";
 
-    Protocol protocol;
+    private Protocol protocol;
 
-    XMPPConnection connection;
+    private XMPPConnection connection;
 
     /**
      * Initialize fields used in the tests.
-     * @throws XMPPException 
-     * @throws SmackException 
+     * @throws XMPPException
+     * @throws SmackException
+     * @throws InterruptedException
      */
     @Before
-    public void setup() throws XMPPException, SmackException {
+    public void setup() throws XMPPException, SmackException, InterruptedException {
 
         // build protocol verifier
         protocol = new Protocol();
 
         // create mocked XMPP connection
-        connection = ConnectionUtils.createMockedConnection(protocol, targetJID, xmppServer);
+        connection = ConnectionUtils.createMockedConnection(protocol, targetJID);
 
     }
 
     /**
      * Accepting a SOCKS5 Bytestream request should fail if the request doesn't contain any Socks5
      * proxies.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
     public void shouldFailIfRequestHasNoStreamHosts() throws Exception {
-
-        try {
-
+        assertThrows(Socks5Exception.NoSocks5StreamHostsProvided.class, () -> {
             // build SOCKS5 Bytestream initialization request with no SOCKS5 proxies
             Bytestream bytestreamInitialization = Socks5PacketUtils.createBytestreamInitiation(
                             initiatorJID, targetJID, sessionID);
@@ -99,35 +103,28 @@ public class Socks5ByteStreamRequestTest {
 
             // accept the stream (this is the call that is tested here)
             byteStreamRequest.accept();
-
-            fail("exception should be thrown");
-        }
-        catch (XMPPErrorException e) {
-            assertTrue(e.getMessage().contains("Could not establish socket with any provided host"));
-        }
+        });
 
         // verify targets response
         assertEquals(1, protocol.getRequests().size());
-        Packet targetResponse = protocol.getRequests().remove(0);
+        Stanza targetResponse = protocol.getRequests().remove(0);
         assertTrue(IQ.class.isInstance(targetResponse));
         assertEquals(initiatorJID, targetResponse.getTo());
         assertEquals(IQ.Type.error, ((IQ) targetResponse).getType());
-        assertEquals(XMPPError.Condition.item_not_found.toString(),
-                        ((IQ) targetResponse).getError().getCondition());
+        assertEquals(StanzaError.Condition.item_not_found,
+                        targetResponse.getError().getCondition());
 
     }
 
     /**
      * Accepting a SOCKS5 Bytestream request should fail if target is not able to connect to any of
      * the provided SOCKS5 proxies.
-     * 
+     *
      * @throws Exception
      */
     @Test
     public void shouldFailIfRequestHasInvalidStreamHosts() throws Exception {
-
-        try {
-
+        assertThrows(Socks5Exception.CouldNotConnectToAnyProvidedSocks5Host.class, () -> {
             // build SOCKS5 Bytestream initialization request
             Bytestream bytestreamInitialization = Socks5PacketUtils.createBytestreamInitiation(
                             initiatorJID, targetJID, sessionID);
@@ -143,27 +140,22 @@ public class Socks5ByteStreamRequestTest {
 
             // accept the stream (this is the call that is tested here)
             byteStreamRequest.accept();
-
-            fail("exception should be thrown");
-        }
-        catch (XMPPErrorException e) {
-            assertTrue(e.getMessage().contains("Could not establish socket with any provided host"));
-        }
+        });
 
         // verify targets response
         assertEquals(1, protocol.getRequests().size());
-        Packet targetResponse = protocol.getRequests().remove(0);
+        Stanza targetResponse = protocol.getRequests().remove(0);
         assertTrue(IQ.class.isInstance(targetResponse));
         assertEquals(initiatorJID, targetResponse.getTo());
         assertEquals(IQ.Type.error, ((IQ) targetResponse).getType());
-        assertEquals(XMPPError.Condition.item_not_found.toString(),
-                        ((IQ) targetResponse).getError().getCondition());
+        assertEquals(StanzaError.Condition.item_not_found,
+                        targetResponse.getError().getCondition());
 
     }
 
     /**
      * Target should not try to connect to SOCKS5 proxies that already failed twice.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -172,14 +164,14 @@ public class Socks5ByteStreamRequestTest {
         // build SOCKS5 Bytestream initialization request
         Bytestream bytestreamInitialization = Socks5PacketUtils.createBytestreamInitiation(
                         initiatorJID, targetJID, sessionID);
-        bytestreamInitialization.addStreamHost("invalid." + proxyJID, "127.0.0.2", 7778);
+        bytestreamInitialization.addStreamHost(JidCreate.from("invalid." + proxyJID), "127.0.0.2", 7778);
 
         // get SOCKS5 Bytestream manager for connection
         Socks5BytestreamManager byteStreamManager = Socks5BytestreamManager.getBytestreamManager(connection);
 
         // try to connect several times
         for (int i = 0; i < 2; i++) {
-            try {
+            assertThrows(Socks5Exception.CouldNotConnectToAnyProvidedSocks5Host.class, () -> {
                 // build SOCKS5 Bytestream request with the bytestream initialization
                 Socks5BytestreamRequest byteStreamRequest = new Socks5BytestreamRequest(
                                 byteStreamManager, bytestreamInitialization);
@@ -190,22 +182,16 @@ public class Socks5ByteStreamRequestTest {
 
                 // accept the stream (this is the call that is tested here)
                 byteStreamRequest.accept();
-
-                fail("exception should be thrown");
-            }
-            catch (XMPPErrorException e) {
-                assertTrue(e.getMessage().contains(
-                                "Could not establish socket with any provided host"));
-            }
+            });
 
             // verify targets response
             assertEquals(1, protocol.getRequests().size());
-            Packet targetResponse = protocol.getRequests().remove(0);
+            Stanza targetResponse = protocol.getRequests().remove(0);
             assertTrue(IQ.class.isInstance(targetResponse));
             assertEquals(initiatorJID, targetResponse.getTo());
             assertEquals(IQ.Type.error, ((IQ) targetResponse).getType());
-            assertEquals(XMPPError.Condition.item_not_found.toString(),
-                            ((IQ) targetResponse).getError().getCondition());
+            assertEquals(StanzaError.Condition.item_not_found,
+                            targetResponse.getError().getCondition());
         }
 
         // create test data for stream
@@ -242,7 +228,7 @@ public class Socks5ByteStreamRequestTest {
 
         // verify targets response
         assertEquals(1, protocol.getRequests().size());
-        Packet targetResponse = protocol.getRequests().remove(0);
+        Stanza targetResponse = protocol.getRequests().remove(0);
         assertEquals(Bytestream.class, targetResponse.getClass());
         assertEquals(initiatorJID, targetResponse.getTo());
         assertEquals(IQ.Type.result, ((Bytestream) targetResponse).getType());
@@ -252,7 +238,7 @@ public class Socks5ByteStreamRequestTest {
 
     /**
      * Target should not not blacklist any SOCKS5 proxies regardless of failing connections.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -264,14 +250,14 @@ public class Socks5ByteStreamRequestTest {
         // build SOCKS5 Bytestream initialization request
         Bytestream bytestreamInitialization = Socks5PacketUtils.createBytestreamInitiation(
                         initiatorJID, targetJID, sessionID);
-        bytestreamInitialization.addStreamHost("invalid." + proxyJID, "127.0.0.2", 7778);
+        bytestreamInitialization.addStreamHost(JidCreate.from("invalid." + proxyJID), "127.0.0.2", 7778);
 
         // get SOCKS5 Bytestream manager for connection
         Socks5BytestreamManager byteStreamManager = Socks5BytestreamManager.getBytestreamManager(connection);
 
         // try to connect several times
         for (int i = 0; i < 10; i++) {
-            try {
+            assertThrows(Socks5Exception.CouldNotConnectToAnyProvidedSocks5Host.class, () -> {
                 // build SOCKS5 Bytestream request with the bytestream initialization
                 Socks5BytestreamRequest byteStreamRequest = new Socks5BytestreamRequest(
                                 byteStreamManager, bytestreamInitialization);
@@ -282,22 +268,16 @@ public class Socks5ByteStreamRequestTest {
 
                 // accept the stream (this is the call that is tested here)
                 byteStreamRequest.accept();
-
-                fail("exception should be thrown");
-            }
-            catch (XMPPException e) {
-                assertTrue(e.getMessage().contains(
-                                "Could not establish socket with any provided host"));
-            }
+            });
 
             // verify targets response
             assertEquals(1, protocol.getRequests().size());
-            Packet targetResponse = protocol.getRequests().remove(0);
+            Stanza targetResponse = protocol.getRequests().remove(0);
             assertTrue(IQ.class.isInstance(targetResponse));
             assertEquals(initiatorJID, targetResponse.getTo());
             assertEquals(IQ.Type.error, ((IQ) targetResponse).getType());
-            assertEquals(XMPPError.Condition.item_not_found.toString(),
-                            ((IQ) targetResponse).getError().getCondition());
+            assertEquals(StanzaError.Condition.item_not_found,
+                            targetResponse.getError().getCondition());
         }
 
         // enable blacklisting
@@ -309,7 +289,7 @@ public class Socks5ByteStreamRequestTest {
      * If the SOCKS5 Bytestream request contains multiple SOCKS5 proxies and the first one doesn't
      * respond, the connection attempt to this proxy should not consume the whole timeout for
      * connecting to the proxies.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -362,7 +342,7 @@ public class Socks5ByteStreamRequestTest {
 
         // verify targets response
         assertEquals(1, protocol.getRequests().size());
-        Packet targetResponse = protocol.getRequests().remove(0);
+        Stanza targetResponse = protocol.getRequests().remove(0);
         assertEquals(Bytestream.class, targetResponse.getClass());
         assertEquals(initiatorJID, targetResponse.getTo());
         assertEquals(IQ.Type.result, ((Bytestream) targetResponse).getType());
@@ -374,7 +354,7 @@ public class Socks5ByteStreamRequestTest {
 
     /**
      * Accepting the SOCKS5 Bytestream request should be successfully.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -415,7 +395,7 @@ public class Socks5ByteStreamRequestTest {
 
         // verify targets response
         assertEquals(1, protocol.getRequests().size());
-        Packet targetResponse = protocol.getRequests().remove(0);
+        Stanza targetResponse = protocol.getRequests().remove(0);
         assertEquals(Bytestream.class, targetResponse.getClass());
         assertEquals(initiatorJID, targetResponse.getTo());
         assertEquals(IQ.Type.result, ((Bytestream) targetResponse).getType());

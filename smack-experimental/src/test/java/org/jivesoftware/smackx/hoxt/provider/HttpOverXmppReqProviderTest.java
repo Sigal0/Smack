@@ -16,22 +16,24 @@
  */
 package org.jivesoftware.smackx.hoxt.provider;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import org.jivesoftware.smack.packet.IQ;
 import org.jivesoftware.smack.util.PacketParserUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+
 import org.jivesoftware.smackx.hoxt.packet.HttpMethod;
 import org.jivesoftware.smackx.hoxt.packet.HttpOverXmppReq;
-import org.junit.Test;
-import org.xmlpull.v1.XmlPullParser;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import org.junit.jupiter.api.Test;
 
 public class HttpOverXmppReqProviderTest {
 
     @Test
     public void areAllReqAttributesCorrectlyParsed() throws Exception {
         String string = "<req xmlns='urn:xmpp:http' method='OPTIONS' resource='*' version='1.1'/>";
-        HttpOverXmppReq.Req req = parseReq(string);
+        HttpOverXmppReq req = parseReq(string);
         assertEquals(req.getVersion(), "1.1");
         assertEquals(req.getMethod(), HttpMethod.OPTIONS);
         assertEquals(req.getResource(), "*");
@@ -40,7 +42,7 @@ public class HttpOverXmppReqProviderTest {
     @Test
     public void areGetRequestAttributesCorrectlyParsed() throws Exception {
         String string = "<req xmlns='urn:xmpp:http' method='GET' resource='/rdf/xep' version='1.1'/>";
-        HttpOverXmppReq.Req req = parseReq(string);
+        HttpOverXmppReq req = parseReq(string);
         assertEquals(req.getVersion(), "1.1");
         assertEquals(req.getMethod(), HttpMethod.GET);
         assertEquals(req.getResource(), "/rdf/xep");
@@ -49,7 +51,7 @@ public class HttpOverXmppReqProviderTest {
     @Test
     public void getReqOptionAttributesCorrectlyParsed() throws Exception {
         String string = "<req xmlns='urn:xmpp:http' method='OPTIONS' resource='*' version='1.1' maxChunkSize='256' sipub='false' ibb='true' jingle='false'/>";
-        HttpOverXmppReq.Req req = parseReq(string);
+        HttpOverXmppReq req = parseReq(string);
         assertEquals(req.getMaxChunkSize(), 256);
         assertEquals(req.isSipub(), false);
         assertEquals(req.isIbb(), true);
@@ -59,18 +61,17 @@ public class HttpOverXmppReqProviderTest {
     @Test
     public void getReqOptionalAttributesDefaultValues() throws Exception {
         String string = "<req xmlns='urn:xmpp:http' method='OPTIONS' resource='*' version='1.1'/>";
-        HttpOverXmppReq.Req req = parseReq(string);
+        HttpOverXmppReq req = parseReq(string);
         assertEquals(req.isSipub(), true);
         assertEquals(req.isIbb(), true);
         assertEquals(req.isJingle(), true);
     }
 
-    private HttpOverXmppReq.Req parseReq(String string) throws Exception {
+    private static HttpOverXmppReq parseReq(String string) throws Exception {
         HttpOverXmppReqProvider provider = new HttpOverXmppReqProvider();
         XmlPullParser parser = PacketParserUtils.getParserFor(string);
-        IQ iq = provider.parseIQ(parser);
+        IQ iq = provider.parse(parser);
         assertTrue(iq instanceof HttpOverXmppReq);
-        HttpOverXmppReq castedIq = (HttpOverXmppReq) iq;
-        return castedIq.getReq();
+        return  (HttpOverXmppReq) iq;
     }
 }

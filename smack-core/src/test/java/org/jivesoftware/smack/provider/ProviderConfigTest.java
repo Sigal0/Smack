@@ -19,25 +19,20 @@ package org.jivesoftware.smack.provider;
 import java.util.ArrayList;
 import java.util.Collection;
 
-import org.junit.Assert;
-
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.provider.ExtensionProviderInfo;
-import org.jivesoftware.smack.provider.IQProvider;
-import org.jivesoftware.smack.provider.IQProviderInfo;
-import org.jivesoftware.smack.provider.ProviderFileLoader;
-import org.jivesoftware.smack.provider.ProviderLoader;
-import org.jivesoftware.smack.provider.ProviderManager;
+import org.jivesoftware.smack.packet.XmlEnvironment;
 import org.jivesoftware.smack.util.FileUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+
+import org.junit.Assert;
 import org.junit.Test;
-import org.xmlpull.v1.XmlPullParser;
 
 public class ProviderConfigTest {
 
     @Test
     public void addGenericLoaderProvider() {
         ProviderManager.addLoader(new ProviderLoader() {
-            
+
             @Override
             public Collection<IQProviderInfo> getIQProviderInfo() {
                 ArrayList<IQProviderInfo> l = new ArrayList<IQProviderInfo>(1);
@@ -49,21 +44,26 @@ public class ProviderConfigTest {
             public Collection<ExtensionProviderInfo> getExtensionProviderInfo() {
                 return null;
             }
+
+            @Override
+            public Collection<StreamFeatureProviderInfo> getStreamFeatureProviderInfo() {
+                return null;
+            }
         });
 
         Assert.assertNotNull(ProviderManager.getIQProvider("provider", "test:provider"));
     }
 
     @Test
-    public void addClasspathFileLoaderProvider() throws Exception{
-        ProviderManager.addLoader(new ProviderFileLoader(FileUtils.getStreamForUrl("classpath:test.providers", null)));
+    public void addClasspathFileLoaderProvider() throws Exception {
+        ProviderManager.addLoader(new ProviderFileLoader(FileUtils.getStreamForClasspathFile("test.providers", null)));
         Assert.assertNotNull(ProviderManager.getIQProvider("provider", "test:file_provider"));
     }
 
-    public static class TestIQProvider implements IQProvider {
+    public static class TestIQProvider extends IQProvider<IQ> {
 
         @Override
-        public IQ parseIQ(XmlPullParser parser) throws Exception {
+        public IQ parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) {
             return null;
         }
 

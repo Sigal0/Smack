@@ -16,98 +16,108 @@
  */
 package org.jivesoftware.util;
 
-import static org.mockito.Matchers.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
-import org.jivesoftware.smack.PacketCollector;
 import org.jivesoftware.smack.SmackException;
+import org.jivesoftware.smack.StanzaCollector;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException.XMPPErrorException;
-import org.jivesoftware.smack.filter.PacketFilter;
+import org.jivesoftware.smack.filter.StanzaFilter;
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.Packet;
-import org.jivesoftware.smack.packet.XMPPError;
+import org.jivesoftware.smack.packet.Stanza;
+
 import org.jivesoftware.smackx.disco.ServiceDiscoveryManager;
+
+import org.jxmpp.jid.DomainBareJid;
+import org.jxmpp.jid.EntityFullJid;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
 /**
  * A collection of utility methods to create mocked XMPP connections.
- * 
+ *
  * @author Henning Staib
  */
 public class ConnectionUtils {
 
     /**
-     * Creates a mocked XMPP connection that stores every packet that is send over this
+     * Creates a mocked XMPP connection that stores every stanza that is send over this
      * connection in the given protocol instance and returns the predefined answer packets
      * form the protocol instance.
      * <p>
      * This mocked connection can used to collect packets that require a reply using a
-     * PacketCollector.
-     * 
+     * StanzaCollector.
+     *
      * <pre>
      * <code>
-     *   PacketCollector collector = connection.createPacketCollector(new PacketFilter());
-     *   connection.sendPacket(packet);
-     *   Packet reply = collector.nextResult();
+     *   StanzaCollector collector = connection.createStanzaCollector(new PacketFilter());
+     *   connection.sendStanza(packet);
+     *   Stanza reply = collector.nextResult();
      * </code>
      * </pre>
-     * 
+     *
      * @param protocol protocol helper containing answer packets
      * @param initiatorJID the user associated to the XMPP connection
-     * @param xmppServer the XMPP server associated to the XMPP connection
      * @return a mocked XMPP connection
-     * @throws SmackException 
-     * @throws XMPPErrorException 
+     * @throws SmackException
+     * @throws XMPPErrorException
+     * @throws InterruptedException
      */
     public static XMPPConnection createMockedConnection(final Protocol protocol,
-                    String initiatorJID, String xmppServer) throws SmackException, XMPPErrorException {
+                    EntityFullJid initiatorJID) throws SmackException, XMPPErrorException, InterruptedException {
+
+        DomainBareJid xmppServer = initiatorJID.asDomainBareJid();
 
         // mock XMPP connection
         XMPPConnection connection = mock(XMPPConnection.class);
         when(connection.getUser()).thenReturn(initiatorJID);
-        when(connection.getServiceName()).thenReturn(xmppServer);
+        when(connection.getXMPPServiceDomain()).thenReturn(xmppServer);
 
         // mock packet collector
-        final PacketCollector collector = mock(PacketCollector.class);
-        when(connection.createPacketCollector(isA(PacketFilter.class))).thenReturn(
+        final StanzaCollector collector = mock(StanzaCollector.class);
+        when(connection.createStanzaCollector(isA(StanzaFilter.class))).thenReturn(
                         collector);
-        Answer<PacketCollector> collectorAndSend = new Answer<PacketCollector>() {
+        Answer<StanzaCollector> collectorAndSend = new Answer<StanzaCollector>() {
             @Override
-            public PacketCollector answer(InvocationOnMock invocation) throws Throwable {
-                Packet packet = (Packet) invocation.getArguments()[0];
+            public StanzaCollector answer(InvocationOnMock invocation) throws Throwable {
+                Stanza packet = (Stanza) invocation.getArguments()[0];
                 protocol.getRequests().add(packet);
                 return collector;
             }
 
         };
-        when(connection.createPacketCollectorAndSend(isA(IQ.class))).thenAnswer(collectorAndSend);
+        when(connection.createStanzaCollectorAndSend(isA(IQ.class))).thenAnswer(collectorAndSend);
 
         // mock send method
         Answer<Object> addIncoming = new Answer<Object>() {
+            @Override
             public Object answer(InvocationOnMock invocation) throws Throwable {
-                protocol.getRequests().add((Packet) invocation.getArguments()[0]);
+                protocol.getRequests().add((Stanza) invocation.getArguments()[0]);
                 return null;
             }
         };
-        doAnswer(addIncoming).when(connection).sendPacket(isA(Packet.class));
+        doAnswer(addIncoming).when(connection).sendStanza(isA(Stanza.class));
 
         // mock receive methods
-        Answer<Packet> answer = new Answer<Packet>() {
-            public Packet answer(InvocationOnMock invocation) throws Throwable {
+        Answer<Stanza> answer = new Answer<Stanza>() {
+            @Override
+            public Stanza answer(InvocationOnMock invocation) throws Throwable {
                 return protocol.getResponses().poll();
             }
         };
         when(collector.nextResult(anyInt())).thenAnswer(answer);
         when(collector.nextResult()).thenAnswer(answer);
-        Answer<Packet> answerOrThrow = new Answer<Packet>() {
+        Answer<Stanza> answerOrThrow = new Answer<Stanza>() {
             @Override
-            public Packet answer(InvocationOnMock invocation) throws Throwable {
-                Packet packet = protocol.getResponses().poll();
+            public Stanza answer(InvocationOnMock invocation) throws Throwable {
+                Stanza packet = protocol.getResponses().poll();
                 if (packet == null) return packet;
-                XMPPError xmppError = packet.getError();
-                if (xmppError != null) throw new XMPPErrorException(xmppError);
+                XMPPErrorException.ifHasErrorThenThrow(packet);
                 return packet;
             }
         };

@@ -16,129 +16,75 @@
  */
 package org.jivesoftware.smackx.filetransfer;
 
-import org.jivesoftware.smack.PacketCollector;
+import java.io.InputStream;
+import java.io.OutputStream;
+
 import org.jivesoftware.smack.SmackException;
-import org.jivesoftware.smack.SmackException.NoResponseException;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException;
 import org.jivesoftware.smack.XMPPException.XMPPErrorException;
-import org.jivesoftware.smack.filter.OrFilter;
-import org.jivesoftware.smack.filter.PacketFilter;
-import org.jivesoftware.smack.packet.Packet;
+import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.Stanza;
+
+import org.jivesoftware.smackx.bytestreams.ibb.packet.Open;
+import org.jivesoftware.smackx.bytestreams.socks5.packet.Bytestream;
 import org.jivesoftware.smackx.si.packet.StreamInitiation;
 
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.util.concurrent.*;
-import java.util.List;
-import java.util.ArrayList;
+import org.jxmpp.jid.Jid;
 
 
 /**
  * The fault tolerant negotiator takes two stream negotiators, the primary and the secondary
- * negotiator. If the primary negotiator fails during the stream negotiaton process, the second
+ * negotiator. If the primary negotiator fails during the stream negotiation process, the second
  * negotiator is used.
  */
 public class FaultTolerantNegotiator extends StreamNegotiator {
 
-    private StreamNegotiator primaryNegotiator;
-    private StreamNegotiator secondaryNegotiator;
-    private XMPPConnection connection;
-    private PacketFilter primaryFilter;
-    private PacketFilter secondaryFilter;
+    private final StreamNegotiator primaryNegotiator;
+    private final StreamNegotiator secondaryNegotiator;
 
     public FaultTolerantNegotiator(XMPPConnection connection, StreamNegotiator primary,
             StreamNegotiator secondary) {
+        super(connection);
         this.primaryNegotiator = primary;
         this.secondaryNegotiator = secondary;
-        this.connection = connection;
     }
 
-    public PacketFilter getInitiationPacketFilter(String from, String streamID) {
-        if (primaryFilter == null || secondaryFilter == null) {
-            primaryFilter = primaryNegotiator.getInitiationPacketFilter(from, streamID);
-            secondaryFilter = secondaryNegotiator.getInitiationPacketFilter(from, streamID);
-        }
-        return new OrFilter(primaryFilter, secondaryFilter);
+    @Override
+    public void newStreamInitiation(Jid from, String streamID) {
+        primaryNegotiator.newStreamInitiation(from, streamID);
+        secondaryNegotiator.newStreamInitiation(from, streamID);
     }
 
-    InputStream negotiateIncomingStream(Packet streamInitiation) {
+    @Override
+    InputStream negotiateIncomingStream(Stanza streamInitiation) {
         throw new UnsupportedOperationException("Negotiation only handled by create incoming " +
                 "stream method.");
     }
 
-    final Packet initiateIncomingStream(XMPPConnection connection, StreamInitiation initiation) {
-        throw new UnsupportedOperationException("Initiation handled by createIncomingStream " +
-                "method");
+    @Override
+    public InputStream createIncomingStream(final StreamInitiation initiation) throws SmackException, XMPPErrorException, InterruptedException {
+        // This could be either an xep47 ibb 'open' iq or an xep65 streamhost iq
+        IQ initiationSet = initiateIncomingStream(connection(), initiation);
+
+        StreamNegotiator streamNegotiator = determineNegotiator(initiationSet);
+
+        return streamNegotiator.negotiateIncomingStream(initiationSet);
     }
 
-    public InputStream createIncomingStream(StreamInitiation initiation) throws SmackException {
-        PacketCollector collector = connection.createPacketCollector(
-                getInitiationPacketFilter(initiation.getFrom(), initiation.getSessionID()));
-
-        connection.sendPacket(super.createInitiationAccept(initiation, getNamespaces()));
-
-        ExecutorService threadPoolExecutor = Executors.newFixedThreadPool(2);
-        CompletionService<InputStream> service
-                = new ExecutorCompletionService<InputStream>(threadPoolExecutor);
-        List<Future<InputStream>> futures = new ArrayList<Future<InputStream>>();
-        InputStream stream = null;
-        SmackException exception = null;
-        try {
-            futures.add(service.submit(new NegotiatorService(collector)));
-            futures.add(service.submit(new NegotiatorService(collector)));
-
-            int i = 0;
-            while (stream == null && i < futures.size()) {
-                Future<InputStream> future;
-                try {
-                    i++;
-                    future = service.poll(10, TimeUnit.SECONDS);
-                }
-                catch (InterruptedException e) {
-                    continue;
-                }
-
-                if (future == null) {
-                    continue;
-                }
-
-                try {
-                    stream = future.get();
-                }
-                catch (InterruptedException e) {
-                    /* Do Nothing */
-                }
-                catch (ExecutionException e) {
-                    exception = new SmackException(e.getCause());
-                }
-            }
+    private StreamNegotiator determineNegotiator(Stanza streamInitiation) {
+        if (streamInitiation instanceof Bytestream) {
+            return primaryNegotiator;
+        } else if (streamInitiation instanceof Open) {
+            return secondaryNegotiator;
+        } else {
+            throw new IllegalStateException("Unknown stream initiation type");
         }
-        finally {
-            for (Future<InputStream> future : futures) {
-                future.cancel(true);
-            }
-            collector.cancel();
-            threadPoolExecutor.shutdownNow();
-        }
-        if (stream == null) {
-            if (exception != null) {
-                throw exception;
-            }
-            else {
-                throw new SmackException("File transfer negotiation failed.");
-            }
-        }
-
-        return stream;
     }
 
-    private StreamNegotiator determineNegotiator(Packet streamInitiation) {
-        return primaryFilter.accept(streamInitiation) ? primaryNegotiator : secondaryNegotiator;
-    }
-
-    public OutputStream createOutgoingStream(String streamID, String initiator, String target)
-                    throws SmackException, XMPPException {
+    @Override
+    public OutputStream createOutgoingStream(String streamID, Jid initiator, Jid target)
+                    throws SmackException, XMPPException, InterruptedException {
         OutputStream stream;
         try {
             stream = primaryNegotiator.createOutgoingStream(streamID, initiator, target);
@@ -150,6 +96,7 @@ public class FaultTolerantNegotiator extends StreamNegotiator {
         return stream;
     }
 
+    @Override
     public String[] getNamespaces() {
         String[] primary = primaryNegotiator.getNamespaces();
         String[] secondary = secondaryNegotiator.getNamespaces();
@@ -161,21 +108,4 @@ public class FaultTolerantNegotiator extends StreamNegotiator {
         return namespaces;
     }
 
-    private class NegotiatorService implements Callable<InputStream> {
-
-        private PacketCollector collector;
-
-        NegotiatorService(PacketCollector collector) {
-            this.collector = collector;
-        }
-
-        public InputStream call() throws XMPPErrorException, InterruptedException, SmackException {
-            Packet streamInitiation = collector.nextResult();
-            if (streamInitiation == null) {
-                throw new NoResponseException();
-            }
-            StreamNegotiator negotiator = determineNegotiator(streamInitiation);
-            return negotiator.negotiateIncomingStream(streamInitiation);
-        }
-    }
 }

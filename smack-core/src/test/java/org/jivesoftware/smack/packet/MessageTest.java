@@ -16,30 +16,23 @@
  */
 package org.jivesoftware.smack.packet;
 
-import static org.custommonkey.xmlunit.XMLAssert.assertXMLEqual;
+import static org.jivesoftware.smack.test.util.XmlUnitUtils.assertXmlSimilar;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import org.custommonkey.xmlunit.Diff;
-import org.custommonkey.xmlunit.examples.RecursiveElementNameAndTextQualifier;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+
 import org.junit.Test;
 import org.xml.sax.SAXException;
 
-import java.io.IOException;
-import java.util.Collection;
-import java.util.List;
-import java.util.ArrayList;
-
-import javax.xml.parsers.ParserConfigurationException;
-
-/**
- *
- */
 public class MessageTest {
 
     @Test
-    public void setMessageTypeTest() throws IOException, SAXException, ParserConfigurationException {
+    public void setMessageTypeTest() throws IOException, SAXException {
         Message.Type type = Message.Type.chat;
         Message.Type type2 = Message.Type.headline;
 
@@ -52,9 +45,9 @@ public class MessageTest {
         String control = controlBuilder.toString();
 
         Message messageTypeInConstructor = new Message(null, Message.Type.chat);
-        messageTypeInConstructor.setPacketID(Packet.ID_NOT_AVAILABLE);
+        messageTypeInConstructor.setStanzaId(null);
         assertEquals(type, messageTypeInConstructor.getType());
-        assertXMLEqual(control, messageTypeInConstructor.toXML().toString());
+        assertXmlSimilar(control, messageTypeInConstructor.toXML(StreamOpen.CLIENT_NAMESPACE).toString());
 
         controlBuilder = new StringBuilder();
         controlBuilder.append("<message")
@@ -67,23 +60,17 @@ public class MessageTest {
         Message messageTypeSet = getNewMessage();
         messageTypeSet.setType(type2);
         assertEquals(type2, messageTypeSet.getType());
-        assertXMLEqual(control, messageTypeSet.toXML().toString());
+        assertXmlSimilar(control, messageTypeSet.toXML(StreamOpen.CLIENT_NAMESPACE).toString());
     }
 
-    @Test(expected=IllegalArgumentException.class)
-    public void setMessageTypeNullTest() {
-        Message message = getNewMessage();
-        message.setType(null);
-    }
-
-    @Test(expected=NullPointerException.class)
+    @Test(expected = NullPointerException.class)
     public void setNullMessageBodyTest() {
         Message message = getNewMessage();
         message.addBody(null, null);
     }
 
     @Test
-    public void setMessageSubjectTest() throws IOException, SAXException, ParserConfigurationException {
+    public void setMessageSubjectTest() throws IOException, SAXException {
         final String messageSubject = "This is a test of the emergency broadcast system.";
 
         StringBuilder controlBuilder = new StringBuilder();
@@ -98,11 +85,11 @@ public class MessageTest {
         message.setSubject(messageSubject);
 
         assertEquals(messageSubject, message.getSubject());
-        assertXMLEqual(control, message.toXML().toString());
+        assertXmlSimilar(control, message.toXML(StreamOpen.CLIENT_NAMESPACE).toString());
     }
 
     @Test
-    public void oneMessageBodyTest() throws IOException, SAXException, ParserConfigurationException {
+    public void oneMessageBodyTest() throws IOException, SAXException {
         final String messageBody = "This is a test of the emergency broadcast system.";
 
         StringBuilder controlBuilder = new StringBuilder();
@@ -117,11 +104,11 @@ public class MessageTest {
         message.setBody(messageBody);
 
         assertEquals(messageBody, message.getBody());
-        assertXMLEqual(control, message.toXML().toString());
+        assertXmlSimilar(control, message.toXML(StreamOpen.CLIENT_NAMESPACE).toString());
     }
 
     @Test
-    public void multipleMessageBodiesTest() throws IOException, SAXException, ParserConfigurationException {
+    public void multipleMessageBodiesTest() throws IOException, SAXException {
         final String messageBody1 = "This is a test of the emergency broadcast system, 1.";
         final String lang2 = "ru";
         final String messageBody2 = "This is a test of the emergency broadcast system, 2.";
@@ -150,12 +137,10 @@ public class MessageTest {
         message.addBody(null, messageBody1);
         message.addBody(lang2, messageBody2);
         message.addBody(lang3, messageBody3);
-        Diff xmlDiff = new Diff(control, message.toXML().toString());
-        xmlDiff.overrideElementQualifier(new RecursiveElementNameAndTextQualifier());
-        assertTrue(xmlDiff.similar());
+        assertXmlSimilar(control, message.toXML(StreamOpen.CLIENT_NAMESPACE));
 
         Collection<String> languages = message.getBodyLanguages();
-        List<String> controlLanguages = new ArrayList<String>();
+        List<String> controlLanguages = new ArrayList<>();
         controlLanguages.add(lang2);
         controlLanguages.add(lang3);
         controlLanguages.removeAll(languages);
@@ -175,13 +160,13 @@ public class MessageTest {
 
         Message.Body body = message.addBody("es", "test");
         assertTrue(message.getBodies().size() == 1);
-        
+
         message.removeBody(body);
         assertTrue(message.getBodies().size() == 0);
     }
 
     @Test
-    public void setMessageThreadTest() throws IOException, SAXException, ParserConfigurationException {
+    public void setMessageThreadTest() throws IOException, SAXException {
         final String messageThread = "1234";
 
         StringBuilder controlBuilder = new StringBuilder();
@@ -196,11 +181,11 @@ public class MessageTest {
         message.setThread(messageThread);
 
         assertEquals(messageThread, message.getThread());
-        assertXMLEqual(control, message.toXML().toString());
+        assertXmlSimilar(control, message.toXML(StreamOpen.CLIENT_NAMESPACE).toString());
     }
 
     @Test
-    public void messageXmlLangTest() throws IOException, SAXException, ParserConfigurationException {
+    public void messageXmlLangTest() throws IOException, SAXException {
         final String lang = "sp";
 
         StringBuilder controlBuilder = new StringBuilder();
@@ -214,50 +199,12 @@ public class MessageTest {
         Message message = getNewMessage();
         message.setLanguage(lang);
 
-        assertXMLEqual(control, message.toXML().toString());
-    }
-
-    @Test
-    public void messageEqualityTest() {
-        Message message = getNewMessage();
-        assertTrue(message.equals(message));
-        //noinspection ObjectEqualsNull
-        assertFalse(message.equals(null));
-        assertFalse(message.equals("test"));
-        Message message2 = getNewMessage();
-
-        assertTrue(message.equals(message2));
-
-        message.setTo("joe@shmoe.com");
-        assertFalse(message.equals(message2));
-        message2.setTo("joe@shmoe.com");
-
-        message.setSubject("subject");
-        assertFalse(message.equals(message2));
-        message2.setSubject("subject");
-
-        message.setThread("thread");
-        assertFalse(message.equals(message2));
-        message2.setThread("thread");
-
-        message.setBody("body1");
-        assertFalse(message.equals(message2));
-        message2.setBody("body1");
-
-        message.setLanguage("language");
-        assertFalse(message.equals(message2));
-        message2.setLanguage("language");
-
-        message.setType(Message.Type.chat);
-        assertFalse(message.equals(message2));
-        message2.setType(Message.Type.chat);
-
-        assertTrue(message.equals(message2));
+        assertXmlSimilar(control, message.toXML(StreamOpen.CLIENT_NAMESPACE).toString());
     }
 
     private static Message getNewMessage() {
         Message message = new Message();
-        message.setPacketID(Packet.ID_NOT_AVAILABLE);
+        message.setStanzaId(null);
         return message;
     }
 }

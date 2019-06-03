@@ -19,10 +19,16 @@ package org.jivesoftware.smack.packet;
 
 import java.util.Locale;
 
+import org.jivesoftware.smack.packet.id.StanzaIdUtil;
+import org.jivesoftware.smack.util.Objects;
+import org.jivesoftware.smack.util.StringUtils;
+import org.jivesoftware.smack.util.TypedCloneable;
 import org.jivesoftware.smack.util.XmlStringBuilder;
 
+import org.jxmpp.jid.Jid;
+
 /**
- * Represents XMPP presence packets. Every presence packet has a type, which is one of
+ * Represents XMPP presence packets. Every presence stanza has a type, which is one of
  * the following values:
  * <ul>
  *      <li>{@link Presence.Type#available available} -- (Default) indicates the user is available to
@@ -34,7 +40,7 @@ import org.jivesoftware.smack.util.XmlStringBuilder;
  *          sender's presence.
  *      <li>{@link Presence.Type#unsubscribed unsubscribed} -- grant removal of subscription to
  *          sender's presence.
- *      <li>{@link Presence.Type#error error} -- the presence packet contains an error message.
+ *      <li>{@link Presence.Type#error error} -- the presence stanza contains an error message.
  * </ul><p>
  *
  * A number of attributes are optional:
@@ -52,16 +58,24 @@ import org.jivesoftware.smack.util.XmlStringBuilder;
  * the user's current presence status. Second, they are used to subscribe and
  * unsubscribe users from the roster.
  *
- * @see RosterPacket
  * @author Matt Tucker
  */
-public class Presence extends Packet {
+public final class Presence extends Stanza implements TypedCloneable<Presence> {
+
+    public static final String ELEMENT = "presence";
 
     private Type type = Type.available;
     private String status = null;
+
+    /**
+     * The priority of the presence. The magic value {@link Integer#MIN_VALUE} is used to indicate that the original
+     * presence stanza did not had an explicit priority set. In which case the priority defaults to 0.
+     *
+     * @see <a href="https://tools.ietf.org/html/rfc6121#section-4.7.2.3">RFC 6121 § 4.7.2.3.</a>
+     */
     private int priority = Integer.MIN_VALUE;
+
     private Mode mode = null;
-    private String language;
 
     /**
      * Creates a new presence update. Status, priority, and mode are left un-set.
@@ -69,7 +83,21 @@ public class Presence extends Packet {
      * @param type the type.
      */
     public Presence(Type type) {
+        // Ensure that the stanza ID is set by calling super().
+        super();
         setType(type);
+    }
+
+    /**
+     * Creates a new presence with the given type and using the given XMPP address as recipient.
+     *
+     * @param to the recipient.
+     * @param type the type.
+     * @since 4.2
+     */
+    public Presence(Jid to, Type type) {
+        this(type);
+        setTo(to);
     }
 
     /**
@@ -81,10 +109,29 @@ public class Presence extends Packet {
      * @param mode the mode type for this presence update.
      */
     public Presence(Type type, String status, int priority, Mode mode) {
+        // Ensure that the stanza ID is set by calling super().
+        super();
         setType(type);
         setStatus(status);
         setPriority(priority);
         setMode(mode);
+    }
+
+    /**
+     * Copy constructor.
+     * <p>
+     * This does not perform a deep clone, as extension elements are shared between the new and old
+     * instance.
+     * </p>
+     *
+     * @param other
+     */
+    public Presence(Presence other) {
+        super(other);
+        this.type = other.type;
+        this.status = other.status;
+        this.priority = other.priority;
+        this.mode = other.mode;
     }
 
     /**
@@ -99,7 +146,7 @@ public class Presence extends Packet {
      * @return true if the presence type is available.
      */
     public boolean isAvailable() {
-        return type == Type.available;    
+        return type == Type.available;
     }
 
     /**
@@ -108,12 +155,12 @@ public class Presence extends Packet {
      * {@link Mode#dnd do not disturb}. False will be returned when the type or mode
      * is any other value, including when the presence type is unavailable (offline).
      * This is a convenience method equivalent to
-     * <tt>type == Type.available && (mode == Mode.away || mode == Mode.xa || mode == Mode.dnd)</tt>.
+     * <tt>type == Type.available &amp;&amp; (mode == Mode.away || mode == Mode.xa || mode == Mode.dnd)</tt>.
      *
      * @return true if the presence type is available and the presence mode is away, xa, or dnd.
      */
     public boolean isAway() {
-        return type == Type.available && (mode == Mode.away || mode == Mode.xa || mode == Mode.dnd); 
+        return type == Type.available && (mode == Mode.away || mode == Mode.xa || mode == Mode.dnd);
     }
 
     /**
@@ -131,10 +178,7 @@ public class Presence extends Packet {
      * @param type the type of the presence packet.
      */
     public void setType(Type type) {
-        if(type == null) {
-            throw new NullPointerException("Type cannot be null");
-        }
-        this.type = type;
+        this.type = Objects.requireNonNull(type, "Type cannot be null");
     }
 
     /**
@@ -162,33 +206,39 @@ public class Presence extends Packet {
      * Returns the priority of the presence, or Integer.MIN_VALUE if no priority has been set.
      *
      * @return the priority.
+     * @see <a href="https://tools.ietf.org/html/rfc6121#section-4.7.2.3">RFC 6121 § 4.7.2.3. Priority Element</a>
      */
     public int getPriority() {
+        if (priority == Integer.MIN_VALUE) {
+            return 0;
+        }
         return priority;
     }
 
     /**
-     * Sets the priority of the presence. The valid range is -128 through 128.
+     * Sets the priority of the presence. The valid range is -128 through 127.
      *
      * @param priority the priority of the presence.
      * @throws IllegalArgumentException if the priority is outside the valid range.
+     * @see <a href="https://tools.ietf.org/html/rfc6121#section-4.7.2.3">RFC 6121 § 4.7.2.3. Priority Element</a>
      */
     public void setPriority(int priority) {
-        if (priority < -128 || priority > 128) {
+        if (priority < -128 || priority > 127) {
             throw new IllegalArgumentException("Priority value " + priority +
-                    " is not valid. Valid range is -128 through 128.");
+                    " is not valid. Valid range is -128 through 127.");
         }
         this.priority = priority;
     }
 
     /**
-     * Returns the mode of the presence update, or <tt>null</tt> if the mode is not set.
-     * A null presence mode value is interpreted to be the same thing as
-     * {@link Presence.Mode#available}.
+     * Returns the mode of the presence update.
      *
      * @return the mode.
      */
     public Mode getMode() {
+        if (mode == null) {
+            return Mode.available;
+        }
         return mode;
     }
 
@@ -202,37 +252,34 @@ public class Presence extends Packet {
         this.mode = mode;
     }
 
-    /**
-     * Returns the xml:lang of this Presence, or null if one has not been set.
-     *
-     * @return the xml:lang of this Presence, or null if one has not been set.
-     * @since 3.0.2
-     */
-    public String getLanguage() {
-        return language;
-    }
-
-    /**
-     * Sets the xml:lang of this Presence.
-     *
-     * @param language the xml:lang of this Presence.
-     * @since 3.0.2
-     */
-    public void setLanguage(String language) {
-        this.language = language;
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Presence Stanza [");
+        logCommonAttributes(sb);
+        sb.append("type=").append(type).append(',');
+        if (mode != null) {
+            sb.append("mode=").append(mode).append(',');
+        }
+        if (!StringUtils.isNullOrEmpty(status)) {
+            sb.append("status=").append(status).append(',');
+        }
+        if (priority != Integer.MIN_VALUE) {
+            sb.append("prio=").append(priority).append(',');
+        }
+        sb.append(']');
+        return sb.toString();
     }
 
     @Override
-    public XmlStringBuilder toXML() {
-        XmlStringBuilder buf = new XmlStringBuilder();
-        buf.halfOpenElement("presence");
-        buf.xmlnsAttribute(getXmlns());
-        buf.xmllangAttribute(getLanguage());
-        addCommonAttributes(buf);
+    public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
+        XmlStringBuilder buf = new XmlStringBuilder(enclosingNamespace);
+        buf.halfOpenElement(ELEMENT);
+        addCommonAttributes(buf, enclosingNamespace);
         if (type != Type.available) {
             buf.attribute("type", type);
         }
-        buf.rightAngelBracket();
+        buf.rightAngleBracket();
 
         buf.optElement("status", status);
         if (priority != Integer.MIN_VALUE) {
@@ -241,28 +288,40 @@ public class Presence extends Packet {
         if (mode != null && mode != Mode.available) {
             buf.element("show", mode);
         }
-        buf.append(getExtensionsXML());
+
+        buf.append(getExtensions(), enclosingNamespace);
 
         // Add the error sub-packet, if there is one.
-        XMPPError error = getError();
-        if (error != null) {
-            buf.append(error.toXML());
-        }
-        buf.closeElement("presence");
+        appendErrorIfExists(buf, enclosingNamespace);
+
+        buf.closeElement(ELEMENT);
 
         return buf;
     }
 
-    public String toString() {
-        StringBuilder buf = new StringBuilder();
-        buf.append(type);
-        if (mode != null) {
-            buf.append(": ").append(mode);
-        }
-        if (getStatus() != null) {
-            buf.append(" (").append(getStatus()).append(")");
-        }
-        return buf.toString();
+    /**
+     * Creates and returns a copy of this presence stanza.
+     * <p>
+     * This does not perform a deep clone, as extension elements are shared between the new and old
+     * instance.
+     * </p>
+     * @return a clone of this presence.
+     */
+    @Override
+    public Presence clone() {
+        return new Presence(this);
+    }
+
+    /**
+     * Clone this presence and set a newly generated stanza ID as the clone's ID.
+     *
+     * @return a "clone" of this presence  with a different stanza ID.
+     * @since 4.1.2
+     */
+    public Presence cloneWithNewId() {
+        Presence clone = clone();
+        clone.setStanzaId(StanzaIdUtil.newStanzaId());
+        return clone;
     }
 
     /**
@@ -305,15 +364,21 @@ public class Presence extends Packet {
         unsubscribed,
 
         /**
-         * The presence packet contains an error message.
+         * The presence stanza contains an error message.
          */
-        error;
+        error,
+
+        /**
+         * A presence probe as defined in section 4.3 of RFC 6121.
+         */
+        probe,
+        ;
 
         /**
          * Converts a String into the corresponding types. Valid String values that can be converted
          * to types are: "available", "unavailable", "subscribe", "subscribed", "unsubscribe",
          * "unsubscribed" and "error".
-         * 
+         *
          * @param string the String value to covert.
          * @return the corresponding Type.
          * @throws IllegalArgumentException when not able to parse the string parameter
@@ -357,7 +422,7 @@ public class Presence extends Packet {
         /**
          * Converts a String into the corresponding types. Valid String values that can be converted
          * to types are: "chat", "available", "away", "xa", and "dnd".
-         * 
+         *
          * @param string the String value to covert.
          * @return the corresponding Type.
          * @throws IllegalArgumentException when not able to parse the string parameter

@@ -17,9 +17,11 @@
 
 package org.jivesoftware.smackx.address;
 
+import java.util.List;
+
 import org.jivesoftware.smackx.address.packet.MultipleAddresses;
 
-import java.util.List;
+import org.jxmpp.jid.Jid;
 
 /**
  * MultipleRecipientInfo keeps information about the multiple recipients extension included
@@ -42,7 +44,7 @@ public class MultipleRecipientInfo {
      * @return list of primary recipients of the packet.
      */
     public List<MultipleAddresses.Address> getTOAddresses() {
-        return extension.getAddressesOfType(MultipleAddresses.TO);
+        return extension.getAddressesOfType(MultipleAddresses.Type.to);
     }
 
     /**
@@ -52,7 +54,7 @@ public class MultipleRecipientInfo {
      * @return list of secondary recipients of the packet.
      */
     public List<MultipleAddresses.Address> getCCAddresses() {
-        return extension.getAddressesOfType(MultipleAddresses.CC);
+        return extension.getAddressesOfType(MultipleAddresses.Type.cc);
     }
 
     /**
@@ -64,20 +66,21 @@ public class MultipleRecipientInfo {
      * @return the JID of a MUC room to which responses should be sent or <tt>null</tt>  if
      *         no specific address was provided.
      */
-    public String getReplyRoom() {
-        List<MultipleAddresses.Address> replyRoom = extension.getAddressesOfType(MultipleAddresses.REPLY_ROOM);
-        return replyRoom.isEmpty() ? null : ((MultipleAddresses.Address) replyRoom.get(0)).getJid();
+    // TODO should return EntityBareJid
+    public Jid getReplyRoom() {
+        List<MultipleAddresses.Address> replyRoom = extension.getAddressesOfType(MultipleAddresses.Type.replyroom);
+        return replyRoom.isEmpty() ? null : replyRoom.get(0).getJid();
     }
 
     /**
-     * Returns true if the received packet should not be replied. Use
+     * Returns true if the received stanza should not be replied. Use
      * {@link MultipleRecipientManager#reply(org.jivesoftware.smack.XMPPConnection, org.jivesoftware.smack.packet.Message, org.jivesoftware.smack.packet.Message)}
-     * to send replies. 
+     * to send replies.
      *
-     * @return true if the received packet should not be replied.
+     * @return true if the received stanza should not be replied.
      */
     public boolean shouldNotReply() {
-        return !extension.getAddressesOfType(MultipleAddresses.NO_REPLY).isEmpty();
+        return !extension.getAddressesOfType(MultipleAddresses.Type.noreply).isEmpty();
     }
 
     /**
@@ -89,7 +92,7 @@ public class MultipleRecipientInfo {
      *         no specific address was provided.
      */
     public MultipleAddresses.Address getReplyAddress() {
-        List<MultipleAddresses.Address> replyTo = extension.getAddressesOfType(MultipleAddresses.REPLY_TO);
-        return replyTo.isEmpty() ? null : (MultipleAddresses.Address) replyTo.get(0);
+        List<MultipleAddresses.Address> replyTo = extension.getAddressesOfType(MultipleAddresses.Type.replyto);
+        return replyTo.isEmpty() ? null : replyTo.get(0);
     }
 }

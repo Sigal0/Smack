@@ -16,8 +16,10 @@
  */
 package org.jivesoftware.smackx.privacy.packet;
 
+import org.jivesoftware.smack.util.NumberUtil;
+
 /**
- * A privacy item acts a rule that when matched defines if a packet should be blocked or not.
+ * A privacy item acts a rule that when matched defines if a stanza should be blocked or not.
  *
  * Privacy Items can handle different kind of blocking communications based on JID, group,
  * subscription type or globally by:<ul>
@@ -40,8 +42,11 @@ public class PrivacyItem {
 
     /** allow is the action associated with the item, it can allow or deny the communication. */
     private final boolean allow;
-    /** order is a non-negative integer that is unique among all items in the list. */
-    private final int order;
+
+    /**
+     * order is a unsigned 32-bit integer that is unique among all items in the list.
+     **/
+    private final long order;
 
     /**
      * Type defines if the rule is based on JIDs, roster groups or presence subscription types.
@@ -75,7 +80,7 @@ public class PrivacyItem {
      * @param allow true if this is an allow item
      * @param order the order of this privacy item
      */
-    public PrivacyItem(boolean allow, int order) {
+    public PrivacyItem(boolean allow, long order) {
         this(null, null, allow, order);
     }
 
@@ -93,11 +98,30 @@ public class PrivacyItem {
      * @param allow true if this is an allow item
      * @param order the order of this privacy item
      */
-    public PrivacyItem(Type type, String value, boolean allow, int order) {
+    public PrivacyItem(Type type, String value, boolean allow, long order) {
+        NumberUtil.checkIfInUInt32Range(order);
         this.type = type;
         this.value = value;
         this.allow = allow;
         this.order = order;
+    }
+
+    /**
+     * Creates a new privacy item.
+     *
+     * If the type is "jid", then the 'value' attribute MUST contain a valid Jabber ID.
+     * If the type is "group", then the 'value' attribute SHOULD contain the name of a group
+     * in the user's roster.
+     * If the type is "subscription", then the 'value' attribute MUST be one of "both", "to",
+     * "from", or "none".
+     *
+     * @param type the type.
+     * @param value the value of the privacy item
+     * @param allow true if this is an allow item
+     * @param order the order of this privacy item
+     */
+    public PrivacyItem(Type type, CharSequence value, boolean allow, long order) {
+        this(type, value != null ? value.toString() : null, allow, order);
     }
 
     /**
@@ -107,8 +131,8 @@ public class PrivacyItem {
      * @return the allow communication status.
      */
     public boolean isAllow() {
-		return allow;
-	}
+        return allow;
+    }
 
     /**
      * Returns whether the receiver allow or deny incoming IQ stanzas or not.
@@ -116,8 +140,8 @@ public class PrivacyItem {
      * @return the iq filtering status.
      */
     public boolean isFilterIQ() {
-		return filterIQ;
-	}
+        return filterIQ;
+    }
 
     /**
      * Sets whether the receiver allows or denies incoming IQ stanzas or not.
@@ -125,8 +149,8 @@ public class PrivacyItem {
      * @param filterIQ indicates if the receiver allows or denies incoming IQ stanzas.
      */
     public void setFilterIQ(boolean filterIQ) {
-		this.filterIQ = filterIQ;
-	}
+        this.filterIQ = filterIQ;
+    }
 
     /**
      * Returns whether the receiver allows or denies incoming messages or not.
@@ -134,8 +158,8 @@ public class PrivacyItem {
      * @return the message filtering status.
      */
     public boolean isFilterMessage() {
-		return filterMessage;
-	}
+        return filterMessage;
+    }
 
     /**
      * Sets wheather the receiver allows or denies incoming messages or not.
@@ -143,8 +167,8 @@ public class PrivacyItem {
      * @param filterMessage indicates if the receiver allows or denies incoming messages or not.
      */
     public void setFilterMessage(boolean filterMessage) {
-		this.filterMessage = filterMessage;
-	}
+        this.filterMessage = filterMessage;
+    }
 
     /**
      * Returns whether the receiver allows or denies incoming presence or not.
@@ -152,8 +176,8 @@ public class PrivacyItem {
      * @return the iq filtering incoming presence status.
      */
     public boolean isFilterPresenceIn() {
-		return filterPresenceIn;
-	}
+        return filterPresenceIn;
+    }
 
     /**
      * Sets whether the receiver allows or denies incoming presence or not.
@@ -161,8 +185,8 @@ public class PrivacyItem {
      * @param filterPresenceIn indicates if the receiver allows or denies filtering incoming presence.
      */
     public void setFilterPresenceIn(boolean filterPresenceIn) {
-		this.filterPresenceIn = filterPresenceIn;
-	}
+        this.filterPresenceIn = filterPresenceIn;
+    }
 
     /**
      * Returns whether the receiver allows or denies incoming presence or not.
@@ -170,8 +194,8 @@ public class PrivacyItem {
      * @return the iq filtering incoming presence status.
      */
     public boolean isFilterPresenceOut() {
-		return filterPresenceOut;
-	}
+        return filterPresenceOut;
+    }
 
     /**
      * Sets whether the receiver allows or denies outgoing presence or not.
@@ -179,8 +203,8 @@ public class PrivacyItem {
      * @param filterPresenceOut indicates if the receiver allows or denies filtering outgoing presence
      */
     public void setFilterPresenceOut(boolean filterPresenceOut) {
-		this.filterPresenceOut = filterPresenceOut;
-	}
+        this.filterPresenceOut = filterPresenceOut;
+    }
 
     /**
      * Returns the order where the receiver is processed. List items are processed in
@@ -191,9 +215,9 @@ public class PrivacyItem {
      *
      * @return the order number.
      */
-    public int getOrder() {
-		return order;
-	}
+    public long getOrder() {
+        return order;
+    }
 
     /**
      * Returns the type hold the kind of communication it will allow or block.
@@ -203,7 +227,7 @@ public class PrivacyItem {
      */
     public Type getType() {
         return type;
-	}
+    }
 
     /**
      * Returns the element identifier to apply the action.
@@ -218,7 +242,7 @@ public class PrivacyItem {
      */
     public String getValue() {
         return value;
-	}
+    }
 
     /**
      * Returns whether the receiver allows or denies every kind of communication.
@@ -229,47 +253,47 @@ public class PrivacyItem {
      * @return the all communications status.
      */
     public boolean isFilterEverything() {
-		return !(this.isFilterIQ() || this.isFilterMessage() || this.isFilterPresenceIn()
-				|| this.isFilterPresenceOut());
-	}
+        return !(this.isFilterIQ() || this.isFilterMessage() || this.isFilterPresenceIn()
+                || this.isFilterPresenceOut());
+    }
 
-	/**
-	 * Answer an xml representation of the receiver according to the RFC 3921.
-	 *
-	 * @return the text xml representation.
+    /**
+     * Answer an xml representation of the receiver according to the RFC 3921.
+     *
+     * @return the text xml representation.
      */
     public String toXML() {
         StringBuilder buf = new StringBuilder();
         buf.append("<item");
         if (this.isAllow()) {
-        	buf.append(" action=\"allow\"");
+            buf.append(" action=\"allow\"");
         } else {
-        	buf.append(" action=\"deny\"");
+            buf.append(" action=\"deny\"");
         }
-        buf.append(" order=\"").append(getOrder()).append("\"");
+        buf.append(" order=\"").append(getOrder()).append('"');
         if (getType() != null) {
-            buf.append(" type=\"").append(getType()).append("\"");
+            buf.append(" type=\"").append(getType()).append('"');
         }
         if (getValue() != null) {
-            buf.append(" value=\"").append(getValue()).append("\"");
+            buf.append(" value=\"").append(getValue()).append('"');
         }
         if (isFilterEverything()) {
-        	buf.append("/>");
+            buf.append("/>");
         } else {
-        	buf.append(">");
-        	if (this.isFilterIQ()) {
-            	buf.append("<iq/>");
+            buf.append('>');
+            if (this.isFilterIQ()) {
+                buf.append("<iq/>");
             }
-        	if (this.isFilterMessage()) {
-            	buf.append("<message/>");
+            if (this.isFilterMessage()) {
+                buf.append("<message/>");
             }
-        	if (this.isFilterPresenceIn()) {
-            	buf.append("<presence-in/>");
+            if (this.isFilterPresenceIn()) {
+                buf.append("<presence-in/>");
             }
-        	if (this.isFilterPresenceOut()) {
-            	buf.append("<presence-out/>");
+            if (this.isFilterPresenceOut()) {
+                buf.append("<presence-out/>");
             }
-        	buf.append("</item>");
+            buf.append("</item>");
         }
         return buf.toString();
     }
@@ -277,7 +301,7 @@ public class PrivacyItem {
     /**
      * Type defines if the rule is based on JIDs, roster groups or presence subscription types.
      */
-    public static enum Type {
+    public enum Type {
         /**
          * JID being analyzed should belong to a roster group of the list's owner.
          */

@@ -18,7 +18,7 @@
 package org.jivesoftware.smackx;
 
 import org.jivesoftware.smack.Chat;
-import org.jivesoftware.smack.PacketCollector;
+import org.jivesoftware.smack.StanzaCollector;
 import org.jivesoftware.smack.XMPPException;
 import org.jivesoftware.smack.filter.MessageTypeFilter;
 import org.jivesoftware.smack.packet.Message;
@@ -55,7 +55,7 @@ public class OfflineMessageManagerTest extends SmackTestCase {
      */
     public void testReadAndDelete() {
         // Make user2 unavailable
-        getConnection(1).sendPacket(new Presence(Presence.Type.unavailable));
+        getConnection(1).sendStanza(new Presence(Presence.Type.unavailable));
 
         try {
             Thread.sleep(500);
@@ -98,9 +98,9 @@ public class OfflineMessageManagerTest extends SmackTestCase {
             assertEquals("Wrong number of offline messages", 2, offlineManager.getMessageCount());
 
             // User2 becomes available again
-            PacketCollector collector = getConnection(1).createPacketCollector(
+            StanzaCollector collector = getConnection(1).createStanzaCollector(
                     new MessageTypeFilter(Message.Type.chat));
-            getConnection(1).sendPacket(new Presence(Presence.Type.available));
+            getConnection(1).sendStanza(new Presence(Presence.Type.available));
 
             // Check that no offline messages was sent to the user
             Message message = (Message) collector.nextResult(2500);
@@ -124,7 +124,7 @@ public class OfflineMessageManagerTest extends SmackTestCase {
      */
     public void testFetchAndPurge() {
         // Make user2 unavailable
-        getConnection(1).sendPacket(new Presence(Presence.Type.unavailable));
+        getConnection(1).sendStanza(new Presence(Presence.Type.unavailable));
 
         try {
             Thread.sleep(500);
@@ -156,9 +156,9 @@ public class OfflineMessageManagerTest extends SmackTestCase {
             assertEquals("Wrong number of offline messages", 2, offlineManager.getMessageCount());
 
             // User2 becomes available again
-            PacketCollector collector = getConnection(1).createPacketCollector(
+            StanzaCollector collector = getConnection(1).createStanzaCollector(
                     new MessageTypeFilter(Message.Type.chat));
-            getConnection(1).sendPacket(new Presence(Presence.Type.available));
+            getConnection(1).sendStanza(new Presence(Presence.Type.available));
 
             // Check that no offline messages was sent to the user
             Message message = (Message) collector.nextResult(2500);

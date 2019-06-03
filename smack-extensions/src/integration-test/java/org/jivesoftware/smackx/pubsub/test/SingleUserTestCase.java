@@ -21,7 +21,7 @@ import org.jivesoftware.smackx.pubsub.LeafNode;
 import org.jivesoftware.smackx.pubsub.PubSubManager;
 
 /**
- * 
+ *
  * @author Robin Collier
  *
  */
@@ -31,7 +31,7 @@ public class SingleUserTestCase extends PubSubTestCase
 	{
 		return getManager(0);
 	}
-	
+
 	protected LeafNode getPubnode(boolean persistItems, boolean deliverPayload) throws XMPPException
 	{
 		return getRandomPubnode(getManager(), persistItems, deliverPayload);

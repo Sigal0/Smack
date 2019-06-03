@@ -1,6 +1,6 @@
 /**
  *
- * Copyright 2013 Georg Lukas
+ * Copyright 2013-2014 Georg Lukas
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,28 @@
  */
 package org.jivesoftware.smackx.receipts;
 
+import org.jivesoftware.smack.packet.Stanza;
+
+import org.jxmpp.jid.Jid;
+
 /**
  * Interface for received receipt notifications.
- * 
- * Implement this and add a listener to get notified. 
+ *
+ * Implement this and add a listener to get notified.
  */
 public interface ReceiptReceivedListener {
-    void onReceiptReceived(String fromJid, String toJid, String receiptId);
+    /**
+     * Callback invoked when a new receipt got received.
+     * <p>
+     * {@code receiptId} correspondents to the message ID, which can be obtained with
+     * {@link org.jivesoftware.smack.packet.Stanza#getStanzaId()}.
+     * </p>
+     *
+     * @param fromJid the jid that send this receipt
+     * @param toJid the jid which received this receipt
+     * @param receiptId the message ID of the stanza which has been received and this receipt is for.
+     *                  This might be {@code null}.
+     * @param receipt the receipt
+     */
+    void onReceiptReceived(Jid fromJid, Jid toJid, String receiptId, Stanza receipt);
 }

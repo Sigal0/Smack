@@ -16,21 +16,33 @@
  */
 package org.jivesoftware.smackx.workgroup.packet;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
-import org.xmlpull.v1.XmlPullParser;
-
+import java.io.IOException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.Iterator;
+import java.util.List;
+import java.util.TimeZone;
+
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.ExtensionElementProvider;
+import org.jivesoftware.smack.util.ParserUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
+import org.jxmpp.jid.EntityBareJid;
 
 /**
  * Agent status packet.
  *
  * @author Matt Tucker
  */
-public class AgentStatus implements PacketExtension {
+public class AgentStatus implements ExtensionElement {
 
+    @SuppressWarnings("DateFormatConstant")
     private static final SimpleDateFormat UTC_FORMAT = new SimpleDateFormat("yyyyMMdd'T'HH:mm:ss");
 
     static {
@@ -38,23 +50,23 @@ public class AgentStatus implements PacketExtension {
     }
 
     /**
-     * Element name of the packet extension.
+     * Element name of the stanza extension.
      */
     public static final String ELEMENT_NAME = "agent-status";
 
     /**
-     * Namespace of the packet extension.
+     * Namespace of the stanza extension.
      */
     public static final String NAMESPACE = "http://jabber.org/protocol/workgroup";
 
-    private String workgroupJID;
-    private List<ChatInfo> currentChats = new ArrayList<ChatInfo>();
+    private EntityBareJid workgroupJID;
+    private final List<ChatInfo> currentChats = new ArrayList<>();
     private int maxChats = -1;
 
     AgentStatus() {
     }
 
-    public String getWorkgroupJID() {
+    public EntityBareJid getWorkgroupJID() {
         return workgroupJID;
     }
 
@@ -73,29 +85,32 @@ public class AgentStatus implements PacketExtension {
         return maxChats;
     }
 
+    @Override
     public String getElementName() {
         return ELEMENT_NAME;
     }
 
+    @Override
     public String getNamespace() {
         return NAMESPACE;
     }
 
-    public String toXML() {
+    @Override
+    public String toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
         StringBuilder buf = new StringBuilder();
 
-        buf.append("<").append(ELEMENT_NAME).append(" xmlns=\"").append(NAMESPACE).append("\"");
+        buf.append('<').append(ELEMENT_NAME).append(" xmlns=\"").append(NAMESPACE).append('"');
         if (workgroupJID != null) {
-            buf.append(" jid=\"").append(workgroupJID).append("\"");
+            buf.append(" jid=\"").append(workgroupJID).append('"');
         }
-        buf.append(">");
+        buf.append('>');
         if (maxChats != -1) {
             buf.append("<max-chats>").append(maxChats).append("</max-chats>");
         }
         if (!currentChats.isEmpty()) {
             buf.append("<current-chats xmlns= \"http://jivesoftware.com/protocol/workgroup\">");
             for (Iterator<ChatInfo> it = currentChats.iterator(); it.hasNext();) {
-                buf.append(((ChatInfo)it.next()).toXML());
+                buf.append(it.next().toXML());
             }
             buf.append("</current-chats>");
         }
@@ -111,12 +126,12 @@ public class AgentStatus implements PacketExtension {
      */
     public static class ChatInfo {
 
-        private String sessionID;
-        private String userID;
-        private Date date;
-        private String email;
-        private String username;
-        private String question;
+        private final String sessionID;
+        private final String userID;
+        private final Date date;
+        private final String email;
+        private final String username;
+        private final String question;
 
         public ChatInfo(String sessionID, String userID, Date date, String email, String username, String question) {
             this.sessionID = sessionID;
@@ -190,22 +205,26 @@ public class AgentStatus implements PacketExtension {
 
             buf.append("<chat ");
             if (sessionID != null) {
-                buf.append(" sessionID=\"").append(sessionID).append("\"");
+                buf.append(" sessionID=\"").append(sessionID).append('"');
             }
             if (userID != null) {
-                buf.append(" userID=\"").append(userID).append("\"");
+                buf.append(" userID=\"").append(userID).append('"');
             }
             if (date != null) {
-                buf.append(" startTime=\"").append(UTC_FORMAT.format(date)).append("\"");
+                buf.append(" startTime=\"");
+                synchronized (UTC_FORMAT) {
+                    buf.append(UTC_FORMAT.format(date));
+                }
+                buf.append('"');
             }
             if (email != null) {
-                buf.append(" email=\"").append(email).append("\"");
+                buf.append(" email=\"").append(email).append('"');
             }
             if (username != null) {
-                buf.append(" username=\"").append(username).append("\"");
+                buf.append(" username=\"").append(username).append('"');
             }
             if (question != null) {
-                buf.append(" question=\"").append(question).append("\"");
+                buf.append(" question=\"").append(question).append('"');
             }
             buf.append("/>");
 
@@ -214,20 +233,21 @@ public class AgentStatus implements PacketExtension {
     }
 
     /**
-     * Packet extension provider for AgentStatus packets.
+     * Stanza extension provider for AgentStatus packets.
      */
-    public static class Provider implements PacketExtensionProvider {
+    public static class Provider extends ExtensionElementProvider<AgentStatus> {
 
-        public PacketExtension parseExtension(XmlPullParser parser) throws Exception {
+        @Override
+        public AgentStatus parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException {
             AgentStatus agentStatus = new AgentStatus();
 
-            agentStatus.workgroupJID = parser.getAttributeValue("", "jid");
+            agentStatus.workgroupJID = ParserUtils.getBareJidAttribute(parser);
 
             boolean done = false;
             while (!done) {
-                int eventType = parser.next();
+                XmlPullParser.Event eventType = parser.next();
 
-                if (eventType == XmlPullParser.START_TAG) {
+                if (eventType == XmlPullParser.Event.START_ELEMENT) {
                     if ("chat".equals(parser.getName())) {
                         agentStatus.currentChats.add(parseChatInfo(parser));
                     }
@@ -235,7 +255,7 @@ public class AgentStatus implements PacketExtension {
                         agentStatus.maxChats = Integer.parseInt(parser.nextText());
                     }
                 }
-                else if (eventType == XmlPullParser.END_TAG &&
+                else if (eventType == XmlPullParser.Event.END_ELEMENT &&
                     ELEMENT_NAME.equals(parser.getName())) {
                     done = true;
                 }
@@ -243,13 +263,15 @@ public class AgentStatus implements PacketExtension {
             return agentStatus;
         }
 
-        private ChatInfo parseChatInfo(XmlPullParser parser) {
+        private static ChatInfo parseChatInfo(XmlPullParser parser) {
 
             String sessionID = parser.getAttributeValue("", "sessionID");
             String userID = parser.getAttributeValue("", "userID");
             Date date = null;
             try {
-                date = UTC_FORMAT.parse(parser.getAttributeValue("", "startTime"));
+                synchronized (UTC_FORMAT) {
+                    date = UTC_FORMAT.parse(parser.getAttributeValue("", "startTime"));
+                }
             }
             catch (ParseException e) {
             }

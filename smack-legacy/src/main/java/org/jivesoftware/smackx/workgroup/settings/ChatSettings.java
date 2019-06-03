@@ -17,14 +17,17 @@
 
 package org.jivesoftware.smackx.workgroup.settings;
 
-import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.provider.IQProvider;
-import org.xmlpull.v1.XmlPullParser;
-
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
+
+import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.IQProvider;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
 
 public class ChatSettings extends IQ {
 
@@ -43,15 +46,27 @@ public class ChatSettings extends IQ {
      */
     public static final int BOT_SETTINGS = 2;
 
-    private List<ChatSetting> settings;
+    private final List<ChatSetting> settings;
     private String key;
     private int type = -1;
 
+    /**
+     * Element name of the stanza extension.
+     */
+    public static final String ELEMENT_NAME = "chat-settings";
+
+    /**
+     * Namespace of the stanza extension.
+     */
+    public static final String NAMESPACE = "http://jivesoftware.com/protocol/workgroup";
+
     public ChatSettings() {
-        settings = new ArrayList<ChatSetting>();
+        super(ELEMENT_NAME, NAMESPACE);
+        settings = new ArrayList<>();
     }
 
     public ChatSettings(String key) {
+        this();
         setKey(key);
     }
 
@@ -87,29 +102,13 @@ public class ChatSettings extends IQ {
 
     public ChatSetting getFirstEntry() {
         if (settings.size() > 0) {
-            return (ChatSetting)settings.get(0);
+            return settings.get(0);
         }
         return null;
     }
 
-
-    /**
-     * Element name of the packet extension.
-     */
-    public static final String ELEMENT_NAME = "chat-settings";
-
-    /**
-     * Namespace of the packet extension.
-     */
-    public static final String NAMESPACE = "http://jivesoftware.com/protocol/workgroup";
-
-    public String getChildElementXML() {
-        StringBuilder buf = new StringBuilder();
-
-        buf.append("<").append(ELEMENT_NAME).append(" xmlns=");
-        buf.append('"');
-        buf.append(NAMESPACE);
-        buf.append('"');
+    @Override
+    protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder buf) {
         if (key != null) {
             buf.append(" key=\"" + key + "\"");
         }
@@ -117,18 +116,18 @@ public class ChatSettings extends IQ {
         if (type != -1) {
             buf.append(" type=\"" + type + "\"");
         }
-
-        buf.append("></").append(ELEMENT_NAME).append("> ");
-        return buf.toString();
+        buf.setEmptyElement();
+        return buf;
     }
 
     /**
-     * Packet extension provider for AgentStatusRequest packets.
+     * Stanza extension provider for AgentStatusRequest packets.
      */
-    public static class InternalProvider implements IQProvider {
+    public static class InternalProvider extends IQProvider<ChatSettings> {
 
-        public IQ parseIQ(XmlPullParser parser) throws Exception {
-            if (parser.getEventType() != XmlPullParser.START_TAG) {
+        @Override
+        public ChatSettings parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException {
+            if (parser.getEventType() != XmlPullParser.Event.START_ELEMENT) {
                 throw new IllegalStateException("Parser not in proper position, or bad XML.");
             }
 
@@ -136,19 +135,19 @@ public class ChatSettings extends IQ {
 
             boolean done = false;
             while (!done) {
-                int eventType = parser.next();
-                if ((eventType == XmlPullParser.START_TAG) && ("chat-setting".equals(parser.getName()))) {
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT && "chat-setting".equals(parser.getName())) {
                     chatSettings.addSetting(parseChatSetting(parser));
 
                 }
-                else if (eventType == XmlPullParser.END_TAG && ELEMENT_NAME.equals(parser.getName())) {
+                else if (eventType == XmlPullParser.Event.END_ELEMENT && ELEMENT_NAME.equals(parser.getName())) {
                     done = true;
                 }
             }
             return chatSettings;
         }
 
-        private ChatSetting parseChatSetting(XmlPullParser parser) throws Exception {
+        private static ChatSetting parseChatSetting(XmlPullParser parser) throws XmlPullParserException, IOException {
 
             boolean done = false;
             String key = null;
@@ -156,17 +155,17 @@ public class ChatSettings extends IQ {
             int type = 0;
 
             while (!done) {
-                int eventType = parser.next();
-                if ((eventType == XmlPullParser.START_TAG) && ("key".equals(parser.getName()))) {
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT && "key".equals(parser.getName())) {
                     key = parser.nextText();
                 }
-                else if ((eventType == XmlPullParser.START_TAG) && ("value".equals(parser.getName()))) {
+                else if (eventType == XmlPullParser.Event.START_ELEMENT && "value".equals(parser.getName())) {
                     value = parser.nextText();
                 }
-                else if ((eventType == XmlPullParser.START_TAG) && ("type".equals(parser.getName()))) {
+                else if (eventType == XmlPullParser.Event.START_ELEMENT && "type".equals(parser.getName())) {
                     type = Integer.parseInt(parser.nextText());
                 }
-                else if (eventType == XmlPullParser.END_TAG && "chat-setting".equals(parser.getName())) {
+                else if (eventType == XmlPullParser.Event.END_ELEMENT && "chat-setting".equals(parser.getName())) {
                     done = true;
                 }
             }

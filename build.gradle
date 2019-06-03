@@ -1,15 +1,39 @@
 import org.gradle.plugins.signing.Sign
 
+buildscript {
+    repositories {
+        jcenter()
+		maven { url 'https://plugins.gradle.org/m2/' }
+        maven { url 'https://dl.bintray.com/content/aalmiray/kordamp' }
+    }
+    dependencies {
+        classpath 'org.kordamp:markdown-gradle-plugin:1.0.0'
+		classpath 'org.kordamp.gradle:clirr-gradle-plugin:0.2.2'
+		classpath "org.kt3k.gradle.plugin:coveralls-gradle-plugin:2.3.1"
+    }
+}
+
+plugins {
+    id 'ru.vyarus.animalsniffer' version '1.5.0'
+	id 'net.ltgt.errorprone' version '0.8'
+}
+
+apply plugin: 'org.kordamp.gradle.markdown'
+
+apply from: 'version.gradle'
+
 allprojects {
 	apply plugin: 'java'
+	apply plugin: 'java-library'
 	apply plugin: 'eclipse'
+	apply plugin: 'idea'
+	apply plugin: 'jacoco'
+	apply plugin: 'net.ltgt.errorprone'
 
 	ext {
-		shortVersion = '4.1.0-alpha1'
-		isSnapshot = true
 		gitCommit = getGitCommit()
 		javadocAllDir = new File(buildDir, 'javadoc')
-		documentationDir = new File(projectDir, 'documentation')
+		documentationDir = new File(buildDir, 'documentation')
 		releasedocsDir = new File(buildDir, 'releasedocs')
 		rootConfigDir = new File(rootDir, 'config')
 		sonatypeCredentialsAvailable = project.hasProperty('sonatypeUsername') && project.hasProperty('sonatypePassword')
@@ -17,15 +41,118 @@ allprojects {
 		signingRequired = isReleaseVersion
 		sonatypeSnapshotUrl = 'https://oss.sonatype.org/content/repositories/snapshots'
 		sonatypeStagingUrl = 'https://oss.sonatype.org/service/local/staging/deploy/maven2'
-		buildDate = (new java.text.SimpleDateFormat("yyyy-MM-dd")).format(new Date())
+		// Returns only the date in yyyy-MM-dd format, as otherwise, with
+		// hh:mm:ss information, the manifest files would change with every
+		// build, causing unnecessary rebuilds.
+		builtDate = (new java.text.SimpleDateFormat("yyyy-MM-dd")).format(new Date())
 		oneLineDesc = 'An Open Source XMPP (Jabber) client library'
-		jxmppVersion = "0.1.0"
+		integrationTestProjects = [
+			':smack-integration-test',
+			':smack-omemo-signal-integration-test',
+		].collect{ project(it) }
+		javadocAllProjects = subprojects - integrationTestProjects
+		// A dirty hack used for Gradle's jacoco plugin, since is not
+		// hable to handle the case when a (sub)project has no unit
+		// tests. :-(
+		projectsWithoutUnitTests = [
+			':smack-android',
+			':smack-android-extensions',
+			':smack-bosh',
+			':smack-compression-jzlib',
+			':smack-debug',
+			':smack-debug-slf4j',
+			':smack-java7',
+			':smack-jingle-old',
+			':smack-resolver-dnsjava',
+			':smack-resolver-javax',
+			':smack-resolver-minidns',
+			':smack-omemo-signal-integration-test',
+		].collect{ project(it) }
+		projectsWithUnitTests = subprojects - projectsWithoutUnitTests
+		androidProjects = [
+			':smack-tcp',
+			':smack-bosh',
+			':smack-core',
+			':smack-im',
+			':smack-resolver-minidns',
+			':smack-sasl-provided',
+			':smack-extensions',
+			':smack-experimental',
+			':smack-omemo',
+			':smack-omemo-signal',
+			':smack-openpgp',
+			':smack-xmlparser',
+			':smack-xmlparser-xpp3',
+		].collect{ project(it) }
+		androidBootClasspathProjects = [
+			':smack-android',
+			':smack-android-extensions',
+		].collect{ project(it) }
+		androidOptionalProjects = [
+			':smack-tcp',
+			':smack-extensions',
+			':smack-experimental',
+			':smack-bosh',
+			':smack-omemo',
+			':smack-omemo-signal',
+		].collect{ project(it) }
+		gplLicensedProjects = [
+			':smack-omemo-signal',
+			':smack-omemo-signal-integration-test',
+		].collect{ project(it) }
+		// When this list is empty, then move the according javadoc
+		// tool Werror option into the global configure section.
+		nonStrictJavadocProjects = [
+			':smack-bosh',
+			':smack-core',
+			':smack-experimental',
+			':smack-extensions',
+			':smack-im',
+			':smack-integration-test',
+			':smack-jingle-old',
+			':smack-legacy',
+			':smack-omemo',
+			':smack-tcp',
+		].collect{ project(it) }
+		// Lazily evaluate the Android bootClasspath and offline
+		// Javadoc using a closure, so that targets which do not
+		// require it are still able to succeed without an Android
+		// SDK.
+		androidBootClasspath = { getAndroidRuntimeJar() }
+		androidJavadocOffline = { getAndroidJavadocOffline() }
+		junit4Projects = [
+			':smack-core',
+			':smack-extensions',
+			':smack-im',
+			':smack-integration-test',
+			':smack-omemo',
+			':smack-omemo-signal',
+			':smack-openpgp',
+		].collect { project(it) }
+		junitVersion = '5.4.2'
+		powerMockVersion = '2.0.2'
 	}
 	group = 'org.igniterealtime.smack'
-	sourceCompatibility = 1.7
+	sourceCompatibility = JavaVersion.VERSION_1_8
+	targetCompatibility = sourceCompatibility
 	version = shortVersion
 	if (isSnapshot) {
 		version += '-SNAPSHOT'
+	}
+
+	test {
+		useJUnitPlatform()
+
+		// Enable once the tests are fixed that sometimes break if
+		// they are executed in parallel (.e.g Socks5)
+		// maxParallelForks = Runtime.runtime.availableProcessors().intdiv(2) ?: 1
+
+		// Enable full stacktraces of failed tests. Especially handy
+		// for environments like Travis.
+		testLogging {
+			events "failed"
+			exceptionFormat "full"
+		}
 	}
 
 	ext.sharedManifest = manifest {
@@ -37,7 +164,7 @@ allprojects {
 				   // For example 4.0.0-rc1 becomes 4.0.0.rc1, but
 				   // 4.0.0-SNAPSHOT-2014-05-01 becomes 4.0.0.SNAPSHOT-2014-05-01
 				   'Bundle-Version': version.replaceFirst("-", "."),
-				   'Built-Date': new Date(),
+				   'Built-Date': ext.builtDate,
 				   'Built-JDK': System.getProperty('java.version'),
 				   'Built-Gradle': gradle.gradleVersion,
 				   'Built-By': System.getProperty('user.name')
@@ -51,10 +178,116 @@ allprojects {
 	}
 
 	repositories {
+		mavenLocal()
+		mavenCentral()
 		// Add OSS Sonatype Snapshot repository
 		maven {
 			url 'https://oss.sonatype.org/content/repositories/snapshots'
 		}
+	}
+
+	tasks.withType(JavaCompile) {
+		// Some systems may not have set their platform default
+		// converter to 'utf8', but we use unicode in our source
+		// files. Therefore ensure that javac uses unicode
+		options.encoding = 'UTF-8'
+		options.compilerArgs = [
+			'-Xlint:all',
+			// Set '-options' because a non-java7 javac will emit a
+			// warning if source/traget is set to 1.7 and
+			// bootclasspath is *not* set.
+			// TODO implement a sound heuristic to determine a java7
+			// rt.jar on the build host. And if none is found,
+			// fallback to using a environment variable,
+			// e.g. JAVA7_HOME. See SMACK-651.
+			'-Xlint:-options',
+			'-Werror',
+		]
+		options.errorprone {
+			error("UnusedVariable", "UnusedMethod")
+			errorproneArgs = [
+				// Disable errorprone checks
+				'-Xep:TypeParameterUnusedInFormals:OFF',
+				// Disable errorpone StringSplitter check, as it
+				// recommends using Splitter from Guava, which we don't
+				// have (nor want to use in Smack).
+				'-Xep:StringSplitter:OFF',
+				'-Xep:JdkObsolete:OFF',
+				// Disabled because sinttest re-uses BeforeClass from junit.
+				// TODO: change sinttest so that it has it's own
+				// BeforeClass and re-enable this check.
+				'-Xep:JUnit4ClassAnnotationNonStatic:OFF',
+				// Disabled but should be re-enabled at some point
+				//'-Xep:InconsistentCapitalization:OFF',
+				'-Xep:MixedMutabilityReturnType:OFF',
+			]
+		}
+	}
+
+	tasks.withType(ScalaCompile) {
+		scalaCompileOptions.additionalParameters = [
+			'-Xfatal-warnings',
+			'-feature',
+		]
+	}
+
+	jacoco {
+		toolVersion = "0.8.3"
+	}
+
+	jacocoTestReport {
+		dependsOn test
+		getSourceDirectories().setFrom(project.files(sourceSets.main.allSource.srcDirs))
+		getClassDirectories().setFrom(project.files(sourceSets.main.output))
+		reports {
+			xml.enabled true
+		}
+	}
+
+	if (JavaVersion.current().isJava8Compatible()) {
+		tasks.withType(Javadoc) {
+			// The '-quiet' as second argument is actually a hack,
+			// since the one paramater addStringOption doesn't seem to
+			// work, we extra add '-quiet', which is added anyway by
+			// gradle.
+			options.addStringOption('Xdoclint:all', '-quiet')
+
+			// TODO: Add
+
+			// Treat warnings as errors.
+			// See also https://bugs.openjdk.java.net/browse/JDK-8200363
+			// options.addStringOption('Xwerror', '-quiet')
+
+			// after all javadoc warnings have been resolved and
+			// remove Xwerror from the subprojects build.gradle files
+			// (e.g. smack-android-extensions).
+		}
+	}
+	tasks.withType(Javadoc) {
+		options.charSet = "UTF-8"
+		options.encoding = 'UTF-8'
+	}
+
+	dependencies {
+		testImplementation "org.junit.jupiter:junit-jupiter-api:$junitVersion"
+		testImplementation "org.junit.jupiter:junit-jupiter-params:$junitVersion"
+		testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:$junitVersion"
+
+		errorprone 'com.google.errorprone:error_prone_core:2.3.3'
+		errorproneJavac('com.google.errorprone:javac:9+181-r4173-1')
+	}
+
+	// Make all project's 'test' target depend on javadoc, so that
+	// javadoc is also linted.
+	test { dependsOn javadoc }
+}
+
+configure (junit4Projects) {
+	dependencies {
+		testImplementation "org.junit.vintage:junit-vintage-engine:$junitVersion"
+		testImplementation "org.powermock:powermock-module-junit4:$powerMockVersion"
+		testImplementation "org.powermock:powermock-module-junit4-rule:$powerMockVersion"
+		testImplementation "org.powermock:powermock-api-mockito2:$powerMockVersion"
 	}
 }
 
@@ -62,7 +295,10 @@ gradle.taskGraph.whenReady { taskGraph ->
 	if (signingRequired
 		&& taskGraph.allTasks.any { it instanceof Sign }) {
 		// Use Java 6's console to read from the console (no good for a CI environment)
-		Console console = System.console()
+		def console = System.console()
+		if (console == null) {
+			throw new Exception("Could not obtain system console (Console is 'null'). Did you build with gradle daemon? Try the same Gradle command with \"--no-daemon\".")
+		}
 		console.printf '\n\nWe have to sign some things in this build.\n\nPlease enter your signing details.\n\n'
 		def password = console.readPassword('GnuPG Private Key Password: ')
 
@@ -72,27 +308,48 @@ gradle.taskGraph.whenReady { taskGraph ->
 	}
 }
 
-task javadocAll(type: Javadoc) {
-	source subprojects.collect {project ->
+task copyAllJavadocDocFiles(type: Copy) {
+	from javadocAllProjects.collect { project ->
+		"${project.projectDir}/src/javadoc" }
+	into javadocAllDir
+	include '**/doc-files/*.*'
+}
+
+task javadocAll(type: Javadoc, dependsOn: copyAllJavadocDocFiles) {
+	source javadocAllProjects.collect {project ->
 		project.sourceSets.main.allJava }
 	destinationDir = javadocAllDir
 	// Might need a classpath
 	classpath = files(subprojects.collect {project ->
 		project.sourceSets.main.compileClasspath})
-	options.linkSource = true
-	options.use = true
-	options.links = ["http://docs.oracle.com/javase/$sourceCompatibility/docs/api/"] as String[]
+	classpath += files(androidBootClasspath)
+	options {
+		linkSource = true
+		use = true
+		links = [
+		"https://docs.oracle.com/javase/${sourceCompatibility.getMajorVersion()}/docs/api/",
+		"https://jxmpp.org/releases/$jxmppVersion/javadoc/",
+		"https://minidns.org/releases/$miniDnsVersion/javadoc/",
+		] as String[]
+		overview = "$projectDir/resources/javadoc-overview.html"
+	}
 }
 
 import org.apache.tools.ant.filters.ReplaceTokens
 task prepareReleasedocs(type: Copy) {
 	from 'resources/releasedocs'
 	into releasedocsDir
-	filter(ReplaceTokens, tokens: [version: version, releasedate: buildDate])
+	filter(ReplaceTokens, tokens: [version: version, releasedate: builtDate, targetCompatibility: targetCompatibility.toString()])
 }
 
-task distributionZip(type: Zip, dependsOn: [javadocAll, prepareReleasedocs]) {
-	classifier buildDate
+markdownToHtml {
+	sourceDir = new File(projectDir, "/documentation")
+	outputDir documentationDir
+	configuration = [tables: true, fencedCodeBlocks: true]
+}
+
+task distributionZip(type: Zip, dependsOn: [javadocAll, prepareReleasedocs, markdownToHtml]) {
+	classifier builtDate
 	into ('javadoc') {
 		from(javadocAllDir)
 	}
@@ -103,6 +360,26 @@ task distributionZip(type: Zip, dependsOn: [javadocAll, prepareReleasedocs]) {
 		from(documentationDir)
 	}
 }
+
+task maybeCheckForSnapshotDependencies {
+	// Don't check for Snapshot dependencies if this is a snapshot.
+	onlyIf { isReleaseVersion }
+	// Run in the execution phase, not in configuration phase, as the
+	// 'each' forces the runtime configuration to be resovled, which
+	// causes "Cannot change dependencies of configuration after it
+	// has been included in dependency resolution." errors.
+	// See https://discuss.gradle.org/t/23153
+	doLast {
+		allprojects { project ->
+			project.configurations.runtime.each {
+				if (it.toString().contains("-SNAPSHOT"))
+					throw new Exception("Release build contains snapshot dependencies: " + it)
+			}
+		}
+	}
+}
+
+test { dependsOn maybeCheckForSnapshotDependencies }
 
 jar {
 	// Root project should not create empty jar artifact
@@ -119,16 +396,13 @@ ${oneLineDesc}."""
 evaluationDependsOnChildren()
 subprojects {
 	apply plugin: 'maven'
-	apply plugin: 'osgi'
 	apply plugin: 'signing'
 	apply plugin: 'checkstyle'
+	apply plugin: 'org.kordamp.gradle.clirr'
 
 	checkstyle {
 		configFile = new File(rootConfigDir, 'checkstyle.xml')
-	}
-	repositories {
-		mavenLocal()
-		mavenCentral()
+		toolVersion = '8.10'
 	}
 	task sourcesJar(type: Jar, dependsOn: classes) {
 		classifier = 'sources'
@@ -138,9 +412,35 @@ subprojects {
 		classifier = 'javadoc'
 		from javadoc.destinationDir
 	}
+	task testJar(type: Jar, dependsOn: testClasses) {
+		classifier = 'tests'
+		from sourceSets.test.output
+	}
+
+	// Does install unique snapshosts (and release)s in the local maven
+	// repository, unlike the 'install' task.
+	// You can specify the path of the local maven repository using 'maven.repo.local', e.g.
+	// gradle uploadLocal -Dmaven.repo.local=/var/www/repo
+	task uploadLocal(type: Upload) {
+		description "Uploads artifacts into the local maven repositories URL."
+		configuration = configurations['archives']
+		repositories {
+			mavenDeployer {
+				repository url: repositories.mavenLocal().url
+			}
+		}
+	}
+
+	configurations {
+		archivesOutput.extendsFrom (testCompile)
+	}
+
 	artifacts {
 		archives sourcesJar
 		archives javadocJar
+		archives testJar
+		// See http://stackoverflow.com/a/21946676/194894
+		testRuntime testJar
 	}
 
 	uploadArchives {
@@ -185,14 +485,6 @@ subprojects {
 						developerConnection 'scm:git:https://github.com/igniterealtime/Smack.git'
 					}
 
-					licenses {
-						license {
-							name 'The Apache Software License, Version 2.0'
-							url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
-							distribution 'repo'
-						}
-					}
-
 					developers {
 						developer {
 							id 'flow'
@@ -216,17 +508,66 @@ subprojects {
 		required { signingRequired }
 		sign configurations.archives
 	}
-}
 
-['smack-resolver-javax', 'smack-extensions', 'smack-experimental', 'smack-legacy'].each { name ->
-	project(":$name") {
-		jar {
-			manifest {
-				instruction 'Service-Component', "org.jivesoftware.smackx/$name-components.xml"
-			}
+	clirr {
+		// 2018-08-14: Disabled Clirr because
+		// - It reports an breaking change in android.jar (seems right, but there is nothing we can do about it)
+		// - Only the first smack-* projects are correctly checked,
+		//   the other ones have the output of a clirr report from a previous project
+		//   (Look at the clirr reports).
+		enabled false
+		semver false
+	}
+
+	// Work around https://github.com/gradle/gradle/issues/4046
+	javadoc.dependsOn('copyJavadocDocFiles')
+	task copyJavadocDocFiles(type: Copy) {
+		from('src/javadoc')
+		into 'build/docs/javadoc'
+		include '**/doc-files/*.*'
+	}
+
+	// If this subproject has a Makefile then make copyJavadocDocFiles
+	// and the root project's javadocAll task dependend on
+	// generateFiles.
+	if (file("$projectDir/Makefile").exists()) {
+		copyJavadocDocFiles.dependsOn('generateFiles')
+		rootProject.copyAllJavadocDocFiles.dependsOn("${project.name}:generateFiles")
+		task generateFiles(type: Exec) {
+			workingDir projectDir
+			commandLine 'make'
+		}
+
+		clean.dependsOn('cleanGeneratedFiles')
+		rootProject.clean.dependsOn("${project.name}:cleanGeneratedFiles")
+		task cleanGeneratedFiles(type: Exec) {
+			workingDir projectDir
+			commandLine 'make', 'clean'
 		}
 	}
 }
+
+configure (androidProjects + androidBootClasspathProjects) {
+	apply plugin: 'ru.vyarus.animalsniffer'
+	dependencies {
+		signature "net.sf.androidscents.signature:android-api-level-${smackMinAndroidSdk}:4.4.2_r4@signature"
+	}
+	animalsniffer {
+		sourceSets = [sourceSets.main]
+	}
+}
+
+// There is no need to ever clirr integration test projects and the
+// smack-repl project.
+configure(integrationTestProjects + project(':smack-repl')) {
+	clirr {
+		enabled false
+	}
+}
+
+// Disable clirr on omemo modules
+project(':smack-omemo').clirr.enabled = false
+project(':smack-omemo-signal').clirr.enabled = false
 
 subprojects*.jar {
    manifest {
@@ -234,13 +575,150 @@ subprojects*.jar {
    }
 }
 
+configure(subprojects - nonStrictJavadocProjects) {
+	tasks.withType(Javadoc) {
+		// Abort on javadoc warnings.
+		// See JDK-8200363 (https://bugs.openjdk.java.net/browse/JDK-8200363)
+		// for information about the -Xwerror option.
+		options.addStringOption('Xwerror', '-quiet')
+	}
+}
+
+configure(subprojects - gplLicensedProjects) {
+	checkstyle {
+		configProperties.checkstyleLicenseHeader = "header"
+	}
+	uploadArchives {
+		repositories {
+			mavenDeployer {
+				pom.project {
+					licenses {
+						license {
+							name 'The Apache Software License, Version 2.0'
+							url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+							distribution 'repo'
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+configure(gplLicensedProjects) {
+	checkstyle {
+		configProperties.checkstyleLicenseHeader = "${project.name}-gplv3-license-header"
+	}
+	uploadArchives {
+	repositories {
+		mavenDeployer {
+			pom.project {
+				licenses {
+					license {
+						name 'GNU General Public License, version 3 or any later version'
+						url 'https://www.gnu.org/licenses/gpl.txt'
+						distribution 'repo'
+					}
+				}
+			}
+		}
+	}
+}
+
+}
+
+configure(androidBootClasspathProjects) {
+	compileJava {
+		options.bootstrapClasspath = files(androidBootClasspath)
+	}
+	javadoc {
+		classpath += files(androidBootClasspath)
+	}
+}
+
+apply plugin: "com.github.kt3k.coveralls"
+coveralls {
+	sourceDirs = files(subprojects.sourceSets.main.allSource.srcDirs).files.absolutePath
+}
+
+task jacocoRootReport(type: org.gradle.testing.jacoco.tasks.JacocoReport) {
+	dependsOn = projectsWithUnitTests.jacocoTestReport
+	getSourceDirectories().setFrom(files(projectsWithUnitTests.sourceSets.main.allSource.srcDirs))
+	getClassDirectories().setFrom(files(projectsWithUnitTests.sourceSets.main.output))
+	getExecutionData().setFrom(files(projectsWithUnitTests.jacocoTestReport.executionData))
+	reports {
+		xml.enabled true
+		xml.destination file("${buildDir}/reports/jacoco/test/jacocoTestReport.xml")
+	}
+	// We could remove the following setOnlyIf line, but then
+	// jacocoRootReport would silently be SKIPPED if something with
+	// the projectsWithUnitTests is wrong (e.g. a project is missing
+	// in there).
+	setOnlyIf { true }
+}
+
+// Important to specify this task after the subprojects block
+task clirrRootReport(type: org.kordamp.gradle.clirr.ClirrReportTask) {
+	dependsOn = subprojects.tasks.clirr
+	reports = files((subprojects.findAll { it.clirr.enabled == true }).tasks.clirr.xmlReport)
+}
+
+task integrationTest {
+	description 'Verify correct functionality of Smack by running some integration tests.'
+	dependsOn project(':smack-integration-test').tasks.run
+}
+
+task omemoSignalIntTest {
+	description 'Run integration tests of the smack-omemo module in combination with smack-omemo-signal.'
+	dependsOn project(':smack-omemo-signal-integration-test').tasks.run
+}
+
 def getGitCommit() {
 	def dotGit = new File("$projectDir/.git")
 	if (!dotGit.isDirectory()) return 'non-git build'
 
-	def cmd = 'git describe --tags --dirty=+'
+	def cmd = 'git describe --always --tags --dirty=+'
 	def proc = cmd.execute()
 	def gitCommit = proc.text.trim()
 	assert !gitCommit.isEmpty()
+
+    def srCmd = 'git symbolic-ref --short HEAD'
+    def srProc = srCmd.execute()
+    srProc.waitForOrKill(10 * 1000)
+    if (srProc.exitValue() == 0) {
+        // Only add the information if the git command was
+        // successful. There may be no symbolic reference for HEAD if
+        // e.g. in detached mode.
+        def symbolicReference = srProc.text.trim()
+        assert !symbolicReference.isEmpty()
+        gitCommit += "-$symbolicReference"
+    }
+
 	gitCommit
+}
+
+def getAndroidRuntimeJar() {
+	def androidApiLevel = ext.smackMinAndroidSdk
+	def androidHome = getAndroidHome()
+	def androidJar = new File("$androidHome/platforms/android-${androidApiLevel}/android.jar")
+	if (androidJar.isFile()) {
+		return androidJar
+	} else {
+		throw new Exception("Can't find android.jar for $androidApiLevel API. Please install corresponding SDK platform package")
+	}
+}
+
+def getAndroidJavadocOffline() {
+	def androidHome = getAndroidHome()
+	return androidHome.toString() + "/docs/reference"
+}
+
+def getAndroidHome() {
+	def androidHomeEnv = System.getenv("ANDROID_HOME")
+	if (androidHomeEnv == null) {
+		throw new Exception("ANDROID_HOME environment variable is not set")
+	}
+	def androidHome = new File(androidHomeEnv)
+	if (!androidHome.isDirectory()) throw new Exception("Environment variable ANDROID_HOME is not pointing to a directory")
+	return androidHome
 }

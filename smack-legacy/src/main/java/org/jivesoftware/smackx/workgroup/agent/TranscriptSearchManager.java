@@ -17,24 +17,27 @@
 
 package org.jivesoftware.smackx.workgroup.agent;
 
-import org.jivesoftware.smackx.search.ReportedData;
-import org.jivesoftware.smackx.workgroup.packet.TranscriptSearch;
-import org.jivesoftware.smackx.xdata.Form;
 import org.jivesoftware.smack.SmackException.NoResponseException;
 import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException.XMPPErrorException;
 import org.jivesoftware.smack.packet.IQ;
 
+import org.jivesoftware.smackx.search.ReportedData;
+import org.jivesoftware.smackx.workgroup.packet.TranscriptSearch;
+import org.jivesoftware.smackx.xdata.Form;
+
+import org.jxmpp.jid.DomainBareJid;
+
 /**
  * A TranscriptSearchManager helps to retrieve the form to use for searching transcripts
- * {@link #getSearchForm(String)} or to submit a search form and return the results of
- * the search {@link #submitSearch(String, Form)}.
+ * {@link #getSearchForm(DomainBareJid)} or to submit a search form and return the results of
+ * the search {@link #submitSearch(DomainBareJid, Form)}.
  *
  * @author Gaston Dombiak
  */
 public class TranscriptSearchManager {
-    private XMPPConnection connection;
+    private final XMPPConnection connection;
 
     public TranscriptSearchManager(XMPPConnection connection) {
         this.connection = connection;
@@ -47,16 +50,17 @@ public class TranscriptSearchManager {
      *
      * @param serviceJID the address of the workgroup service.
      * @return the Form to use for searching transcripts.
-     * @throws XMPPErrorException 
-     * @throws NoResponseException 
-     * @throws NotConnectedException 
+     * @throws XMPPErrorException
+     * @throws NoResponseException
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public Form getSearchForm(String serviceJID) throws NoResponseException, XMPPErrorException, NotConnectedException  {
+    public Form getSearchForm(DomainBareJid serviceJID) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException  {
         TranscriptSearch search = new TranscriptSearch();
         search.setType(IQ.Type.get);
         search.setTo(serviceJID);
 
-        TranscriptSearch response = (TranscriptSearch) connection.createPacketCollectorAndSend(
+        TranscriptSearch response = connection.createStanzaCollectorAndSend(
                         search).nextResultOrThrow();
         return Form.getFormFrom(response);
     }
@@ -69,17 +73,18 @@ public class TranscriptSearchManager {
      * @param serviceJID    the address of the workgroup service.
      * @param completedForm the filled out search form.
      * @return the result of the transcript search.
-     * @throws XMPPErrorException 
-     * @throws NoResponseException 
-     * @throws NotConnectedException 
+     * @throws XMPPErrorException
+     * @throws NoResponseException
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public ReportedData submitSearch(String serviceJID, Form completedForm) throws NoResponseException, XMPPErrorException, NotConnectedException {
+    public ReportedData submitSearch(DomainBareJid serviceJID, Form completedForm) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
         TranscriptSearch search = new TranscriptSearch();
         search.setType(IQ.Type.get);
         search.setTo(serviceJID);
         search.addExtension(completedForm.getDataFormToSend());
 
-        TranscriptSearch response = (TranscriptSearch) connection.createPacketCollectorAndSend(
+        TranscriptSearch response = connection.createStanzaCollectorAndSend(
                         search).nextResultOrThrow();
         return ReportedData.getReportedDataFrom(response);
     }

@@ -17,51 +17,69 @@
 
 package org.jivesoftware.smackx.muc;
 
+import org.jxmpp.jid.Jid;
+
 /**
  * Default implementation of the UserStatusListener interface.<p>
  *
  * This class does not provide any behavior by default. It just avoids having
  * to implement all the inteface methods if the user is only interested in implementing
  * some of the methods.
- * 
+ *
  * @author Gaston Dombiak
  */
 public class DefaultUserStatusListener implements UserStatusListener {
 
-    public void kicked(String actor, String reason) {
+    @Override
+    public void kicked(Jid actor, String reason) {
     }
 
+    @Override
     public void voiceGranted() {
     }
 
+    @Override
     public void voiceRevoked() {
     }
 
-    public void banned(String actor, String reason) {
+    @Override
+    public void banned(Jid actor, String reason) {
     }
 
+    @Override
     public void membershipGranted() {
     }
 
+    @Override
     public void membershipRevoked() {
     }
 
+    @Override
     public void moderatorGranted() {
     }
 
+    @Override
     public void moderatorRevoked() {
     }
 
+    @Override
     public void ownershipGranted() {
     }
 
+    @Override
     public void ownershipRevoked() {
     }
 
+    @Override
     public void adminGranted() {
     }
 
+    @Override
     public void adminRevoked() {
+    }
+
+    @Override
+    public void roomDestroyed(MultiUserChat alternateMUC, String reason) {
     }
 
 }

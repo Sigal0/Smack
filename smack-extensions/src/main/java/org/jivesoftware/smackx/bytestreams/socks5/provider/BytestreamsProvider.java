@@ -16,19 +16,29 @@
  */
 package org.jivesoftware.smackx.bytestreams.socks5.provider;
 
-import org.jivesoftware.smack.packet.IQ;
+import java.io.IOException;
+
+import org.jivesoftware.smack.packet.XmlEnvironment;
 import org.jivesoftware.smack.provider.IQProvider;
+import org.jivesoftware.smack.util.ParserUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
 import org.jivesoftware.smackx.bytestreams.socks5.packet.Bytestream;
-import org.xmlpull.v1.XmlPullParser;
+import org.jivesoftware.smackx.bytestreams.socks5.packet.Bytestream.Mode;
+
+import org.jxmpp.jid.Jid;
 
 /**
  * Parses a bytestream packet.
- * 
+ *
  * @author Alexander Wenckus
  */
-public class BytestreamsProvider implements IQProvider {
+public class BytestreamsProvider extends IQProvider<Bytestream> {
 
-    public IQ parseIQ(XmlPullParser parser) throws Exception {
+    @Override
+    public Bytestream parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment)
+                    throws XmlPullParserException, IOException {
         boolean done = false;
 
         Bytestream toReturn = new Bytestream();
@@ -37,29 +47,29 @@ public class BytestreamsProvider implements IQProvider {
         String mode = parser.getAttributeValue("", "mode");
 
         // streamhost
-        String JID = null;
+        Jid JID = null;
         String host = null;
         String port = null;
 
-        int eventType;
+        XmlPullParser.Event eventType;
         String elementName;
         while (!done) {
             eventType = parser.next();
             elementName = parser.getName();
-            if (eventType == XmlPullParser.START_TAG) {
+            if (eventType == XmlPullParser.Event.START_ELEMENT) {
                 if (elementName.equals(Bytestream.StreamHost.ELEMENTNAME)) {
-                    JID = parser.getAttributeValue("", "jid");
+                    JID = ParserUtils.getJidAttribute(parser);
                     host = parser.getAttributeValue("", "host");
                     port = parser.getAttributeValue("", "port");
                 }
                 else if (elementName.equals(Bytestream.StreamHostUsed.ELEMENTNAME)) {
-                    toReturn.setUsedHost(parser.getAttributeValue("", "jid"));
+                    toReturn.setUsedHost(ParserUtils.getJidAttribute(parser));
                 }
                 else if (elementName.equals(Bytestream.Activate.ELEMENTNAME)) {
-                    toReturn.setToActivate(parser.getAttributeValue("", "jid"));
+                    toReturn.setToActivate(ParserUtils.getJidAttribute(parser));
                 }
             }
-            else if (eventType == XmlPullParser.END_TAG) {
+            else if (eventType == XmlPullParser.Event.END_ELEMENT) {
                 if (elementName.equals("streamhost")) {
                     if (port == null) {
                         toReturn.addStreamHost(JID, host);
@@ -77,7 +87,11 @@ public class BytestreamsProvider implements IQProvider {
             }
         }
 
-        toReturn.setMode((Bytestream.Mode.fromName(mode)));
+        if (mode == null) {
+            toReturn.setMode(Mode.tcp);
+        } else {
+            toReturn.setMode(Bytestream.Mode.fromName(mode));
+        }
         toReturn.setSessionID(id);
         return toReturn;
     }

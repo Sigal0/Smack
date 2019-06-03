@@ -16,50 +16,59 @@
  */
 package org.jivesoftware.smackx.bytestreams.socks5;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 
 import org.jivesoftware.smack.SmackException;
-import org.jivesoftware.smackx.bytestreams.socks5.Socks5Client;
-import org.jivesoftware.smackx.bytestreams.socks5.Socks5Utils;
+import org.jivesoftware.smack.util.NetworkUtil;
+
 import org.jivesoftware.smackx.bytestreams.socks5.packet.Bytestream.StreamHost;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.jxmpp.jid.DomainBareJid;
+import org.jxmpp.jid.JidTestUtil;
 
 /**
  * Test for Socks5Client class.
- * 
+ *
  * @author Henning Staib
  */
 public class Socks5ClientTest {
 
     // settings
-    private String serverAddress = "127.0.0.1";
-    private int serverPort = 7890;
-    private String proxyJID = "proxy.xmpp-server";
+    private int serverPort;
+    private String serverAddress;
+    private DomainBareJid proxyJID = JidTestUtil.MUC_EXAMPLE_ORG;
     private String digest = "digest";
     private ServerSocket serverSocket;
 
     /**
      * Initialize fields used in the tests.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Before
     public void setup() throws Exception {
         // create SOCKS5 proxy server socket
-        serverSocket = new ServerSocket(serverPort);
+        serverSocket = NetworkUtil.getSocketOnLoopback();
+        serverAddress = serverSocket.getInetAddress().getHostAddress();
+        serverPort = serverSocket.getLocalPort();
     }
 
     /**
      * A SOCKS5 client MUST close connection if server doesn't accept any of the given
      * authentication methods. (See RFC1928 Section 3)
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -70,8 +79,7 @@ public class Socks5ClientTest {
 
             @Override
             public void run() {
-                StreamHost streamHost = new StreamHost(proxyJID, serverAddress);
-                streamHost.setPort(serverPort);
+                StreamHost streamHost = new StreamHost(proxyJID, serverAddress, serverPort);
 
                 Socks5Client socks5Client = new Socks5Client(streamHost, digest);
 
@@ -118,7 +126,7 @@ public class Socks5ClientTest {
 
     /**
      * The SOCKS5 client should close connection if server replies in an unsupported way.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -129,8 +137,7 @@ public class Socks5ClientTest {
 
             @Override
             public void run() {
-                StreamHost streamHost = new StreamHost(proxyJID, serverAddress);
-                streamHost.setPort(serverPort);
+                StreamHost streamHost = new StreamHost(proxyJID, serverAddress, serverPort);
 
                 Socks5Client socks5Client = new Socks5Client(streamHost, digest);
                 try {
@@ -181,7 +188,7 @@ public class Socks5ClientTest {
 
     /**
      * The SOCKS5 client should close connection if server replies with an error.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -192,8 +199,7 @@ public class Socks5ClientTest {
 
             @Override
             public void run() {
-                StreamHost streamHost = new StreamHost(proxyJID, serverAddress);
-                streamHost.setPort(serverPort);
+                StreamHost streamHost = new StreamHost(proxyJID, serverAddress, serverPort);
 
                 Socks5Client socks5Client = new Socks5Client(streamHost, digest);
                 try {
@@ -232,7 +238,7 @@ public class Socks5ClientTest {
         // reply with full SOCKS5 message with an error code (01 = general SOCKS server
         // failure)
         out.write(new byte[] { (byte) 0x05, (byte) 0x01, (byte) 0x00, (byte) 0x03 });
-        byte[] address = digest.getBytes();
+        byte[] address = digest.getBytes(StandardCharsets.UTF_8);
         out.write(address.length);
         out.write(address);
         out.write(new byte[] { (byte) 0x00, (byte) 0x00 });
@@ -247,8 +253,8 @@ public class Socks5ClientTest {
     }
 
     /**
-     * The SOCKS5 client should successfully connect to the SOCKS5 server
-     * 
+     * The SOCKS5 client should successfully connect to the SOCKS5 server.
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -259,8 +265,7 @@ public class Socks5ClientTest {
 
             @Override
             public void run() {
-                StreamHost streamHost = new StreamHost(proxyJID, serverAddress);
-                streamHost.setPort(serverPort);
+                StreamHost streamHost = new StreamHost(proxyJID, serverAddress, serverPort);
 
                 Socks5Client socks5Client = new Socks5Client(streamHost, digest);
 
@@ -292,7 +297,7 @@ public class Socks5ClientTest {
         out.write(new byte[] { (byte) 0x05, (byte) 0x00 });
         out.flush();
 
-        byte[] address = digest.getBytes();
+        byte[] address = digest.getBytes(StandardCharsets.UTF_8);
 
         assertEquals((byte) 0x05, (byte) in.read()); // version
         assertEquals((byte) 0x01, (byte) in.read()); // connect request
@@ -325,11 +330,14 @@ public class Socks5ClientTest {
 
     /**
      * Close fake SOCKS5 proxy.
-     * 
+     *
      * @throws Exception should not happen
      */
     @After
     public void cleanup() throws Exception {
-        serverSocket.close();
+        // Avoid NPE if serverSocket could not get created for whateve reason.
+        if (serverSocket != null) {
+            serverSocket.close();
+        }
     }
 }

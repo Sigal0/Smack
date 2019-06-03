@@ -16,73 +16,81 @@
  */
 package org.jivesoftware.smackx.bytestreams.socks5;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.InetAddress;
 import java.net.Socket;
 
 import org.jivesoftware.smack.SmackException;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException;
 import org.jivesoftware.smack.XMPPException.XMPPErrorException;
+import org.jivesoftware.smack.packet.EmptyResultIQ;
+import org.jivesoftware.smack.packet.ErrorIQ;
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.XMPPError;
-import org.jivesoftware.smack.packet.IQ.Type;
-import org.jivesoftware.smackx.bytestreams.socks5.Socks5Client;
-import org.jivesoftware.smackx.bytestreams.socks5.Socks5ClientForInitiator;
-import org.jivesoftware.smackx.bytestreams.socks5.Socks5Proxy;
-import org.jivesoftware.smackx.bytestreams.socks5.Socks5Utils;
+import org.jivesoftware.smack.packet.StanzaError;
+
 import org.jivesoftware.smackx.bytestreams.socks5.packet.Bytestream;
 import org.jivesoftware.smackx.bytestreams.socks5.packet.Bytestream.StreamHost;
+
 import org.jivesoftware.util.ConnectionUtils;
 import org.jivesoftware.util.Protocol;
 import org.jivesoftware.util.Verification;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.jxmpp.jid.DomainBareJid;
+import org.jxmpp.jid.EntityFullJid;
+import org.jxmpp.jid.JidTestUtil;
 
 /**
  * Test for Socks5ClientForInitiator class.
- * 
+ *
  * @author Henning Staib
  */
 public class Socks5ClientForInitiatorTest {
 
     // settings
-    String initiatorJID = "initiator@xmpp-server/Smack";
-    String targetJID = "target@xmpp-server/Smack";
-    String xmppServer = "xmpp-server";
-    String proxyJID = "proxy.xmpp-server";
-    String proxyAddress = "127.0.0.1";
-    int proxyPort = 7890;
-    String sessionID = "session_id";
+    private static final EntityFullJid initiatorJID = JidTestUtil.DUMMY_AT_EXAMPLE_ORG_SLASH_DUMMYRESOURCE;
+    private static final EntityFullJid targetJID = JidTestUtil.FULL_JID_1_RESOURCE_1;
+    private static final DomainBareJid proxyJID = JidTestUtil.MUC_EXAMPLE_ORG;
+    private static final String loopbackAddress = InetAddress.getLoopbackAddress().getHostAddress();
+
+    private static final int GET_SOCKET_TIMEOUT = 90 * 1000;
+
+    private static final int proxyPort = 7890;
+    private static final String sessionID = "session_id";
 
     // protocol verifier
-    Protocol protocol;
+    private Protocol protocol;
 
     // mocked XMPP connection
-    XMPPConnection connection;
+    private XMPPConnection connection;
 
     /**
      * Initialize fields used in the tests.
-     * @throws XMPPException 
-     * @throws SmackException 
+     * @throws XMPPException
+     * @throws SmackException
+     * @throws InterruptedException
      */
     @Before
-    public void setup() throws XMPPException, SmackException {
+    public void setup() throws XMPPException, SmackException, InterruptedException {
 
         // build protocol verifier
         protocol = new Protocol();
 
         // create mocked XMPP connection
-        connection = ConnectionUtils.createMockedConnection(protocol, initiatorJID, xmppServer);
-
+        connection = ConnectionUtils.createMockedConnection(protocol, initiatorJID);
     }
 
     /**
      * If the target is not connected to the local SOCKS5 proxy an exception should be thrown.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -95,8 +103,8 @@ public class Socks5ClientForInitiatorTest {
 
         // build stream host information for local SOCKS5 proxy
         StreamHost streamHost = new StreamHost(connection.getUser(),
-                        socks5Proxy.getLocalAddresses().get(0));
-        streamHost.setPort(socks5Proxy.getPort());
+                        loopbackAddress,
+                        socks5Proxy.getPort());
 
         // create digest to get the socket opened by target
         String digest = Socks5Utils.createDigest(sessionID, initiatorJID, targetJID);
@@ -105,7 +113,7 @@ public class Socks5ClientForInitiatorTest {
                         connection, sessionID, targetJID);
 
         try {
-            socks5Client.getSocket(10000);
+            socks5Client.getSocket(GET_SOCKET_TIMEOUT);
 
             fail("exception should be thrown");
         }
@@ -120,7 +128,7 @@ public class Socks5ClientForInitiatorTest {
 
     /**
      * Initiator and target should successfully connect to the local SOCKS5 proxy.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -142,8 +150,8 @@ public class Socks5ClientForInitiatorTest {
 
         // build stream host information
         final StreamHost streamHost = new StreamHost(connection.getUser(),
-                        socks5Proxy.getLocalAddresses().get(0));
-        streamHost.setPort(socks5Proxy.getPort());
+                        loopbackAddress,
+                        socks5Proxy.getPort());
 
         // target connects to local SOCKS5 proxy
         Thread targetThread = new Thread() {
@@ -169,7 +177,7 @@ public class Socks5ClientForInitiatorTest {
         Socks5ClientForInitiator socks5Client = new Socks5ClientForInitiator(streamHost, digest,
                         connection, sessionID, targetJID);
 
-        Socket socket = socks5Client.getSocket(10000);
+        Socket socket = socks5Client.getSocket(GET_SOCKET_TIMEOUT);
 
         // verify test data
         InputStream in = socket.getInputStream();
@@ -189,25 +197,16 @@ public class Socks5ClientForInitiatorTest {
     /**
      * If the initiator can connect to a SOCKS5 proxy but activating the stream fails an exception
      * should be thrown.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
     public void shouldFailIfActivateSocks5ProxyFails() throws Exception {
 
         // build error response as reply to the stream activation
-        XMPPError xmppError = new XMPPError(XMPPError.Condition.internal_server_error);
-        IQ error = new IQ() {
-
-            public String getChildElementXML() {
-                return null;
-            }
-
-        };
-        error.setType(Type.error);
+        IQ error = new ErrorIQ(StanzaError.getBuilder(StanzaError.Condition.internal_server_error));
         error.setFrom(proxyJID);
         error.setTo(initiatorJID);
-        error.setError(xmppError);
 
         protocol.addResponse(error, Verification.correspondingSenderReceiver,
                         Verification.requestTypeSET);
@@ -216,8 +215,8 @@ public class Socks5ClientForInitiatorTest {
         Socks5TestProxy socks5Proxy = Socks5TestProxy.getProxy(proxyPort);
         socks5Proxy.start();
 
-        StreamHost streamHost = new StreamHost(proxyJID, socks5Proxy.getAddress());
-        streamHost.setPort(socks5Proxy.getPort());
+        StreamHost streamHost = new StreamHost(proxyJID,
+                        loopbackAddress, socks5Proxy.getPort());
 
         // create digest to get the socket opened by target
         String digest = Socks5Utils.createDigest(sessionID, initiatorJID, targetJID);
@@ -227,12 +226,12 @@ public class Socks5ClientForInitiatorTest {
 
         try {
 
-            socks5Client.getSocket(10000);
+            socks5Client.getSocket(GET_SOCKET_TIMEOUT);
 
             fail("exception should be thrown");
         }
         catch (XMPPErrorException e) {
-            assertTrue(XMPPError.Condition.internal_server_error.equals(e.getXMPPError().getCondition()));
+            assertTrue(StanzaError.Condition.internal_server_error.equals(e.getStanzaError().getCondition()));
             protocol.verifyAll();
         }
 
@@ -242,28 +241,22 @@ public class Socks5ClientForInitiatorTest {
     /**
      * Target and initiator should successfully connect to a "remote" SOCKS5 proxy and the initiator
      * activates the bytestream.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
     public void shouldSuccessfullyEstablishConnectionAndActivateSocks5Proxy() throws Exception {
 
         // build activation confirmation response
-        IQ activationResponse = new IQ() {
+        IQ activationResponse = new EmptyResultIQ();
 
-            @Override
-            public String getChildElementXML() {
-                return null;
-            }
-
-        };
         activationResponse.setFrom(proxyJID);
         activationResponse.setTo(initiatorJID);
-        activationResponse.setType(IQ.Type.result);
 
         protocol.addResponse(activationResponse, Verification.correspondingSenderReceiver,
                         Verification.requestTypeSET, new Verification<Bytestream, IQ>() {
 
+                            @Override
                             public void verify(Bytestream request, IQ response) {
                                 // verify that the correct stream should be activated
                                 assertNotNull(request.getToActivate());
@@ -276,8 +269,8 @@ public class Socks5ClientForInitiatorTest {
         Socks5TestProxy socks5Proxy = Socks5TestProxy.getProxy(proxyPort);
         socks5Proxy.start();
 
-        StreamHost streamHost = new StreamHost(proxyJID, socks5Proxy.getAddress());
-        streamHost.setPort(socks5Proxy.getPort());
+        StreamHost streamHost = new StreamHost(proxyJID,
+                        loopbackAddress, socks5Proxy.getPort());
 
         // create digest to get the socket opened by target
         String digest = Socks5Utils.createDigest(sessionID, initiatorJID, targetJID);

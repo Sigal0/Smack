@@ -17,39 +17,58 @@
 
 package org.jivesoftware.smackx.workgroup.ext.history;
 
-import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.provider.IQProvider;
-import org.xmlpull.v1.XmlPullParser;
-
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
+
+import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.IQProvider;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
+import org.jxmpp.jid.EntityBareJid;
 
 /**
  * IQ provider used to retrieve individual agent information. Each chat session can be mapped
  * to one or more jids and therefore retrievable.
  */
 public class AgentChatHistory extends IQ {
-    private String agentJID;
+
+    /**
+     * Element name of the stanza extension.
+     */
+    public static final String ELEMENT_NAME = "chat-sessions";
+
+    /**
+     * Namespace of the stanza extension.
+     */
+    public static final String NAMESPACE = "http://jivesoftware.com/protocol/workgroup";
+
+    private EntityBareJid agentJID;
     private int maxSessions;
     private long startDate;
 
-    private List<AgentChatSession> agentChatSessions = new ArrayList<AgentChatSession>();
+    private final List<AgentChatSession> agentChatSessions = new ArrayList<>();
 
-    public AgentChatHistory(String agentJID, int maxSessions, Date startDate) {
+    public AgentChatHistory(EntityBareJid agentJID, int maxSessions, Date startDate) {
+        this();
         this.agentJID = agentJID;
         this.maxSessions = maxSessions;
         this.startDate = startDate.getTime();
     }
 
-    public AgentChatHistory(String agentJID, int maxSessions) {
+    public AgentChatHistory(EntityBareJid agentJID, int maxSessions) {
+        this();
         this.agentJID = agentJID;
         this.maxSessions = maxSessions;
         this.startDate = 0;
     }
 
     public AgentChatHistory() {
+        super(ELEMENT_NAME, NAMESPACE);
     }
 
     public void addChatSession(AgentChatSession chatSession) {
@@ -60,38 +79,23 @@ public class AgentChatHistory extends IQ {
         return agentChatSessions;
     }
 
-    /**
-     * Element name of the packet extension.
-     */
-    public static final String ELEMENT_NAME = "chat-sessions";
-
-    /**
-     * Namespace of the packet extension.
-     */
-    public static final String NAMESPACE = "http://jivesoftware.com/protocol/workgroup";
-
-    public String getChildElementXML() {
-        StringBuilder buf = new StringBuilder();
-
-        buf.append("<").append(ELEMENT_NAME).append(" xmlns=");
-        buf.append('"');
-        buf.append(NAMESPACE);
-        buf.append('"');
+    @Override
+    protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder buf) {
         buf.append(" agentJID=\"" + agentJID + "\"");
         buf.append(" maxSessions=\"" + maxSessions + "\"");
         buf.append(" startDate=\"" + startDate + "\"");
-
-        buf.append("></").append(ELEMENT_NAME).append("> ");
-        return buf.toString();
+        buf.setEmptyElement();
+        return buf;
     }
 
     /**
-     * Packet extension provider for AgentHistory packets.
+     * Stanza extension provider for AgentHistory packets.
      */
-    public static class InternalProvider implements IQProvider {
+    public static class InternalProvider extends IQProvider<AgentChatHistory> {
 
-        public IQ parseIQ(XmlPullParser parser) throws Exception {
-            if (parser.getEventType() != XmlPullParser.START_TAG) {
+        @Override
+        public AgentChatHistory parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException {
+            if (parser.getEventType() != XmlPullParser.Event.START_ELEMENT) {
                 throw new IllegalStateException("Parser not in proper position, or bad XML.");
             }
 
@@ -99,19 +103,19 @@ public class AgentChatHistory extends IQ {
 
             boolean done = false;
             while (!done) {
-                int eventType = parser.next();
-                if ((eventType == XmlPullParser.START_TAG) && ("chat-session".equals(parser.getName()))) {
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT && "chat-session".equals(parser.getName())) {
                     agentChatHistory.addChatSession(parseChatSetting(parser));
 
                 }
-                else if (eventType == XmlPullParser.END_TAG && ELEMENT_NAME.equals(parser.getName())) {
+                else if (eventType == XmlPullParser.Event.END_ELEMENT && ELEMENT_NAME.equals(parser.getName())) {
                     done = true;
                 }
             }
             return agentChatHistory;
         }
 
-        private AgentChatSession parseChatSetting(XmlPullParser parser) throws Exception {
+        private AgentChatSession parseChatSetting(XmlPullParser parser) throws XmlPullParserException, IOException {
 
             boolean done = false;
             Date date = null;
@@ -122,28 +126,28 @@ public class AgentChatHistory extends IQ {
             String question = null;
 
             while (!done) {
-                int eventType = parser.next();
-                if ((eventType == XmlPullParser.START_TAG) && ("date".equals(parser.getName()))) {
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT && "date".equals(parser.getName())) {
                     String dateStr = parser.nextText();
                     long l = Long.valueOf(dateStr).longValue();
                     date = new Date(l);
                 }
-                else if ((eventType == XmlPullParser.START_TAG) && ("duration".equals(parser.getName()))) {
+                else if (eventType == XmlPullParser.Event.START_ELEMENT && "duration".equals(parser.getName())) {
                     duration = Long.valueOf(parser.nextText()).longValue();
                 }
-                else if ((eventType == XmlPullParser.START_TAG) && ("visitorsName".equals(parser.getName()))) {
+                else if (eventType == XmlPullParser.Event.START_ELEMENT && "visitorsName".equals(parser.getName())) {
                     visitorsName = parser.nextText();
                 }
-                else if ((eventType == XmlPullParser.START_TAG) && ("visitorsEmail".equals(parser.getName()))) {
+                else if (eventType == XmlPullParser.Event.START_ELEMENT && "visitorsEmail".equals(parser.getName())) {
                     visitorsEmail = parser.nextText();
                 }
-                else if ((eventType == XmlPullParser.START_TAG) && ("sessionID".equals(parser.getName()))) {
+                else if (eventType == XmlPullParser.Event.START_ELEMENT && "sessionID".equals(parser.getName())) {
                     sessionID = parser.nextText();
                 }
-                else if ((eventType == XmlPullParser.START_TAG) && ("question".equals(parser.getName()))) {
+                else if (eventType == XmlPullParser.Event.START_ELEMENT && "question".equals(parser.getName())) {
                     question = parser.nextText();
                 }
-                else if (eventType == XmlPullParser.END_TAG && "chat-session".equals(parser.getName())) {
+                else if (eventType == XmlPullParser.Event.END_ELEMENT && "chat-session".equals(parser.getName())) {
                     done = true;
                 }
             }

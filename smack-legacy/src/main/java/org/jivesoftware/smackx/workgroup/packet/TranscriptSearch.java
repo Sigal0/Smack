@@ -17,62 +17,57 @@
 
 package org.jivesoftware.smackx.workgroup.packet;
 
-import org.jivesoftware.smack.packet.IQ;
+import java.io.IOException;
+
+import org.jivesoftware.smack.packet.SimpleIQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.parsing.SmackParsingException;
 import org.jivesoftware.smack.provider.IQProvider;
 import org.jivesoftware.smack.util.PacketParserUtils;
-import org.xmlpull.v1.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
 
 /**
- * IQ packet for retrieving the transcript search form, submiting the completed search form
+ * IQ stanza for retrieving the transcript search form, submitting the completed search form
  * or retrieving the answer of a transcript search.
  *
  * @author Gaston Dombiak
  */
-public class TranscriptSearch extends IQ {
+public class TranscriptSearch extends SimpleIQ {
 
     /**
-    * Element name of the packet extension.
+    * Element name of the stanza extension.
     */
    public static final String ELEMENT_NAME = "transcript-search";
 
    /**
-    * Namespace of the packet extension.
+    * Namespace of the stanza extension.
     */
    public static final String NAMESPACE = "http://jivesoftware.com/protocol/workgroup";
 
-    public String getChildElementXML() {
-        StringBuilder buf = new StringBuilder();
-
-        buf.append("<").append(ELEMENT_NAME).append(" xmlns=\"").append(NAMESPACE).append("\">");
-        // Add packet extensions, if any are defined.
-        buf.append(getExtensionsXML());
-        buf.append("</").append(ELEMENT_NAME).append("> ");
-
-        return buf.toString();
-    }
+   public TranscriptSearch() {
+       super(ELEMENT_NAME, NAMESPACE);
+   }
 
     /**
      * An IQProvider for TranscriptSearch packets.
      *
      * @author Gaston Dombiak
      */
-    public static class Provider implements IQProvider {
+    public static class Provider extends IQProvider<TranscriptSearch> {
 
-        public Provider() {
-            super();
-        }
-
-        public IQ parseIQ(XmlPullParser parser) throws Exception {
+        @Override
+        public TranscriptSearch parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException, SmackParsingException {
             TranscriptSearch answer = new TranscriptSearch();
 
             boolean done = false;
             while (!done) {
-                int eventType = parser.next();
-                if (eventType == XmlPullParser.START_TAG) {
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT) {
                     // Parse the packet extension
-                    answer.addExtension(PacketParserUtils.parsePacketExtension(parser.getName(), parser.getNamespace(), parser));
+                    PacketParserUtils.addExtensionElement(answer, parser, xmlEnvironment);
                 }
-                else if (eventType == XmlPullParser.END_TAG) {
+                else if (eventType == XmlPullParser.Event.END_ELEMENT) {
                     if (parser.getName().equals(ELEMENT_NAME)) {
                         done = true;
                     }

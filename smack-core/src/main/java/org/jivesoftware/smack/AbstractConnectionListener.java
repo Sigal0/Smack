@@ -21,7 +21,7 @@ package org.jivesoftware.smack;
  * methods defined by the {@link ConnectionListener} interface. This is a
  * convenience class which should be used in case you do not need to implement
  * all methods.
- * 
+ *
  * @author Henning Staib
  */
 public class AbstractConnectionListener implements ConnectionListener {
@@ -31,7 +31,7 @@ public class AbstractConnectionListener implements ConnectionListener {
     }
 
     @Override
-    public void authenticated(XMPPConnection connection) {
+    public void authenticated(XMPPConnection connection, boolean resumed) {
         // do nothing
     }
 
@@ -45,18 +45,4 @@ public class AbstractConnectionListener implements ConnectionListener {
         // do nothing
     }
 
-    @Override
-    public void reconnectingIn(int seconds) {
-        // do nothing
-    }
-
-    @Override
-    public void reconnectionFailed(Exception e) {
-        // do nothing
-    }
-
-    @Override
-    public void reconnectionSuccessful() {
-        // do nothing
-    }
 }

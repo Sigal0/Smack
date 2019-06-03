@@ -19,54 +19,61 @@ package org.jivesoftware.smackx.pubsub;
 import java.util.Collections;
 import java.util.List;
 
+import org.jivesoftware.smack.util.XmlStringBuilder;
+
+import org.jivesoftware.smackx.pubsub.Affiliation.AffiliationNamespace;
+
 /**
  * Represents the <b>affiliations</b> element of the reply to a request for affiliations.
- * It is defined in the specification in section <a href="http://xmpp.org/extensions/xep-0060.html#entity-affiliations">5.7 Retrieve Affiliations</a>.
- * 
+ * It is defined in the specification in section <a href="http://xmpp.org/extensions/xep-0060.html#entity-affiliations">5.7 Retrieve Affiliations</a> and
+ * <a href="http://www.xmpp.org/extensions/xep-0060.html#owner-affiliations">8.9 Manage Affiliations</a>.
+ *
  * @author Robin Collier
  */
-public class AffiliationsExtension extends NodeExtension
-{
-	protected List<Affiliation> items = Collections.emptyList();
-	
-	public AffiliationsExtension()
-	{
-		super(PubSubElementType.AFFILIATIONS);
-	}
-	
-	public AffiliationsExtension(List<Affiliation> subList)
-	{
-		super(PubSubElementType.AFFILIATIONS);
-		items = subList;
-	}
+public class AffiliationsExtension extends NodeExtension {
+    protected List<Affiliation> items = Collections.emptyList();
+    private final String node;
 
-	public List<Affiliation> getAffiliations()
-	{
-		return items;
-	}
+    public AffiliationsExtension() {
+        this(null);
+    }
 
-	@Override
-	public CharSequence toXML()
-	{
-		if ((items == null) || (items.size() == 0))
-		{
-			return super.toXML();
-		}
-		else
-		{
-			StringBuilder builder = new StringBuilder("<");
-			builder.append(getElementName());
-			builder.append(">");
-			
-			for (Affiliation item : items)
-			{
-				builder.append(item.toXML());
-			}
-			
-			builder.append("</");
-			builder.append(getElementName());
-			builder.append(">");
-			return builder.toString();
-		}
-	}
+    public AffiliationsExtension(List<Affiliation> subList) {
+        this(subList, null);
+    }
+
+    public AffiliationsExtension(AffiliationNamespace affiliationsNamespace, List<Affiliation> subList) {
+        this(affiliationsNamespace, subList, null);
+    }
+
+    public AffiliationsExtension(List<Affiliation> subList, String node) {
+        this(AffiliationNamespace.basic, subList, node);
+    }
+
+    public AffiliationsExtension(AffiliationNamespace affiliationsNamespace, List<Affiliation> subList, String node) {
+        super(affiliationsNamespace.type);
+        items = subList;
+        this.node = node;
+    }
+
+    public List<Affiliation> getAffiliations() {
+        return items;
+    }
+
+    @Override
+    public CharSequence toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
+        if ((items == null) || (items.size() == 0)) {
+            return super.toXML(enclosingNamespace);
+        }
+        else {
+            // Can't use XmlStringBuilder(this), because we don't want the namespace to be included
+            XmlStringBuilder xml = new XmlStringBuilder();
+            xml.halfOpenElement(getElementName());
+            xml.optAttribute("node", node);
+            xml.rightAngleBracket();
+            xml.append(items);
+            xml.closeElement(this);
+            return xml;
+        }
+    }
 }

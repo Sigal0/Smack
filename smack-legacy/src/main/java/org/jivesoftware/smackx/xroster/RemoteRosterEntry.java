@@ -17,7 +17,13 @@
 
 package org.jivesoftware.smackx.xroster;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+
+import org.jxmpp.jid.Jid;
 
 /**
  * Represents a roster item, which consists of a JID and , their name and
@@ -30,9 +36,9 @@ import java.util.*;
  */
 public class RemoteRosterEntry {
 
-    private String user;
-    private String name;
-    private final List<String> groupNames = new ArrayList<String>();
+    private final Jid user;
+    private final String name;
+    private final List<String> groupNames = new ArrayList<>();
 
     /**
      * Creates a new remote roster entry.
@@ -42,12 +48,12 @@ public class RemoteRosterEntry {
      * @param groups the list of group names the entry will belong to, or <tt>null</tt> if the
      *      the roster entry won't belong to a group.
      */
-    public RemoteRosterEntry(String user, String name, String [] groups) {
+    public RemoteRosterEntry(Jid user, String name, String[] groups) {
         this.user = user;
         this.name = name;
-		if (groups != null) {
+        if (groups != null) {
             groupNames.addAll(Arrays.asList(groups));
-		}
+        }
     }
 
     /**
@@ -55,7 +61,7 @@ public class RemoteRosterEntry {
      *
      * @return the user.
      */
-    public String getUser() {
+    public Jid getUser() {
         return user;
     }
 
@@ -94,11 +100,11 @@ public class RemoteRosterEntry {
 
     public String toXML() {
         StringBuilder buf = new StringBuilder();
-        buf.append("<item jid=\"").append(user).append("\"");
+        buf.append("<item jid=\"").append(user).append('"');
         if (name != null) {
-            buf.append(" name=\"").append(name).append("\"");
+            buf.append(" name=\"").append(name).append('"');
         }
-        buf.append(">");
+        buf.append('>');
         synchronized (groupNames) {
             for (String groupName : groupNames) {
                 buf.append("<group>").append(groupName).append("</group>");

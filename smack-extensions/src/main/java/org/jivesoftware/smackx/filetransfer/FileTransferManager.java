@@ -16,39 +16,38 @@
  */
 package org.jivesoftware.smackx.filetransfer;
 
-import org.jivesoftware.smack.Manager;
-import org.jivesoftware.smack.PacketListener;
-import org.jivesoftware.smack.SmackException.NotConnectedException;
-import org.jivesoftware.smack.XMPPConnection;
-import org.jivesoftware.smack.filter.AndFilter;
-import org.jivesoftware.smack.filter.IQTypeFilter;
-import org.jivesoftware.smack.filter.PacketTypeFilter;
-import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.Packet;
-import org.jivesoftware.smack.packet.XMPPError;
-import org.jivesoftware.smackx.si.packet.StreamInitiation;
-import org.jxmpp.util.XmppStringUtils;
-
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import org.jivesoftware.smack.Manager;
+import org.jivesoftware.smack.SmackException.NotConnectedException;
+import org.jivesoftware.smack.XMPPConnection;
+import org.jivesoftware.smack.iqrequest.AbstractIqRequestHandler;
+import org.jivesoftware.smack.iqrequest.IQRequestHandler.Mode;
+import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.StanzaError;
+
+import org.jivesoftware.smackx.si.packet.StreamInitiation;
+
+import org.jxmpp.jid.EntityFullJid;
+
 /**
- * The file transfer manager class handles the sending and recieving of files.
- * To send a file invoke the {@link #createOutgoingFileTransfer(String)} method.
+ * The file transfer manager class handles the sending and receiving of files.
+ * To send a file invoke the {@link #createOutgoingFileTransfer(EntityFullJid)} method.
  * <p>
- * And to recieve a file add a file transfer listener to the manager. The
+ * And to receive a file add a file transfer listener to the manager. The
  * listener will notify you when there is a new file transfer request. To create
  * the {@link IncomingFileTransfer} object accept the transfer, or, if the
  * transfer is not desirable reject it.
- * 
+ *
  * @author Alexander Wenckus
- * 
+ *
  */
-public class FileTransferManager extends Manager {
+public final class FileTransferManager extends Manager {
 
-    private static final Map<XMPPConnection, FileTransferManager> INSTANCES = new WeakHashMap<XMPPConnection, FileTransferManager>();
+    private static final Map<XMPPConnection, FileTransferManager> INSTANCES = new WeakHashMap<>();
 
     public static synchronized FileTransferManager getInstanceFor(XMPPConnection connection) {
         FileTransferManager fileTransferManager = INSTANCES.get(connection);
@@ -59,107 +58,121 @@ public class FileTransferManager extends Manager {
         return fileTransferManager;
     }
 
-	private final FileTransferNegotiator fileTransferNegotiator;
+    private final FileTransferNegotiator fileTransferNegotiator;
 
-	private final List<FileTransferListener> listeners = new CopyOnWriteArrayList<FileTransferListener>();
+    private final List<FileTransferListener> listeners = new CopyOnWriteArrayList<>();
 
-	/**
-	 * Creates a file transfer manager to initiate and receive file transfers.
-	 * 
-	 * @param connection
-	 *            The XMPPConnection that the file transfers will use.
-	 */
-	private FileTransferManager(XMPPConnection connection) {
-		super(connection);
-		this.fileTransferNegotiator = FileTransferNegotiator
-				.getInstanceFor(connection);
-        connection.addPacketListener(new PacketListener() {
-            public void processPacket(Packet packet) {
+    /**
+     * Creates a file transfer manager to initiate and receive file transfers.
+     *
+     * @param connection
+     *            The XMPPConnection that the file transfers will use.
+     */
+    private FileTransferManager(XMPPConnection connection) {
+        super(connection);
+        this.fileTransferNegotiator = FileTransferNegotiator
+                .getInstanceFor(connection);
+        connection.registerIQRequestHandler(new AbstractIqRequestHandler(StreamInitiation.ELEMENT,
+                        StreamInitiation.NAMESPACE, IQ.Type.set, Mode.async) {
+            @Override
+            public IQ handleIQRequest(IQ packet) {
                 StreamInitiation si = (StreamInitiation) packet;
-                FileTransferRequest request = new FileTransferRequest(FileTransferManager.this, si);
-                for (FileTransferListener listener : listeners) {
-                    listener.fileTransferRequest(request);
+                final FileTransferRequest request = new FileTransferRequest(FileTransferManager.this, si);
+                for (final FileTransferListener listener : listeners) {
+                            listener.fileTransferRequest(request);
                 }
+                return null;
             }
-        }, new AndFilter(new PacketTypeFilter(StreamInitiation.class), IQTypeFilter.SET));
-	}
+        });
+    }
 
-	/**
-	 * Add a file transfer listener to listen to incoming file transfer
-	 * requests.
-	 * 
-	 * @param li
-	 *            The listener
-	 * @see #removeFileTransferListener(FileTransferListener)
-	 * @see FileTransferListener
-	 */
-	public void addFileTransferListener(final FileTransferListener li) {
-		listeners.add(li);
-	}
+    /**
+     * Add a file transfer listener to listen to incoming file transfer
+     * requests.
+     *
+     * @param li
+     *            The listener
+     * @see #removeFileTransferListener(FileTransferListener)
+     * @see FileTransferListener
+     */
+    public void addFileTransferListener(final FileTransferListener li) {
+        listeners.add(li);
+    }
 
-	/**
-	 * Removes a file transfer listener.
-	 * 
-	 * @param li
-	 *            The file transfer listener to be removed
-	 * @see FileTransferListener
-	 */
-	public void removeFileTransferListener(final FileTransferListener li) {
-		listeners.remove(li);
-	}
+    /**
+     * Removes a file transfer listener.
+     *
+     * @param li
+     *            The file transfer listener to be removed
+     * @see FileTransferListener
+     */
+    public void removeFileTransferListener(final FileTransferListener li) {
+        listeners.remove(li);
+    }
 
-	/**
-	 * Creates an OutgoingFileTransfer to send a file to another user.
-	 * 
-	 * @param userID
-	 *            The fully qualified jabber ID (i.e. full JID) with resource of the user to
-	 *            send the file to.
-	 * @return The send file object on which the negotiated transfer can be run.
-	 * @exception IllegalArgumentException if userID is null or not a full JID
-	 */
-	public OutgoingFileTransfer createOutgoingFileTransfer(String userID) {
-        if (userID == null) {
-            throw new IllegalArgumentException("userID was null");
-        }
+    /**
+     * Creates an OutgoingFileTransfer to send a file to another user.
+     *
+     * @param userID
+     *            The fully qualified jabber ID (i.e. full JID) with resource of the user to
+     *            send the file to.
+     * @return The send file object on which the negotiated transfer can be run.
+     * @exception IllegalArgumentException if userID is null or not a full JID
+     */
+    public OutgoingFileTransfer createOutgoingFileTransfer(EntityFullJid userID) {
         // We need to create outgoing file transfers with a full JID since this method will later
         // use XEP-0095 to negotiate the stream. This is done with IQ stanzas that need to be addressed to a full JID
         // in order to reach an client entity.
-        else if (!XmppStringUtils.isFullJID(userID)) {
-            throw new IllegalArgumentException("The provided user id was not a full JID (i.e. with resource part)");
+        if (userID == null) {
+            throw new IllegalArgumentException("userID was null");
         }
 
-		return new OutgoingFileTransfer(connection().getUser(), userID,
-				fileTransferNegotiator.getNextStreamID(),
-				fileTransferNegotiator);
-	}
-
-	/**
-	 * When the file transfer request is acceptable, this method should be
-	 * invoked. It will create an IncomingFileTransfer which allows the
-	 * transmission of the file to procede.
-	 * 
-	 * @param request
-	 *            The remote request that is being accepted.
-	 * @return The IncomingFileTransfer which manages the download of the file
-	 *         from the transfer initiator.
-	 */
-	protected IncomingFileTransfer createIncomingFileTransfer(
-			FileTransferRequest request) {
-		if (request == null) {
-			throw new NullPointerException("RecieveRequest cannot be null");
-		}
-
-		IncomingFileTransfer transfer = new IncomingFileTransfer(request,
+        return new OutgoingFileTransfer(connection().getUser(), userID,
+                FileTransferNegotiator.getNextStreamID(),
                 fileTransferNegotiator);
-		transfer.setFileInfo(request.getFileName(), request.getFileSize());
+    }
 
-		return transfer;
-	}
+    /**
+     * When the file transfer request is acceptable, this method should be
+     * invoked. It will create an IncomingFileTransfer which allows the
+     * transmission of the file to proceed.
+     *
+     * @param request
+     *            The remote request that is being accepted.
+     * @return The IncomingFileTransfer which manages the download of the file
+     *         from the transfer initiator.
+     */
+    protected IncomingFileTransfer createIncomingFileTransfer(
+            FileTransferRequest request) {
+        if (request == null) {
+            throw new NullPointerException("ReceiveRequest cannot be null");
+        }
 
-	protected void rejectIncomingFileTransfer(FileTransferRequest request) throws NotConnectedException {
-		StreamInitiation initiation = request.getStreamInitiation();
+        IncomingFileTransfer transfer = new IncomingFileTransfer(request,
+                fileTransferNegotiator);
+        transfer.setFileInfo(request.getFileName(), request.getFileSize());
 
-		IQ rejection = IQ.createErrorResponse(initiation, new XMPPError(XMPPError.Condition.no_acceptable));
-		connection().sendPacket(rejection);
-	}
+        return transfer;
+    }
+
+    /**
+     * Reject an incoming file transfer.
+     * <p>
+     * Specified in XEP-95 4.2 and 3.2 Example 8
+     * </p>
+     * @param request
+     * @throws NotConnectedException
+     * @throws InterruptedException
+     */
+    protected void rejectIncomingFileTransfer(FileTransferRequest request) throws NotConnectedException, InterruptedException {
+        StreamInitiation initiation = request.getStreamInitiation();
+
+        // Reject as specified in XEP-95 4.2. Note that this is not to be confused with the Socks 5
+        // Bytestream rejection as specified in XEP-65 5.3.1 Example 13, which says that
+        // 'not-acceptable' should be returned. This is done by Smack in
+        // Socks5BytestreamManager.replyRejectPacket(IQ).
+        IQ rejection = IQ.createErrorResponse(initiation, StanzaError.getBuilder(
+                        StanzaError.Condition.forbidden));
+        connection().sendStanza(rejection);
+    }
 }

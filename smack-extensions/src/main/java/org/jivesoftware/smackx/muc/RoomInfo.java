@@ -17,9 +17,20 @@
 
 package org.jivesoftware.smackx.muc;
 
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.Collections;
+import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import org.jivesoftware.smackx.disco.packet.DiscoverInfo;
 import org.jivesoftware.smackx.xdata.Form;
 import org.jivesoftware.smackx.xdata.FormField;
+
+import org.jxmpp.jid.EntityBareJid;
+import org.jxmpp.jid.Jid;
+import org.jxmpp.jid.util.JidUtil;
 
 /**
  * Represents the room information that was discovered using Service Discovery. It's possible to
@@ -30,70 +41,201 @@ import org.jivesoftware.smackx.xdata.FormField;
  */
 public class RoomInfo {
 
+    private static final Logger LOGGER = Logger.getLogger(RoomInfo.class.getName());
+
     /**
-     * JID of the room. The node of the JID is commonly used as the ID of the room or name.
+     * JID of the room. The localpart of the JID is commonly used as the ID of the room or name.
      */
-    private String room;
+    private final EntityBareJid room;
     /**
      * Description of the room.
      */
-    private String description = "";
+    private final String description;
+
+    /**
+     * Name of the room.
+     */
+    private final String name;
+
     /**
      * Last known subject of the room.
      */
-    private String subject = "";
+    private final String subject;
     /**
      * Current number of occupants in the room.
      */
-    private int occupantsCount = -1;
+    private final int occupantsCount;
     /**
      * A room is considered members-only if an invitation is required in order to enter the room.
      * Any user that is not a member of the room won't be able to join the room unless the user
      * decides to register with the room (thus becoming a member).
      */
-    private boolean membersOnly;
+    private final boolean membersOnly;
     /**
      * Moderated rooms enable only participants to speak. Users that join the room and aren't
      * participants can't speak (they are just visitors).
      */
-    private boolean moderated;
+    private final boolean moderated;
     /**
-     * Every presence packet can include the JID of every occupant unless the owner deactives this
+     * Every presence stanza can include the JID of every occupant unless the owner deactives this
      * configuration.
      */
-    private boolean nonanonymous;
+    private final boolean nonanonymous;
     /**
      * Indicates if users must supply a password to join the room.
      */
-    private boolean passwordProtected;
+    private final boolean passwordProtected;
     /**
      * Persistent rooms are saved to the database to make sure that rooms configurations can be
      * restored in case the server goes down.
      */
-    private boolean persistent;
+    private final boolean persistent;
+
+    /**
+     * Maximum number of history messages returned by the room.
+     */
+    private final int maxhistoryfetch;
+
+    /**
+     * Contact Address
+     */
+    private final List<EntityBareJid> contactJid;
+
+    /**
+     * Natural Language for Room Discussions
+     */
+    private final String lang;
+
+    /**
+     * An associated LDAP group that defined room membership. Should be an LDAP
+     * Distinguished Name
+     */
+    private final String ldapgroup;
+
+    /**
+     * True if the room subject can be modified by participants
+     */
+    private final Boolean subjectmod;
+
+    /**
+     * URL for archived discussion logs
+     */
+    private final URL logs;
+
+    /**
+     * An associated pubsub node
+     */
+    private final String pubsub;
+
+    /**
+     * The rooms extended configuration form;
+     */
+    private final Form form;
 
     RoomInfo(DiscoverInfo info) {
-        super();
-        this.room = info.getFrom();
+        final Jid from = info.getFrom();
+        if (from != null) {
+            this.room = info.getFrom().asEntityBareJidIfPossible();
+        } else {
+            this.room = null;
+        }
         // Get the information based on the discovered features
         this.membersOnly = info.containsFeature("muc_membersonly");
         this.moderated = info.containsFeature("muc_moderated");
         this.nonanonymous = info.containsFeature("muc_nonanonymous");
         this.passwordProtected = info.containsFeature("muc_passwordprotected");
         this.persistent = info.containsFeature("muc_persistent");
+
+        List<DiscoverInfo.Identity> identities = info.getIdentities();
+        // XEP-45 6.4 is not really clear on the topic if an identity needs to
+        // be send together with the disco result and how to call this description.
+        if (!identities.isEmpty()) {
+            this.name = identities.get(0).getName();
+        } else {
+            LOGGER.warning("DiscoverInfo does not contain any Identity: " + info.toXML());
+            this.name = "";
+        }
+        String subject = "";
+        int occupantsCount = -1;
+        String description = "";
+        int maxhistoryfetch = -1;
+        List<EntityBareJid> contactJid = null;
+        String lang = null;
+        String ldapgroup = null;
+        Boolean subjectmod = null;
+        URL logs = null;
+        String pubsub = null;
         // Get the information based on the discovered extended information
-        Form form = Form.getFormFrom(info);
+        form = Form.getFormFrom(info);
         if (form != null) {
             FormField descField = form.getField("muc#roominfo_description");
-            this.description = ( descField == null || descField.getValues().isEmpty() ) ? "" : descField.getValues().get(0);
+            if (descField != null && !descField.getValues().isEmpty()) {
+                // Prefer the extended result description
+                description = descField.getFirstValue();
+            }
 
             FormField subjField = form.getField("muc#roominfo_subject");
-            this.subject = ( subjField == null || subjField.getValues().isEmpty() ) ? "" : subjField.getValues().get(0);
+            if (subjField != null && !subjField.getValues().isEmpty()) {
+                subject = subjField.getFirstValue();
+            }
 
             FormField occCountField = form.getField("muc#roominfo_occupants");
-            this.occupantsCount = occCountField == null ? -1 : Integer.parseInt(occCountField.getValues()
-                    .get(0));
+            if (occCountField != null && !occCountField.getValues().isEmpty()) {
+                occupantsCount = Integer.parseInt(occCountField.getFirstValue());
+            }
+
+            FormField maxhistoryfetchField = form.getField("muc#maxhistoryfetch");
+            if (maxhistoryfetchField != null && !maxhistoryfetchField.getValues().isEmpty()) {
+                maxhistoryfetch = Integer.parseInt(maxhistoryfetchField.getFirstValue());
+            }
+
+            FormField contactJidField = form.getField("muc#roominfo_contactjid");
+            if (contactJidField != null && !contactJidField.getValues().isEmpty()) {
+                List<CharSequence> contactJidValues = contactJidField.getValues();
+                contactJid = JidUtil.filterEntityBareJidList(JidUtil.jidSetFrom(contactJidValues));
+            }
+
+            FormField langField = form.getField("muc#roominfo_lang");
+            if (langField != null && !langField.getValues().isEmpty()) {
+                lang = langField.getFirstValue();
+            }
+
+            FormField ldapgroupField = form.getField("muc#roominfo_ldapgroup");
+            if (ldapgroupField != null && !ldapgroupField.getValues().isEmpty()) {
+                ldapgroup = ldapgroupField.getFirstValue();
+            }
+
+            FormField subjectmodField = form.getField("muc#roominfo_subjectmod");
+            if (subjectmodField != null && !subjectmodField.getValues().isEmpty()) {
+                String firstValue = subjectmodField.getFirstValue();
+                subjectmod = ("true".equals(firstValue) || "1".equals(firstValue));
+            }
+
+            FormField urlField = form.getField("muc#roominfo_logs");
+            if (urlField != null && !urlField.getValues().isEmpty()) {
+                String urlString = urlField.getFirstValue();
+                try {
+                    logs = new URL(urlString);
+                } catch (MalformedURLException e) {
+                    LOGGER.log(Level.SEVERE, "Could not parse URL", e);
+                }
+            }
+
+            FormField pubsubField = form.getField("muc#roominfo_pubsub");
+            if (pubsubField != null && !pubsubField.getValues().isEmpty()) {
+                pubsub = pubsubField.getFirstValue();
+            }
         }
+        this.description = description;
+        this.subject = subject;
+        this.occupantsCount = occupantsCount;
+        this.maxhistoryfetch = maxhistoryfetch;
+        this.contactJid = contactJid;
+        this.lang = lang;
+        this.ldapgroup = ldapgroup;
+        this.subjectmod = subjectmod;
+        this.logs = logs;
+        this.pubsub = pubsub;
     }
 
     /**
@@ -101,24 +243,41 @@ public class RoomInfo {
      *
      * @return the JID of the room whose information was discovered.
      */
-    public String getRoom() {
+    public EntityBareJid getRoom() {
         return room;
     }
 
     /**
-     * Returns the discovered description of the room.
+     * Returns the room name.
+     * <p>
+     * The name returnd here was provided as value of the name attribute
+     * of the returned identity within the disco#info result.
+     * </p>
      *
-     * @return the discovered description of the room.
+     * @return the name of the room.
+     */
+    public String getName() {
+        return name;
+    }
+
+    /**
+     * Returns the discovered description of the room.
+     * <p>
+     * The description returned by this method was provided as value of the form
+     * field of the extended disco info result. It may be <code>null</code>.
+     * </p>
+     *
+     * @return the discovered description of the room or null
      */
     public String getDescription() {
         return description;
     }
 
     /**
-     * Returns the discovered subject of the room. The subject may be empty if the room does not
+     * Returns the discovered subject of the room. The subject may be null if the room does not
      * have a subject.
      *
-     * @return the discovered subject of the room.
+     * @return the discovered subject of the room or null
      */
     public String getSubject() {
         return subject;
@@ -180,6 +339,89 @@ public class RoomInfo {
      */
     public boolean isPersistent() {
         return persistent;
+    }
+
+    /**
+     * Returns the maximum number of history messages which are returned by the
+     * room or '-1' if this property is not reported by the room.
+     *
+     * @return the maximum number of history messages or '-1'
+     */
+    public int getMaxHistoryFetch() {
+        return maxhistoryfetch;
+    }
+
+    /**
+     * Returns Contact Addresses as JIDs, if such are reported.
+     *
+     * @return a list of contact addresses for this room.
+     */
+    public List<EntityBareJid> getContactJids() {
+        return Collections.unmodifiableList(contactJid);
+    }
+
+    /**
+     * Returns the natural language of the room discussion, or <code>null</code>.
+     *
+     * @return the language of the room discussion or <code>null</code>.
+     */
+    public String getLang() {
+        return lang;
+    }
+
+    /**
+     * Returns an associated LDAP group that defines room membership. The
+     * value should be an LDAP Distinguished Name according to an
+     * implementation-specific or deployment-specific definition of a group.
+     *
+     * @return an associated LDAP group or <code>null</code>
+     */
+    public String getLdapGroup() {
+        return ldapgroup;
+    }
+
+    /**
+     * Returns an Boolean instance with the value 'true' if the subject can be
+     * modified by the room participants, 'false' if not, or <code>null</code>
+     * if this information is reported by the room.
+     *
+     * @return an boolean that is true if the subject can be modified by
+     *         participants or <code>null</code>
+     */
+    public Boolean isSubjectModifiable() {
+        return subjectmod;
+    }
+
+    /**
+     * An associated pubsub node for this room or <code>null</code>.
+     *
+     * @return the associated pubsub node or <code>null</code>
+     */
+    public String getPubSub() {
+        return pubsub;
+    }
+
+    /**
+     * Returns the URL where archived discussion logs can be found or
+     * <code>null</code> if there is no such URL.
+     *
+     * @return the URL where archived logs can be found or <code>null</code>
+     */
+    public URL getLogsUrl() {
+        return logs;
+    }
+
+    /**
+     * Returns the form included in the extended disco info result or
+     * <code>null</code> if no such form was sent.
+     *
+     * @return The room info form or <code>null</code>
+     * @see <a
+     *      href="http://xmpp.org/extensions/xep-0045.html#disco-roominfo">XEP-45:
+     *      Multi User Chat - 6.5 Querying for Room Information</a>
+     */
+    public Form getForm() {
+        return form;
     }
 
 }

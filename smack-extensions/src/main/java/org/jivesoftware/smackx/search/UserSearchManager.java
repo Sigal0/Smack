@@ -16,19 +16,17 @@
  */
 package org.jivesoftware.smackx.search;
 
+import java.util.List;
+
 import org.jivesoftware.smack.SmackException.NoResponseException;
 import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.XMPPConnection;
-import org.jivesoftware.smack.XMPPException;
 import org.jivesoftware.smack.XMPPException.XMPPErrorException;
+
 import org.jivesoftware.smackx.disco.ServiceDiscoveryManager;
-import org.jivesoftware.smackx.disco.packet.DiscoverInfo;
-import org.jivesoftware.smackx.disco.packet.DiscoverItems;
 import org.jivesoftware.smackx.xdata.Form;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
+import org.jxmpp.jid.DomainBareJid;
 
 /**
  * The UserSearchManager is a facade built upon Jabber Search Services (XEP-055) to allow for searching
@@ -50,8 +48,8 @@ import java.util.List;
  */
 public class UserSearchManager {
 
-    private XMPPConnection con;
-    private UserSearch userSearch;
+    private final XMPPConnection con;
+    private final UserSearch userSearch;
 
     /**
      * Creates a new UserSearchManager.
@@ -68,26 +66,28 @@ public class UserSearchManager {
      *
      * @param searchService the search service to query.
      * @return the form to fill out to perform a search.
-     * @throws XMPPErrorException 
-     * @throws NoResponseException 
-     * @throws NotConnectedException 
+     * @throws XMPPErrorException
+     * @throws NoResponseException
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public Form getSearchForm(String searchService) throws NoResponseException, XMPPErrorException, NotConnectedException  {
+    public Form getSearchForm(DomainBareJid searchService) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException  {
         return userSearch.getSearchForm(con, searchService);
     }
 
     /**
      * Submits a search form to the server and returns the resulting information
-     * in the form of <code>ReportedData</code>
+     * in the form of <code>ReportedData</code>.
      *
      * @param searchForm    the <code>Form</code> to submit for searching.
      * @param searchService the name of the search service to use.
      * @return the ReportedData returned by the server.
-     * @throws XMPPErrorException 
-     * @throws NoResponseException 
-     * @throws NotConnectedException 
+     * @throws XMPPErrorException
+     * @throws NoResponseException
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public ReportedData getSearchResults(Form searchForm, String searchService) throws NoResponseException, XMPPErrorException, NotConnectedException  {
+    public ReportedData getSearchResults(Form searchForm, DomainBareJid searchService) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException  {
         return userSearch.sendSearchForm(con, searchForm, searchService);
     }
 
@@ -96,34 +96,13 @@ public class UserSearchManager {
      * Returns a collection of search services found on the server.
      *
      * @return a Collection of search services found on the server.
-     * @throws XMPPErrorException 
-     * @throws NoResponseException 
-     * @throws NotConnectedException 
+     * @throws XMPPErrorException
+     * @throws NoResponseException
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public Collection<String> getSearchServices() throws NoResponseException, XMPPErrorException, NotConnectedException  {
-        final List<String> searchServices = new ArrayList<String>();
+    public List<DomainBareJid> getSearchServices() throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException  {
         ServiceDiscoveryManager discoManager = ServiceDiscoveryManager.getInstanceFor(con);
-        DiscoverItems items = discoManager.discoverItems(con.getServiceName());
-        for (DiscoverItems.Item item : items.getItems()) {
-            try {
-                DiscoverInfo info;
-                try {
-                    info = discoManager.discoverInfo(item.getEntityID());
-                }
-                catch (XMPPException e) {
-                    // Ignore Case
-                    continue;
-                }
-
-                if (info.containsFeature("jabber:iq:search")) {
-                    searchServices.add(item.getEntityID());
-                }
-            }
-            catch (Exception e) {
-                // No info found.
-                break;
-            }
-        }
-        return searchServices;
+        return discoManager.findServices(UserSearch.NAMESPACE, false, false);
     }
 }

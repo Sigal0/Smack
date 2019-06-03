@@ -17,34 +17,35 @@
 
 package org.jivesoftware.smackx.bookmarks;
 
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-import org.jivesoftware.smack.SmackException;
 import org.jivesoftware.smack.SmackException.NoResponseException;
 import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.XMPPConnection;
-import org.jivesoftware.smack.XMPPException;
 import org.jivesoftware.smack.XMPPException.XMPPErrorException;
+
 import org.jivesoftware.smackx.iqprivate.PrivateDataManager;
+
+import org.jxmpp.jid.EntityBareJid;
+import org.jxmpp.jid.parts.Resourcepart;
 
 
 /**
  * Provides methods to manage bookmarks in accordance with XEP-0048. Methods for managing URLs and
  * Conferences are provided.
- * </p>
+ *
  * It should be noted that some extensions have been made to the XEP. There is an attribute on URLs
  * that marks a url as a news feed and also a sub-element can be added to either a URL or conference
  * indicated that it is shared amongst all users on a server.
  *
  * @author Alexander Wenckus
  */
-public class BookmarkManager {
-    private static final Map<XMPPConnection, BookmarkManager> bookmarkManagerMap = new WeakHashMap<XMPPConnection, BookmarkManager>();
+public final class BookmarkManager {
+    private static final Map<XMPPConnection, BookmarkManager> bookmarkManagerMap = new WeakHashMap<>();
 
     static {
         PrivateDataManager.addPrivateDataProvider("storage", "storage:bookmarks",
@@ -57,21 +58,18 @@ public class BookmarkManager {
      * @param connection the connection for which the manager is desired.
      * @return Returns the <i>BookmarkManager</i> for a connection, if it doesn't
      * exist it is created.
-     * @throws XMPPException 
-     * @throws SmackException thrown has not been authenticated.
      * @throws IllegalArgumentException when the connection is null.
      */
-    public synchronized static BookmarkManager getBookmarkManager(XMPPConnection connection)
-                    throws XMPPException, SmackException
-    {
-        BookmarkManager manager = (BookmarkManager) bookmarkManagerMap.get(connection);
+    public static synchronized BookmarkManager getBookmarkManager(XMPPConnection connection) {
+        BookmarkManager manager = bookmarkManagerMap.get(connection);
         if (manager == null) {
             manager = new BookmarkManager(connection);
+            bookmarkManagerMap.put(connection, manager);
         }
         return manager;
     }
 
-    private PrivateDataManager privateDataManager;
+    private final PrivateDataManager privateDataManager;
     private Bookmarks bookmarks;
     private final Object bookmarkLock = new Object();
 
@@ -81,23 +79,23 @@ public class BookmarkManager {
      *
      * @param connection the connection for persisting and retrieving bookmarks.
      */
-    private BookmarkManager(XMPPConnection connection) throws XMPPException, SmackException {
+    private BookmarkManager(XMPPConnection connection) {
         privateDataManager = PrivateDataManager.getInstanceFor(connection);
-        bookmarkManagerMap.put(connection, this);
     }
 
     /**
      * Returns all currently bookmarked conferences.
      *
      * @return returns all currently bookmarked conferences
-     * @throws XMPPErrorException 
-     * @throws NoResponseException 
-     * @throws NotConnectedException 
+     * @throws XMPPErrorException
+     * @throws NoResponseException
+     * @throws NotConnectedException
+     * @throws InterruptedException
      * @see BookmarkedConference
      */
-    public Collection<BookmarkedConference> getBookmarkedConferences() throws NoResponseException, XMPPErrorException, NotConnectedException {
+    public List<BookmarkedConference> getBookmarkedConferences() throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
         retrieveBookmarks();
-        return Collections.unmodifiableCollection(bookmarks.getBookmarkedConferences());
+        return Collections.unmodifiableList(bookmarks.getBookmarkedConferences());
     }
 
     /**
@@ -111,18 +109,18 @@ public class BookmarkManager {
      * @throws XMPPErrorException thrown when there is an issue retrieving the current bookmarks from
      * the server.
      * @throws NoResponseException if there was no response from the server.
-     * @throws NotConnectedException 
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public void addBookmarkedConference(String name, String jid, boolean isAutoJoin,
-            String nickname, String password) throws NoResponseException, XMPPErrorException, NotConnectedException
-    {
+    public void addBookmarkedConference(String name, EntityBareJid jid, boolean isAutoJoin,
+            Resourcepart nickname, String password) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
         retrieveBookmarks();
         BookmarkedConference bookmark
                 = new BookmarkedConference(name, jid, isAutoJoin, nickname, password);
         List<BookmarkedConference> conferences = bookmarks.getBookmarkedConferences();
-        if(conferences.contains(bookmark)) {
+        if (conferences.contains(bookmark)) {
             BookmarkedConference oldConference = conferences.get(conferences.indexOf(bookmark));
-            if(oldConference.isShared()) {
+            if (oldConference.isShared()) {
                 throw new IllegalArgumentException("Cannot modify shared bookmark");
             }
             oldConference.setAutoJoin(isAutoJoin);
@@ -143,17 +141,18 @@ public class BookmarkManager {
      * @throws XMPPErrorException thrown when there is a problem with the connection attempting to
      * retrieve the bookmarks or persist the bookmarks.
      * @throws NoResponseException if there was no response from the server.
-     * @throws NotConnectedException 
+     * @throws NotConnectedException
+     * @throws InterruptedException
      * @throws IllegalArgumentException thrown when the conference being removed is a shared
      * conference
      */
-    public void removeBookmarkedConference(String jid) throws NoResponseException, XMPPErrorException, NotConnectedException {
+    public void removeBookmarkedConference(EntityBareJid jid) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
         retrieveBookmarks();
         Iterator<BookmarkedConference> it = bookmarks.getBookmarkedConferences().iterator();
-        while(it.hasNext()) {
+        while (it.hasNext()) {
             BookmarkedConference conference = it.next();
-            if(conference.getJid().equalsIgnoreCase(jid)) {
-                if(conference.isShared()) {
+            if (conference.getJid().equals(jid)) {
+                if (conference.isShared()) {
                     throw new IllegalArgumentException("Conference is shared and can't be removed");
                 }
                 it.remove();
@@ -169,11 +168,12 @@ public class BookmarkManager {
      * @return returns an unmodifiable collection of all bookmarked urls.
      * @throws XMPPErrorException thrown when there is a problem retriving bookmarks from the server.
      * @throws NoResponseException if there was no response from the server.
-     * @throws NotConnectedException 
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public Collection<BookmarkedURL> getBookmarkedURLs() throws NoResponseException, XMPPErrorException, NotConnectedException {
+    public List<BookmarkedURL> getBookmarkedURLs() throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
         retrieveBookmarks();
-        return Collections.unmodifiableCollection(bookmarks.getBookmarkedURLS());
+        return Collections.unmodifiableList(bookmarks.getBookmarkedURLS());
     }
 
     /**
@@ -185,15 +185,16 @@ public class BookmarkManager {
      * @throws XMPPErrorException thrown when there is an error retriving or saving bookmarks from or to
      * the server
      * @throws NoResponseException if there was no response from the server.
-     * @throws NotConnectedException 
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public void addBookmarkedURL(String URL, String name, boolean isRSS) throws NoResponseException, XMPPErrorException, NotConnectedException {
+    public void addBookmarkedURL(String URL, String name, boolean isRSS) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
         retrieveBookmarks();
         BookmarkedURL bookmark = new BookmarkedURL(URL, name, isRSS);
         List<BookmarkedURL> urls = bookmarks.getBookmarkedURLS();
-        if(urls.contains(bookmark)) {
+        if (urls.contains(bookmark)) {
             BookmarkedURL oldURL = urls.get(urls.indexOf(bookmark));
-            if(oldURL.isShared()) {
+            if (oldURL.isShared()) {
                 throw new IllegalArgumentException("Cannot modify shared bookmarks");
             }
             oldURL.setName(name);
@@ -212,15 +213,16 @@ public class BookmarkManager {
      * @throws XMPPErrorException thrown if there is an error retriving or saving bookmarks from or to
      * the server.
      * @throws NoResponseException if there was no response from the server.
-     * @throws NotConnectedException 
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public void removeBookmarkedURL(String bookmarkURL) throws NoResponseException, XMPPErrorException, NotConnectedException {
+    public void removeBookmarkedURL(String bookmarkURL) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
         retrieveBookmarks();
         Iterator<BookmarkedURL> it = bookmarks.getBookmarkedURLS().iterator();
-        while(it.hasNext()) {
+        while (it.hasNext()) {
             BookmarkedURL bookmark = it.next();
-            if(bookmark.getURL().equalsIgnoreCase(bookmarkURL)) {
-                if(bookmark.isShared()) {
+            if (bookmark.getURL().equalsIgnoreCase(bookmarkURL)) {
+                if (bookmark.isShared()) {
                     throw new IllegalArgumentException("Cannot delete a shared bookmark.");
                 }
                 it.remove();
@@ -230,9 +232,25 @@ public class BookmarkManager {
         }
     }
 
-    private Bookmarks retrieveBookmarks() throws NoResponseException, XMPPErrorException, NotConnectedException {
-        synchronized(bookmarkLock) {
-            if(bookmarks == null) {
+    /**
+     * Check if the service supports bookmarks using private data.
+     *
+     * @return true if the service supports private data, false otherwise.
+     * @throws NoResponseException
+     * @throws NotConnectedException
+     * @throws InterruptedException
+     * @throws XMPPErrorException
+     * @see PrivateDataManager#isSupported()
+     * @since 4.2
+     */
+    public boolean isSupported() throws NoResponseException, NotConnectedException,
+                    XMPPErrorException, InterruptedException {
+        return privateDataManager.isSupported();
+    }
+
+    private Bookmarks retrieveBookmarks() throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
+        synchronized (bookmarkLock) {
+            if (bookmarks == null) {
                 bookmarks = (Bookmarks) privateDataManager.getPrivateData("storage",
                         "storage:bookmarks");
             }

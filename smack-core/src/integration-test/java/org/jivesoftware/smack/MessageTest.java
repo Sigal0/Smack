@@ -42,14 +42,14 @@ public class MessageTest extends SmackTestCase {
      * message?
      */
     public void testDirectPresence() {
-        getConnection(1).sendPacket(new Presence(Presence.Type.available));
+        getConnection(1).sendStanza(new Presence(Presence.Type.available));
 
         Presence presence = new Presence(Presence.Type.available);
         presence.setTo(getBareJID(1));
-        getConnection(0).sendPacket(presence);
+        getConnection(0).sendStanza(presence);
 
-        PacketCollector collector = getConnection(0)
-                .createPacketCollector(new MessageTypeFilter(Message.Type.chat));
+        StanzaCollector collector = getConnection(0)
+                .createStanzaCollector(new MessageTypeFilter(Message.Type.chat));
         try {
             getConnection(1).getChatManager().createChat(getBareJID(0), null).sendMessage("Test 1");
         }
@@ -67,17 +67,17 @@ public class MessageTest extends SmackTestCase {
      * the client becomes available again the offline messages are received.
      */
     public void testOfflineMessage() {
-        getConnection(0).sendPacket(new Presence(Presence.Type.available));
-        getConnection(1).sendPacket(new Presence(Presence.Type.available));
+        getConnection(0).sendStanza(new Presence(Presence.Type.available));
+        getConnection(1).sendStanza(new Presence(Presence.Type.available));
         // Make user2 unavailable
-        getConnection(1).sendPacket(new Presence(Presence.Type.unavailable));
+        getConnection(1).sendStanza(new Presence(Presence.Type.unavailable));
 
         try {
             Thread.sleep(500);
 
             // User1 sends some messages to User2 which is not available at the moment
             Chat chat = getConnection(0).getChatManager().createChat(getBareJID(1), null);
-            PacketCollector collector = getConnection(1).createPacketCollector(
+            StanzaCollector collector = getConnection(1).createStanzaCollector(
                     new MessageTypeFilter(Message.Type.chat));
             chat.sendMessage("Test 1");
             chat.sendMessage("Test 2");
@@ -86,7 +86,7 @@ public class MessageTest extends SmackTestCase {
 
             // User2 becomes available again
 
-            getConnection(1).sendPacket(new Presence(Presence.Type.available));
+            getConnection(1).sendStanza(new Presence(Presence.Type.available));
 
             // Check that offline messages are retrieved by user2 which is now available
             Message message = (Message) collector.nextResult(2500);
@@ -112,14 +112,14 @@ public class MessageTest extends SmackTestCase {
      */
     /*public void testOfflineMessageInvalidXML() {
         // Make user2 unavailable
-        getConnection(1).sendPacket(new Presence(Presence.Type.unavailable));
+        getConnection(1).sendStanza(new Presence(Presence.Type.unavailable));
 
         try {
             Thread.sleep(500);
 
             // User1 sends some messages to User2 which is not available at the moment
             Chat chat = getConnection(0).getChatManager().createChat(getBareJID(1), null);
-            PacketCollector collector = getConnection(1).createPacketCollector(
+            StanzaCollector collector = getConnection(1).createStanzaCollector(
                     new MessageTypeFilter(Message.Type.chat));
             chat.sendMessage("Test \f 1");
             chat.sendMessage("Test \r 1");
@@ -128,7 +128,7 @@ public class MessageTest extends SmackTestCase {
 
             // User2 becomes available again
 
-            getConnection(1).sendPacket(new Presence(Presence.Type.available));
+            getConnection(1).sendStanza(new Presence(Presence.Type.available));
 
             // Check that offline messages are retrieved by user2 which is now available
             Message message = (Message) collector.nextResult(2500);
@@ -150,22 +150,22 @@ public class MessageTest extends SmackTestCase {
      * connections are not being closed.
      */
     public void testHugeMessage() {
-        getConnection(0).sendPacket(new Presence(Presence.Type.available));
-        getConnection(1).sendPacket(new Presence(Presence.Type.available));
+        getConnection(0).sendStanza(new Presence(Presence.Type.available));
+        getConnection(1).sendStanza(new Presence(Presence.Type.available));
         // User2 becomes available again
-        PacketCollector collector = getConnection(1).createPacketCollector(
+        StanzaCollector collector = getConnection(1).createStanzaCollector(
                 new MessageTypeFilter(Message.Type.chat));
 
         // Create message with a body of 4K characters
         Message msg = new Message(getFullJID(1), Message.Type.chat);
         StringBuilder sb = new StringBuilder(5000);
         for (int i = 0; i <= 4000; i++) {
-            sb.append("X");
+            sb.append('X');
         }
         msg.setBody(sb.toString());
 
         // Send the first message
-        getConnection(0).sendPacket(msg);
+        getConnection(0).sendStanza(msg);
         // Check that the connection that sent the message is still connected
         assertTrue("XMPPConnection was closed", getConnection(0).isConnected());
         // Check that the message was received
@@ -173,7 +173,7 @@ public class MessageTest extends SmackTestCase {
         assertNotNull("No Message was received", rcv);
 
         // Send the second message
-        getConnection(0).sendPacket(msg);
+        getConnection(0).sendStanza(msg);
         // Check that the connection that sent the message is still connected
         assertTrue("XMPPConnection was closed", getConnection(0).isConnected());
         // Check that the second message was received
@@ -193,27 +193,27 @@ public class MessageTest extends SmackTestCase {
     public void testHighestPriority() throws Exception {
         // Create another connection for the same user of connection 1
         ConnectionConfiguration connectionConfiguration =
-                new ConnectionConfiguration(getHost(), getPort(), getServiceName());
+                new ConnectionConfiguration(getHost(), getPort(), getXMPPServiceDomain());
         XMPPTCPConnection conn3 = new XMPPConnection(connectionConfiguration);
         conn3.connect();
         conn3.login(getUsername(0), getPassword(0), "Home");
         // Set this connection as highest priority
         Presence presence = new Presence(Presence.Type.available);
         presence.setPriority(10);
-        conn3.sendPacket(presence);
+        conn3.sendStanza(presence);
         // Set this connection as highest priority
         presence = new Presence(Presence.Type.available);
         presence.setPriority(5);
-        getConnection(0).sendPacket(presence);
+        getConnection(0).sendStanza(presence);
 
         // Let the server process the change in presences
         Thread.sleep(200);
 
         // User0 listen in both connected clients
-        PacketCollector collector = getConnection(0).createPacketCollector(new MessageTypeFilter(Message.Type.chat));
-        PacketCollector coll3 = conn3.createPacketCollector(new MessageTypeFilter(Message.Type.chat));
+        StanzaCollector collector = getConnection(0).createStanzaCollector(new MessageTypeFilter(Message.Type.chat));
+        StanzaCollector coll3 = conn3.createStanzaCollector(new MessageTypeFilter(Message.Type.chat));
 
-        // User1 sends a message to the bare JID of User0 
+        // User1 sends a message to the bare JID of User0
         Chat chat = getConnection(1).getChatManager().createChat(getBareJID(0), null);
         chat.sendMessage("Test 1");
         chat.sendMessage("Test 2");
@@ -242,25 +242,25 @@ public class MessageTest extends SmackTestCase {
     public void testHighestShow() throws Exception {
         // Create another connection for the same user of connection 1
         ConnectionConfiguration connectionConfiguration =
-                new ConnectionConfiguration(getHost(), getPort(), getServiceName());
+                new ConnectionConfiguration(getHost(), getPort(), getXMPPServiceDomain());
         XMPPTCPConnection conn3 = new XMPPConnection(connectionConfiguration);
         conn3.connect();
         conn3.login(getUsername(0), getPassword(0), "Home");
         // Set this connection as highest priority
         Presence presence = new Presence(Presence.Type.available);
         presence.setMode(Presence.Mode.away);
-        conn3.sendPacket(presence);
+        conn3.sendStanza(presence);
         // Set this connection as highest priority
         presence = new Presence(Presence.Type.available);
         presence.setMode(Presence.Mode.available);
-        getConnection(0).sendPacket(presence);
+        getConnection(0).sendStanza(presence);
 
         // Let the server process the change in presences
         Thread.sleep(200);
 
         // User0 listen in both connected clients
-        PacketCollector collector = getConnection(0).createPacketCollector(new MessageTypeFilter(Message.Type.chat));
-        PacketCollector coll3 = conn3.createPacketCollector(new MessageTypeFilter(Message.Type.chat));
+        StanzaCollector collector = getConnection(0).createStanzaCollector(new MessageTypeFilter(Message.Type.chat));
+        StanzaCollector coll3 = conn3.createStanzaCollector(new MessageTypeFilter(Message.Type.chat));
 
         // User1 sends a message to the bare JID of User0
         Chat chat = getConnection(1).getChatManager().createChat(getBareJID(0), null);
@@ -291,7 +291,7 @@ public class MessageTest extends SmackTestCase {
     public void testMostRecentActive() throws Exception {
         // Create another connection for the same user of connection 1
         ConnectionConfiguration connectionConfiguration =
-                new ConnectionConfiguration(getHost(), getPort(), getServiceName());
+                new ConnectionConfiguration(getHost(), getPort(), getXMPPServiceDomain());
         XMPPTCPConnection conn3 = new XMPPConnection(connectionConfiguration);
         conn3.connect();
         conn3.login(getUsername(0), getPassword(0), "Home");
@@ -299,34 +299,34 @@ public class MessageTest extends SmackTestCase {
         Presence presence = new Presence(Presence.Type.available);
         presence.setMode(Presence.Mode.available);
         presence.setPriority(10);
-        conn3.sendPacket(presence);
+        conn3.sendStanza(presence);
         // Set this connection as highest priority
         presence = new Presence(Presence.Type.available);
         presence.setMode(Presence.Mode.available);
         presence.setPriority(10);
-        getConnection(0).sendPacket(presence);
+        getConnection(0).sendStanza(presence);
 
         connectionConfiguration =
-                new ConnectionConfiguration(getHost(), getPort(), getServiceName());
+                new ConnectionConfiguration(getHost(), getPort(), getXMPPServiceDomain());
         XMPPTCPConnection conn4 = new XMPPConnection(connectionConfiguration);
         conn4.connect();
         conn4.login(getUsername(0), getPassword(0), "Home2");
         presence = new Presence(Presence.Type.available);
         presence.setMode(Presence.Mode.available);
         presence.setPriority(4);
-        getConnection(0).sendPacket(presence);
+        getConnection(0).sendStanza(presence);
 
 
         // Let the server process the change in presences
         Thread.sleep(200);
 
         // User0 listen in both connected clients
-        PacketCollector collector = getConnection(0).createPacketCollector(new MessageTypeFilter(Message.Type.chat));
-        PacketCollector coll3 = conn3.createPacketCollector(new MessageTypeFilter(Message.Type.chat));
-        PacketCollector coll4 = conn4.createPacketCollector(new MessageTypeFilter(Message.Type.chat));
+        StanzaCollector collector = getConnection(0).createStanzaCollector(new MessageTypeFilter(Message.Type.chat));
+        StanzaCollector coll3 = conn3.createStanzaCollector(new MessageTypeFilter(Message.Type.chat));
+        StanzaCollector coll4 = conn4.createStanzaCollector(new MessageTypeFilter(Message.Type.chat));
 
-        // Send a message from this resource to indicate most recent activity 
-        conn3.sendPacket(new Message("admin@" + getServiceName()));
+        // Send a message from this resource to indicate most recent activity
+        conn3.sendStanza(new Message("admin@" + getXMPPServiceDomain()));
 
         // User1 sends a message to the bare JID of User0
         Chat chat = getConnection(1).getChatManager().createChat(getBareJID(0), null);
@@ -362,13 +362,13 @@ public class MessageTest extends SmackTestCase {
         Presence presence = new Presence(Presence.Type.available);
         presence.setMode(Presence.Mode.available);
         presence.setPriority(-1);
-        getConnection(0).sendPacket(presence);
+        getConnection(0).sendStanza(presence);
 
         // Let the server process the change in presences
         Thread.sleep(200);
 
         // User0 listen for incoming traffic
-        PacketCollector collector = getConnection(0).createPacketCollector(new MessageTypeFilter(Message.Type.chat));
+        StanzaCollector collector = getConnection(0).createStanzaCollector(new MessageTypeFilter(Message.Type.chat));
 
         // User1 sends a message to the bare JID of User0
         Chat chat = getConnection(1).getChatManager().createChat(getBareJID(0), null);
@@ -383,7 +383,7 @@ public class MessageTest extends SmackTestCase {
         presence = new Presence(Presence.Type.available);
         presence.setMode(Presence.Mode.available);
         presence.setPriority(1);
-        getConnection(0).sendPacket(presence);
+        getConnection(0).sendStanza(presence);
 
         // Let the server process the change in presences
         Thread.sleep(200);

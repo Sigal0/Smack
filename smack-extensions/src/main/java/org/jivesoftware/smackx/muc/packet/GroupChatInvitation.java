@@ -17,12 +17,18 @@
 
 package org.jivesoftware.smackx.muc.packet;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
-import org.xmlpull.v1.XmlPullParser;
+import java.io.IOException;
+
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.packet.Stanza;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.ExtensionElementProvider;
+import org.jivesoftware.smack.util.XmlStringBuilder;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
 
 /**
- * A group chat invitation packet extension, which is used to invite other
+ * A group chat invitation stanza extension, which is used to invite other
  * users to a group chat room. To invite a user to a group chat room, address
  * a new message to the user and set the room name appropriately, as in the
  * following code example:
@@ -31,43 +37,43 @@ import org.xmlpull.v1.XmlPullParser;
  * Message message = new Message("user@chat.example.com");
  * message.setBody("Join me for a group chat!");
  * message.addExtension(new GroupChatInvitation("room@chat.example.com"););
- * con.sendPacket(message);
+ * con.sendStanza(message);
  * </pre>
  *
- * To listen for group chat invitations, use a PacketExtensionFilter for the
+ * To listen for group chat invitations, use a StanzaExtensionFilter for the
  * <tt>x</tt> element name and <tt>jabber:x:conference</tt> namespace, as in the
  * following code example:
  *
  * <pre>
- * PacketFilter filter = new PacketExtensionFilter("x", "jabber:x:conference");
- * // Create a packet collector or packet listeners using the filter...
+ * PacketFilter filter = new StanzaExtensionFilter("x", "jabber:x:conference");
+ * // Create a stanza collector or stanza listeners using the filter...
  * </pre>
  *
  * <b>Note</b>: this protocol is outdated now that the Multi-User Chat (MUC) XEP is available
  * (<a href="http://www.xmpp.org/extensions/jep-0045.html">XEP-45</a>). However, most
  * existing clients still use this older protocol. Once MUC support becomes more
  * widespread, this API may be deprecated.
- * 
+ *
  * @author Matt Tucker
  */
-public class GroupChatInvitation implements PacketExtension {
+public class GroupChatInvitation implements ExtensionElement {
 
     /**
-     * Element name of the packet extension.
+     * Element name of the stanza extension.
      */
-    public static final String ELEMENT_NAME = "x";
+    public static final String ELEMENT = "x";
 
     /**
-     * Namespace of the packet extension.
+     * Namespace of the stanza extension.
      */
     public static final String NAMESPACE = "jabber:x:conference";
 
-    private String roomAddress;
+    private final String roomAddress;
 
     /**
      * Creates a new group chat invitation to the specified room address.
      * GroupChat room addresses are in the form <tt>room@service</tt>,
-     * where <tt>service</tt> is the name of groupchat server, such as
+     * where <tt>service</tt> is the name of group chat server, such as
      * <tt>chat.example.com</tt>.
      *
      * @param roomAddress the address of the group chat room.
@@ -79,7 +85,7 @@ public class GroupChatInvitation implements PacketExtension {
     /**
      * Returns the address of the group chat room. GroupChat room addresses
      * are in the form <tt>room@service</tt>, where <tt>service</tt> is
-     * the name of groupchat server, such as <tt>chat.example.com</tt>.
+     * the name of group chat server, such as <tt>chat.example.com</tt>.
      *
      * @return the address of the group chat room.
      */
@@ -87,22 +93,50 @@ public class GroupChatInvitation implements PacketExtension {
         return roomAddress;
     }
 
+    @Override
     public String getElementName() {
-        return ELEMENT_NAME;
+        return ELEMENT;
     }
 
+    @Override
     public String getNamespace() {
         return NAMESPACE;
     }
 
-    public String toXML() {
-        StringBuilder buf = new StringBuilder();
-        buf.append("<x xmlns=\"jabber:x:conference\" jid=\"").append(roomAddress).append("\"/>");
-        return buf.toString();
+    @Override
+    public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
+        XmlStringBuilder xml = new XmlStringBuilder(this);
+        xml.attribute("jid", getRoomAddress());
+        xml.closeEmptyElement();
+        return xml;
     }
 
-    public static class Provider implements PacketExtensionProvider {
-        public PacketExtension parseExtension (XmlPullParser parser) throws Exception {
+    /**
+     * Deprecated.
+     * @param packet
+     * @return the GroupChatInvitation or null
+     * @deprecated use {@link #from(Stanza)} instead
+     */
+    @Deprecated
+    public static GroupChatInvitation getFrom(Stanza packet) {
+        return from(packet);
+    }
+
+    /**
+     * Get the group chat invitation from the given stanza.
+     * @param packet
+     * @return the GroupChatInvitation or null
+     */
+    public static GroupChatInvitation from(Stanza packet) {
+        return packet.getExtension(ELEMENT, NAMESPACE);
+    }
+
+    public static class Provider extends ExtensionElementProvider<GroupChatInvitation> {
+
+        @Override
+        public GroupChatInvitation parse(XmlPullParser parser,
+                        int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException,
+                        IOException {
             String roomAddress = parser.getAttributeValue("", "jid");
             // Advance to end of extension.
             parser.next();

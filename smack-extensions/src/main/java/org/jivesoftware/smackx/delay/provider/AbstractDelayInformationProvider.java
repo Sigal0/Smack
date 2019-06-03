@@ -1,6 +1,6 @@
 /**
  *
- * Copyright © 2014 Florian Schmaus
+ * Copyright © 2014-2019 Florian Schmaus
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,30 +16,43 @@
  */
 package org.jivesoftware.smackx.delay.provider;
 
+import java.io.IOException;
 import java.util.Date;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
-import org.jivesoftware.smackx.delay.packet.DelayInformation;
-import org.xmlpull.v1.XmlPullParser;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.parsing.SmackParsingException.SmackTextParseException;
+import org.jivesoftware.smack.provider.ExtensionElementProvider;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
 
-public abstract class AbstractDelayInformationProvider implements PacketExtensionProvider {
+import org.jivesoftware.smackx.delay.packet.DelayInformation;
+
+public abstract class AbstractDelayInformationProvider extends ExtensionElementProvider<DelayInformation> {
 
     @Override
-    public final PacketExtension parseExtension(XmlPullParser parser) throws Exception {
+    public final DelayInformation parse(XmlPullParser parser,
+                    int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException,
+                    IOException, SmackTextParseException {
         String stampString = (parser.getAttributeValue("", "stamp"));
         String from = parser.getAttributeValue("", "from");
-        String reason = null;
-        if (!parser.isEmptyElementTag()) {
-            parser.next();
-            assert(parser.getEventType() == XmlPullParser.TEXT);
+        final String reason;
+        XmlPullParser.Event event = parser.next();
+        switch (event) {
+        case TEXT_CHARACTERS:
             reason = parser.getText();
+            parser.next();
+            break;
+        case END_ELEMENT:
+            reason = null;
+            break;
+        default:
+            // TODO: Should be SmackParseException.
+            throw new IOException("Unexpected event: " + event);
         }
-        parser.next();
-        assert(parser.getEventType() == XmlPullParser.END_TAG);
+
         Date stamp = parseDate(stampString);
         return new DelayInformation(stamp, from, reason);
     }
 
-    protected abstract Date parseDate(String string) throws Exception;
+    protected abstract Date parseDate(String string) throws SmackTextParseException;
 }

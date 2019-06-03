@@ -1,6 +1,6 @@
 /**
  *
- * Copyright 2014 Andriy Tsykholyas
+ * Copyright 2014 Andriy Tsykholyas, 2015 Florian Schmaus
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,36 +16,46 @@
  */
 package org.jivesoftware.smackx.hoxt.packet;
 
-import org.jivesoftware.smack.packet.PacketExtension;
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.util.Objects;
+import org.jivesoftware.smack.util.XmlStringBuilder;
+
 import org.jivesoftware.smackx.hoxt.HOXTManager;
 
 /**
- * Packet extension for base64 binary chunks.<p>
+ * Stanza extension for base64 binary chunks.<p>
  * This class is immutable.
  *
  * @author Andriy Tsykholyas
  * @see <a href="http://xmpp.org/extensions/xep-0332.html">XEP-0332: HTTP over XMPP transport</a>
  */
-public class Base64BinaryChunk implements PacketExtension {
+public class Base64BinaryChunk implements ExtensionElement {
 
     public static final String ELEMENT_CHUNK = "chunk";
     public static final String ATTRIBUTE_STREAM_ID = "streamId";
     public static final String ATTRIBUTE_LAST = "last";
+    public static final String ATTRIBUTE_NR = "nr";
 
     private final String streamId;
     private final boolean last;
     private final String text;
+    private final int nr;
 
     /**
      * Creates the extension.
      *
      * @param text     value of text attribute
      * @param streamId value of streamId attribute
+     * @param nr       value of nr attribute
      * @param last     value of last attribute
      */
-    public Base64BinaryChunk(String text, String streamId, boolean last) {
-        this.text = text;
-        this.streamId = streamId;
+    public Base64BinaryChunk(String text, String streamId, int nr, boolean last) {
+        this.text = Objects.requireNonNull(text, "text must not be null");
+        this.streamId = Objects.requireNonNull(streamId, "streamId must not be null");
+        if (nr < 0) {
+            throw new IllegalArgumentException("nr must be a non negative integer");
+        }
+        this.nr = nr;
         this.last = last;
     }
 
@@ -54,9 +64,10 @@ public class Base64BinaryChunk implements PacketExtension {
      *
      * @param text     value of text attribute
      * @param streamId value of streamId attribute
+     * @param nr       value of nr attribute
      */
-    public Base64BinaryChunk(String text, String streamId) {
-        this(text, streamId, false);
+    public Base64BinaryChunk(String text, String streamId, int nr) {
+        this(text, streamId, nr, false);
     }
 
     /**
@@ -86,6 +97,15 @@ public class Base64BinaryChunk implements PacketExtension {
         return text;
     }
 
+    /**
+     * Returns nr attribute.
+     *
+     * @return nr attribute
+     */
+    public int getNr() {
+        return nr;
+    }
+
     @Override
     public String getElementName() {
         return ELEMENT_CHUNK;
@@ -97,15 +117,14 @@ public class Base64BinaryChunk implements PacketExtension {
     }
 
     @Override
-    public String toXML() {
-        StringBuilder builder = new StringBuilder();
-        builder.append("<chunk xmlns='urn:xmpp:http' streamId='");
-        builder.append(streamId);
-        builder.append("' last='");
-        builder.append(Boolean.toString(last));
-        builder.append("'>");
-        builder.append(text);
-        builder.append("</chunk>");
-        return builder.toString();
+    public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
+        XmlStringBuilder xml = new XmlStringBuilder(this);
+        xml.attribute("streamId", streamId);
+        xml.attribute("nr", nr);
+        xml.optBooleanAttribute("last", last);
+        xml.rightAngleBracket();
+        xml.append(text);
+        xml.closeElement(this);
+        return xml;
     }
 }

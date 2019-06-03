@@ -16,72 +16,91 @@
  */
 package org.jivesoftware.smack.util;
 
-import java.io.*;
-import java.util.*;
+import java.io.IOException;
+import java.io.Writer;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * An ObservableWriter is a wrapper on a Writer that notifies to its listeners when
  * writing to character streams.
- * 
+ *
  * @author Gaston Dombiak
  */
 public class ObservableWriter extends Writer {
+    private static final int MAX_STRING_BUILDER_SIZE = 4096;
 
     Writer wrappedWriter = null;
-    List<WriterListener> listeners = new ArrayList<WriterListener>();
+    final List<WriterListener> listeners = new ArrayList<WriterListener>();
+    private final StringBuilder stringBuilder = new StringBuilder(MAX_STRING_BUILDER_SIZE);
 
     public ObservableWriter(Writer wrappedWriter) {
         this.wrappedWriter = wrappedWriter;
     }
 
-    public void write(char cbuf[], int off, int len) throws IOException {
+    @Override
+    public void write(char[] cbuf, int off, int len) throws IOException {
         wrappedWriter.write(cbuf, off, len);
         String str = new String(cbuf, off, len);
-        notifyListeners(str);
+        maybeNotifyListeners(str);
     }
 
+    @Override
     public void flush() throws IOException {
+        notifyListeners();
         wrappedWriter.flush();
     }
 
+    @Override
     public void close() throws IOException {
         wrappedWriter.close();
     }
 
+    @Override
     public void write(int c) throws IOException {
         wrappedWriter.write(c);
     }
 
-    public void write(char cbuf[]) throws IOException {
+    @Override
+    public void write(char[] cbuf) throws IOException {
         wrappedWriter.write(cbuf);
         String str = new String(cbuf);
-        notifyListeners(str);
+        maybeNotifyListeners(str);
     }
 
+    @Override
     public void write(String str) throws IOException {
         wrappedWriter.write(str);
-        notifyListeners(str);
+        maybeNotifyListeners(str);
     }
 
+    @Override
     public void write(String str, int off, int len) throws IOException {
         wrappedWriter.write(str, off, len);
         str = str.substring(off, off + len);
-        notifyListeners(str);
+        maybeNotifyListeners(str);
+    }
+
+    private void maybeNotifyListeners(String s) {
+        stringBuilder.append(s);
+        if (stringBuilder.length() > MAX_STRING_BUILDER_SIZE) {
+            notifyListeners();
+        }
     }
 
     /**
      * Notify that a new string has been written.
-     * 
-     * @param str the written String to notify 
      */
-    private void notifyListeners(String str) {
-        WriterListener[] writerListeners = null;
+    private void notifyListeners() {
+        WriterListener[] writerListeners;
         synchronized (listeners) {
             writerListeners = new WriterListener[listeners.size()];
             listeners.toArray(writerListeners);
         }
-        for (int i = 0; i < writerListeners.length; i++) {
-            writerListeners[i].write(str);
+        String str = stringBuilder.toString();
+        stringBuilder.setLength(0);
+        for (WriterListener writerListener : writerListeners) {
+            writerListener.write(str);
         }
     }
 

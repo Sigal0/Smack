@@ -17,11 +17,20 @@
 
 package org.jivesoftware.smackx.xdata;
 
-import org.jivesoftware.smack.util.XmlStringBuilder;
-
+import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
+
+import org.jivesoftware.smack.packet.NamedElement;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.util.StringUtils;
+import org.jivesoftware.smack.util.XmlStringBuilder;
+
+import org.jivesoftware.smackx.xdatavalidation.packet.ValidateElement;
+
+import org.jxmpp.util.XmppDateTime;
 
 /**
  * Represents a field of a form. The field could be used to represent a question to complete,
@@ -30,28 +39,116 @@ import java.util.List;
  *
  * @author Gaston Dombiak
  */
-public class FormField {
+public class FormField implements NamedElement {
 
     public static final String ELEMENT = "field";
 
-    public static final String TYPE_BOOLEAN = "boolean";
-    public static final String TYPE_FIXED = "fixed";
-    public static final String TYPE_HIDDEN = "hidden";
-    public static final String TYPE_JID_MULTI = "jid-multi";
-    public static final String TYPE_JID_SINGLE = "jid-single";
-    public static final String TYPE_LIST_MULTI = "list-multi";
-    public static final String TYPE_LIST_SINGLE = "list-single";
-    public static final String TYPE_TEXT_MULTI = "text-multi";
-    public static final String TYPE_TEXT_PRIVATE = "text-private";
-    public static final String TYPE_TEXT_SINGLE = "text-single";
+    /**
+     * The constant String "FORM_TYPE".
+     */
+    public static final String FORM_TYPE = "FORM_TYPE";
+
+    /**
+     * Form Field Types as defined in XEP-4 § 3.3.
+     *
+     * @see <a href="http://xmpp.org/extensions/xep-0004.html#protocol-fieldtypes">XEP-4 § 3.3 Field Types</a>
+     */
+    public enum Type {
+
+        /**
+         * Boolean type. Can be 0 or 1, true or false, yes or no. Default value is 0.
+         * <p>
+         * Note that in XEP-4 this type is called 'boolean', but since that String is a restricted keyword in Java, it
+         * is named 'bool' in Smack.
+         * </p>
+         */
+        bool,
+
+        /**
+         * Fixed for putting in text to show sections, or just advertise your web site in the middle of the form.
+         */
+        fixed,
+
+        /**
+         * Is not given to the user at all, but returned with the questionnaire.
+         */
+        hidden,
+
+        /**
+         * multiple entries for JIDs.
+         */
+        jid_multi,
+
+        /**
+         * Jabber ID - choosing a JID from your roster, and entering one based on the rules for a JID.
+         */
+        jid_single,
+
+        /**
+         * Given a list of choices, pick one or more.
+         */
+        list_multi,
+
+        /**
+         * Given a list of choices, pick one.
+         */
+        list_single,
+
+        /**
+         * Multiple lines of text entry.
+         */
+        text_multi,
+
+        /**
+         * Instead of showing the user what they typed, you show ***** to protect it.
+         */
+        text_private,
+
+        /**
+         * Single line or word of text.
+         */
+        text_single,
+        ;
+
+        @Override
+        public String toString() {
+            switch (this) {
+            case bool:
+                return "boolean";
+            default:
+                return this.name().replace('_', '-');
+            }
+        }
+
+        /**
+         * Get a form field type from the given string. If <code>string</code> is null, then null will be returned.
+         *
+         * @param string the string to transform or null.
+         * @return the type or null.
+         */
+        public static Type fromString(String string) {
+            if (string == null) {
+                return null;
+            }
+            switch (string) {
+            case "boolean":
+                return bool;
+            default:
+                string = string.replace('-', '_');
+                return Type.valueOf(string);
+            }
+        }
+    }
+
+    private final String variable;
 
     private String description;
     private boolean required = false;
     private String label;
-    private String variable;
-    private String type;
-    private final List<Option> options = new ArrayList<Option>();
-    private final List<String> values = new ArrayList<String>();
+    private Type type;
+    private final List<Option> options = new ArrayList<>();
+    private final List<CharSequence> values = new ArrayList<>();
+    private ValidateElement validateElement;
 
     /**
      * Creates a new FormField with the variable name that uniquely identifies the field
@@ -60,7 +157,7 @@ public class FormField {
      * @param variable the variable name of the question.
      */
     public FormField(String variable) {
-        this.variable = variable;
+        this.variable = StringUtils.requireNotNullNorEmpty(variable, "Variable must not be null nor empty");
     }
 
     /**
@@ -68,15 +165,17 @@ public class FormField {
      * name.
      */
     public FormField() {
-        this.type = FormField.TYPE_FIXED;
+        this.variable = null;
+        this.type = Type.fixed;
     }
 
     /**
      * Returns a description that provides extra clarification about the question. This information
      * could be presented to the user either in tool-tip, help button, or as a section of text
-     * before the question.<p>
-     * <p/>
+     * before the question.
+     * <p>
      * If the question is of type FIXED then the description should remain empty.
+     * </p>
      *
      * @return description that provides extra clarification about the question.
      */
@@ -102,7 +201,7 @@ public class FormField {
      */
     public List<Option> getOptions() {
         synchronized (options) {
-            return Collections.unmodifiableList(new ArrayList<Option>(options));
+            return Collections.unmodifiableList(new ArrayList<>(options));
         }
     }
 
@@ -116,27 +215,12 @@ public class FormField {
     }
 
     /**
-     * Returns an indicative of the format for the data to answer. Valid formats are:
-     * <p/>
-     * <ul>
-     * <li>text-single -> single line or word of text
-     * <li>text-private -> instead of showing the user what they typed, you show ***** to
-     * protect it
-     * <li>text-multi -> multiple lines of text entry
-     * <li>list-single -> given a list of choices, pick one
-     * <li>list-multi -> given a list of choices, pick one or more
-     * <li>boolean -> 0 or 1, true or false, yes or no. Default value is 0
-     * <li>fixed -> fixed for putting in text to show sections, or just advertise your web
-     * site in the middle of the form
-     * <li>hidden -> is not given to the user at all, but returned with the questionnaire
-     * <li>jid-single -> Jabber ID - choosing a JID from your roster, and entering one based
-     * on the rules for a JID.
-     * <li>jid-multi -> multiple entries for JIDs
-     * </ul>
+     * Returns an indicative of the format for the data to answer.
      *
      * @return format for the data to answer.
+     * @see Type
      */
-    public String getType() {
+    public Type getType() {
         return type;
     }
 
@@ -147,14 +231,70 @@ public class FormField {
      *
      * @return a List of the default values or answered values of the question.
      */
-    public List<String> getValues() {
+    public List<CharSequence> getValues() {
         synchronized (values) {
-            return Collections.unmodifiableList(new ArrayList<String>(values));
+            return Collections.unmodifiableList(new ArrayList<>(values));
         }
     }
 
     /**
+     * Returns the values a String. Note that you should use {@link #getValues()} whenever possible instead of this
+     * method.
+     *
+     * @return a list of Strings representing the values
+     * @see #getValues()
+     * @since 4.3
+     */
+    public List<String> getValuesAsString() {
+        List<CharSequence> valuesAsCharSequence = getValues();
+        List<String> res = new ArrayList<>(valuesAsCharSequence.size());
+        for (CharSequence value : valuesAsCharSequence) {
+            res.add(value.toString());
+        }
+        return res;
+    }
+
+    /**
+     * Returns the first value of this form fold or {@code null}.
+     *
+     * @return the first value or {@code null}
+     * @since 4.3
+     */
+    public String getFirstValue() {
+        CharSequence firstValue;
+
+        synchronized (values) {
+            if (values.isEmpty()) {
+                return null;
+            }
+            firstValue = values.get(0);
+        }
+
+        return firstValue.toString();
+    }
+
+    /**
+     * Parses the first value of this form field as XEP-0082 date/time format and returns a date instance or {@code null}.
+     *
+     * @return a Date instance representing the date/time information of the first value of this field.
+     * @throws ParseException if parsing fails.
+     * @since 4.3.0
+     */
+    public Date getFirstValueAsDate() throws ParseException {
+        String valueString = getFirstValue();
+        if (valueString == null) {
+            return null;
+        }
+        return XmppDateTime.parseXEP0082Date(valueString);
+    }
+
+    /**
      * Returns the variable name that the question is filling out.
+     * <p>
+     * According to XEP-4 § 3.2 the variable name (the 'var' attribute)
+     * "uniquely identifies the field in the context of the form" (if the field is not of type 'fixed', in which case
+     * the field "MAY possess a 'var' attribute")
+     * </p>
      *
      * @return the variable name of the question.
      */
@@ -163,11 +303,21 @@ public class FormField {
     }
 
     /**
+     * Get validate element.
+     *
+     * @return the validateElement
+     */
+    public ValidateElement getValidateElement() {
+        return validateElement;
+    }
+
+    /**
      * Sets a description that provides extra clarification about the question. This information
      * could be presented to the user either in tool-tip, help button, or as a section of text
-     * before the question.<p>
-     * <p/>
+     * before the question.
+     * <p>
      * If the question is of type FIXED then the description should remain empty.
+     * </p>
      *
      * @param description provides extra clarification about the question.
      */
@@ -195,27 +345,29 @@ public class FormField {
     }
 
     /**
-     * Sets an indicative of the format for the data to answer. Valid formats are:
-     * <p/>
-     * <ul>
-     * <li>text-single -> single line or word of text
-     * <li>text-private -> instead of showing the user what they typed, you show ***** to
-     * protect it
-     * <li>text-multi -> multiple lines of text entry
-     * <li>list-single -> given a list of choices, pick one
-     * <li>list-multi -> given a list of choices, pick one or more
-     * <li>boolean -> 0 or 1, true or false, yes or no. Default value is 0
-     * <li>fixed -> fixed for putting in text to show sections, or just advertise your web
-     * site in the middle of the form
-     * <li>hidden -> is not given to the user at all, but returned with the questionnaire
-     * <li>jid-single -> Jabber ID - choosing a JID from your roster, and entering one based
-     * on the rules for a JID.
-     * <li>jid-multi -> multiple entries for JIDs
-     * </ul>
+     * Set validate element.
+     * @param validateElement the validateElement to set
+     */
+    public void setValidateElement(ValidateElement validateElement) {
+        validateElement.checkConsistency(this);
+        this.validateElement = validateElement;
+    }
+
+    /**
+     * Sets an indicative of the format for the data to answer.
+     * <p>
+     * This method will throw an IllegalArgumentException if type is 'fixed'. To create FormFields of type 'fixed' use
+     * {@link #FormField()} instead.
+     * </p>
      *
      * @param type an indicative of the format for the data to answer.
+     * @see Type
+     * @throws IllegalArgumentException if type is 'fixed'.
      */
-    public void setType(String type) {
+    public void setType(Type type) {
+        if (type == Type.fixed) {
+            throw new IllegalArgumentException("Can not set type to fixed, use FormField constructor without arguments instead.");
+        }
         this.type = type;
     }
 
@@ -225,10 +377,22 @@ public class FormField {
      *
      * @param value a default value or an answered value of the question.
      */
-    public void addValue(String value) {
+    public void addValue(CharSequence value) {
         synchronized (values) {
             values.add(value);
         }
+    }
+
+    /**
+     * Adds the given Date as XEP-0082 formated string by invoking {@link #addValue(CharSequence)} after the date
+     * instance was formated.
+     *
+     * @param date the date instance to add as XEP-0082 formated string.
+     * @since 4.3.0
+     */
+    public void addValue(Date date) {
+        String dateString = XmppDateTime.formatXEP0082Date(date);
+        addValue(dateString);
     }
 
     /**
@@ -237,7 +401,7 @@ public class FormField {
      *
      * @param newValues default values or an answered values of the question.
      */
-    public void addValues(List<String> newValues) {
+    public void addValues(List<? extends CharSequence> newValues) {
         synchronized (values) {
             values.addAll(newValues);
         }
@@ -248,7 +412,7 @@ public class FormField {
      */
     protected void resetValues() {
         synchronized (values) {
-            values.removeAll(new ArrayList<String>(values));
+            values.clear();
         }
     }
 
@@ -264,26 +428,32 @@ public class FormField {
         }
     }
 
-    public XmlStringBuilder toXML() {
-        XmlStringBuilder buf = new XmlStringBuilder();
-        buf.halfOpenElement(ELEMENT);
+    @Override
+    public String getElementName() {
+        return ELEMENT;
+    }
+
+    @Override
+    public XmlStringBuilder toXML(XmlEnvironment enclosingNamespace) {
+        XmlStringBuilder buf = new XmlStringBuilder(this);
         // Add attributes
         buf.optAttribute("label", getLabel());
         buf.optAttribute("var", getVariable());
         buf.optAttribute("type", getType());
-        buf.rightAngelBracket();
+        buf.rightAngleBracket();
         // Add elements
         buf.optElement("desc", getDescription());
         buf.condEmptyElement(isRequired(), "required");
         // Loop through all the values and append them to the string buffer
-        for (String value : getValues()) {
+        for (CharSequence value : getValues()) {
             buf.element("value", value);
         }
         // Loop through all the values and append them to the string buffer
         for (Option option : getOptions()) {
             buf.append(option.toXML());
         }
-        buf.closeElement(ELEMENT);
+        buf.optElement(validateElement);
+        buf.closeElement(this);
         return buf;
     }
 
@@ -298,12 +468,12 @@ public class FormField {
 
         FormField other = (FormField) obj;
 
-        return toXML().equals(other.toXML());
+        return toXML().toString().equals(other.toXML().toString());
     }
 
     @Override
     public int hashCode() {
-        return toXML().hashCode();
+        return toXML().toString().hashCode();
     }
 
     /**
@@ -311,9 +481,9 @@ public class FormField {
      *
      * @author Gaston Dombiak
      */
-    public static class Option {
+    public static final class Option implements NamedElement {
 
-        public static final String ELEMNT = "option";
+        public static final String ELEMENT = "option";
 
         private final String value;
         private String label;
@@ -350,17 +520,22 @@ public class FormField {
             return getLabel();
         }
 
-        public XmlStringBuilder toXML() {
-            XmlStringBuilder xml = new XmlStringBuilder();
-            xml.halfOpenElement(ELEMNT);
+        @Override
+        public String getElementName() {
+            return ELEMENT;
+        }
+
+        @Override
+        public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
+            XmlStringBuilder xml = new XmlStringBuilder(this);
             // Add attribute
             xml.optAttribute("label", getLabel());
-            xml.rightAngelBracket();
+            xml.rightAngleBracket();
 
             // Add element
             xml.element("value", getValue());
 
-            xml.closeElement(ELEMENT);
+            xml.closeElement(this);
             return xml;
         }
 

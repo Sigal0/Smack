@@ -1,6 +1,6 @@
 /**
  *
- * Copyright 2003-2007 Jive Software, 2014 Florian Schmaus
+ * Copyright 2003-2007 Jive Software, 2014-2019 Florian Schmaus
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,12 +19,13 @@ package org.jivesoftware.smackx.iqlast.packet;
 
 import java.io.IOException;
 
-import org.jivesoftware.smack.SmackException;
 import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
 import org.jivesoftware.smack.provider.IQProvider;
-import org.jivesoftware.smack.util.XmlStringBuilder;
-import org.xmlpull.v1.XmlPullParser;
-import org.xmlpull.v1.XmlPullParserException;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
+import org.jxmpp.jid.Jid;
 
 /**
  * A last activity IQ for retrieving information about the last activity associated with a Jabber ID.
@@ -37,31 +38,29 @@ import org.xmlpull.v1.XmlPullParserException;
  */
 public class LastActivity extends IQ {
 
+    public static final String ELEMENT = QUERY_ELEMENT;
     public static final String NAMESPACE = "jabber:iq:last";
 
     public long lastActivity = -1;
     public String message;
 
     public LastActivity() {
+        super(ELEMENT, NAMESPACE);
         setType(IQ.Type.get);
     }
 
-    public LastActivity(String to) {
+    public LastActivity(Jid to) {
         this();
         setTo(to);
     }
 
     @Override
-    public XmlStringBuilder getChildElementXML() {
-        XmlStringBuilder xml = new XmlStringBuilder();
-        xml.halfOpenElement("query");
-        xml.xmlnsAttribute(NAMESPACE);
-        if (lastActivity != -1) {
-            xml.attribute("seconds", Long.toString(lastActivity));
-        }
+    protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder xml) {
+        xml.optLongAttribute("seconds", lastActivity);
+
         // We don't support adding the optional message attribute, because it is usually only added
         // by XMPP servers and not by client entities.
-        xml.closeEmptyElement();
+        xml.setEmptyElement();
         return xml;
     }
 
@@ -101,31 +100,21 @@ public class LastActivity extends IQ {
      *
      * @author Derek DeMoro
      */
-    public static class Provider implements IQProvider {
+    public static class Provider extends IQProvider<LastActivity> {
 
-        public Provider() {
-            super();
-        }
-
-        public IQ parseIQ(XmlPullParser parser) throws SmackException, XmlPullParserException {
-            if (parser.getEventType() != XmlPullParser.START_TAG) {
-                throw new SmackException("Parser not in proper position, or bad XML.");
-            }
-
+        @Override
+        public LastActivity parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException {
             LastActivity lastActivity = new LastActivity();
             String seconds = parser.getAttributeValue("", "seconds");
             if (seconds != null) {
                 try {
                     lastActivity.setLastActivity(Long.parseLong(seconds));
                 } catch (NumberFormatException e) {
-                    throw new SmackException("Could not parse last activity number", e);
+                    // TODO: Should be SmackParseException (or a SmackParseNumberException subclass of).
+                    throw new IOException("Could not parse last activity number", e);
                 }
             }
-            try {
-                lastActivity.setMessage(parser.nextText());
-            } catch (IOException e) {
-                throw new SmackException(e);
-            }
+            lastActivity.setMessage(parser.nextText());
             return lastActivity;
         }
     }

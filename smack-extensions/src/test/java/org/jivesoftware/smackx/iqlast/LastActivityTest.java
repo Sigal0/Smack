@@ -21,13 +21,14 @@ import static org.junit.Assert.assertTrue;
 
 import org.jivesoftware.smack.DummyConnection;
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.Packet;
+import org.jivesoftware.smack.packet.Stanza;
 import org.jivesoftware.smack.util.PacketParserUtils;
+
 import org.jivesoftware.smackx.InitExtensions;
 import org.jivesoftware.smackx.iqlast.packet.LastActivity;
-import org.junit.Test;
 
 import com.jamesmurty.utils.XMLBuilder;
+import org.junit.Test;
 
 public class LastActivityTest extends InitExtensions {
 
@@ -42,14 +43,15 @@ public class LastActivityTest extends InitExtensions {
                 .namespace(LastActivity.NAMESPACE);
 
         DummyConnection c = new DummyConnection();
-        IQ lastRequest = (IQ) PacketParserUtils.parseStanza(xml.asString());
+        c.connect();
+        IQ lastRequest = PacketParserUtils.parseStanza(xml.asString());
         assertTrue(lastRequest instanceof LastActivity);
 
-        c.processPacket(lastRequest);;
-        Packet reply = c.getSentPacket();
+        c.processStanza(lastRequest);
+        Stanza reply = c.getSentPacket();
         assertTrue(reply instanceof LastActivity);
         LastActivity l = (LastActivity) reply;
-        assertEquals("last2", l.getPacketID());
+        assertEquals("last2", l.getStanzaId());
         assertEquals(IQ.Type.result, l.getType());
     }
 }

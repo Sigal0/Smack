@@ -17,19 +17,21 @@
 
 package org.jivesoftware.smack.packet;
 
+import java.util.List;
 import java.util.Locale;
 
+import org.jivesoftware.smack.util.Objects;
 import org.jivesoftware.smack.util.XmlStringBuilder;
 
 /**
  * The base IQ (Info/Query) packet. IQ packets are used to get and set information
  * on the server, including authentication, roster operations, and creating
- * accounts. Each IQ packet has a specific type that indicates what type of action
+ * accounts. Each IQ stanza has a specific type that indicates what type of action
  * is being taken: "get", "set", "result", or "error".<p>
  *
  * IQ packets can contain a single child element that exists in a specific XML
  * namespace. The combination of the element name and namespace determines what
- * type of IQ packet it is. Some example IQ subpacket snippets:<ul>
+ * type of IQ stanza it is. Some example IQ subpacket snippets:<ul>
  *
  *  <li>&lt;query xmlns="jabber:iq:auth"&gt; -- an authentication IQ.
  *  <li>&lt;query xmlns="jabber:iq:private"&gt; -- a private storage IQ.
@@ -38,20 +40,33 @@ import org.jivesoftware.smack.util.XmlStringBuilder;
  *
  * @author Matt Tucker
  */
-public abstract class IQ extends Packet {
+public abstract class IQ extends Stanza {
 
+    // Don't name this field 'ELEMENT'. When it comes to IQ, ELEMENT is the child element!
+    public static final String IQ_ELEMENT = "iq";
     public static final String QUERY_ELEMENT = "query";
 
-    private Type type = Type.get;
+    private final String childElementName;
+    private final String childElementNamespace;
 
-    public IQ() {
-        super();
-    }
+    private Type type = Type.get;
 
     public IQ(IQ iq) {
         super(iq);
         type = iq.getType();
+        this.childElementName = iq.childElementName;
+        this.childElementNamespace = iq.childElementNamespace;
     }
+
+    protected IQ(String childElementName) {
+        this(childElementName, null);
+    }
+
+    protected IQ(String childElementName, String childElementNamespace) {
+        this.childElementName = childElementName;
+        this.childElementNamespace = childElementNamespace;
+    }
+
     /**
      * Returns the type of the IQ packet.
      *
@@ -63,55 +78,190 @@ public abstract class IQ extends Packet {
 
     /**
      * Sets the type of the IQ packet.
+     * <p>
+     * Since the type of an IQ must present, an IllegalArgmentException will be thrown when type is
+     * <code>null</code>.
+     * </p>
      *
      * @param type the type of the IQ packet.
      */
     public void setType(Type type) {
-        if (type == null) {
-            this.type = Type.get;
-        }
-        else {
-            this.type = type;
+        this.type = Objects.requireNonNull(type, "type must not be null");
+    }
+
+    /**
+     * Return true if this IQ is a request IQ, i.e. an IQ of type {@link Type#get} or {@link Type#set}.
+     *
+     * @return true if IQ type is 'get' or 'set', false otherwise.
+     * @since 4.1
+     */
+    public boolean isRequestIQ() {
+        switch (type) {
+        case get:
+        case set:
+            return true;
+        default:
+            return false;
         }
     }
 
+    /**
+     * Return true if this IQ is a request, i.e. an IQ of type {@link Type#result} or {@link Type#error}.
+     *
+     * @return true if IQ type is 'result' or 'error', false otherwise.
+     * @since 4.4
+     */
+    public boolean isResponseIQ() {
+        return !isRequestIQ();
+    }
+
+    public final String getChildElementName() {
+        return childElementName;
+    }
+
+    public final String getChildElementNamespace() {
+        return childElementNamespace;
+    }
+
     @Override
-    public CharSequence toXML() {
-        XmlStringBuilder buf = new XmlStringBuilder();
-        buf.halfOpenElement("iq");
-        addCommonAttributes(buf);
+    public final String toString() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("IQ Stanza (");
+            sb.append(getChildElementName()).append(' ').append(getChildElementNamespace());
+            sb.append(") [");
+            logCommonAttributes(sb);
+            sb.append("type=").append(type).append(',');
+            sb.append(']');
+            return sb.toString();
+    }
+
+    @Override
+    public final XmlStringBuilder toXML(XmlEnvironment enclosingXmlEnvironment) {
+        XmlStringBuilder buf = new XmlStringBuilder(enclosingXmlEnvironment);
+        buf.halfOpenElement(IQ_ELEMENT);
+        addCommonAttributes(buf, enclosingXmlEnvironment);
         if (type == null) {
             buf.attribute("type", "get");
         }
         else {
             buf.attribute("type", type.toString());
         }
-        buf.rightAngelBracket();
-        // Add the query section if there is one.
-        buf.optAppend(getChildElementXML());
-        // Add the error sub-packet, if there is one.
-        XMPPError error = getError();
-        if (error != null) {
-            buf.append(error.toXML());
-        }
-        buf.closeElement("iq");
+        buf.rightAngleBracket();
+        buf.append(getChildElementXML(enclosingXmlEnvironment));
+        buf.closeElement(IQ_ELEMENT);
         return buf;
     }
 
     /**
-     * Returns the sub-element XML section of the IQ packet, or <tt>null</tt> if there
-     * isn't one. Packet extensions <b>must</b> be included, if any are defined.<p>
-     *
-     * Extensions of this class must override this method.
+     * Returns the sub-element XML section of the IQ packet, or the empty String if there
+     * isn't one.
      *
      * @return the child element section of the IQ XML.
      */
-    public abstract CharSequence getChildElementXML();
+    public final XmlStringBuilder getChildElementXML() {
+        return getChildElementXML(null);
+    }
+
+    /**
+     * Returns the sub-element XML section of the IQ packet, or the empty String if there
+     * isn't one.
+     *
+     * @param enclosingXmlEnvironment the enclosing XML namespace.
+     * @return the child element section of the IQ XML.
+     * @since 4.3.0
+     */
+    public final XmlStringBuilder getChildElementXML(XmlEnvironment enclosingXmlEnvironment) {
+        XmlStringBuilder xml = new XmlStringBuilder();
+        if (type == Type.error) {
+            // Add the error sub-packet, if there is one.
+            appendErrorIfExists(xml, enclosingXmlEnvironment);
+        }
+        else if (childElementName != null) {
+            // Add the query section if there is one.
+            IQChildElementXmlStringBuilder iqChildElement = getIQChildElementBuilder(new IQChildElementXmlStringBuilder(this));
+            if (iqChildElement != null) {
+                xml.append(iqChildElement);
+
+                List<ExtensionElement> extensionsXml = getExtensions();
+                if (iqChildElement.isEmptyElement) {
+                    if (extensionsXml.isEmpty()) {
+                         xml.closeEmptyElement();
+                         return xml;
+                    } else {
+                        xml.rightAngleBracket();
+                    }
+                }
+                xml.append(extensionsXml);
+                xml.closeElement(iqChildElement.element);
+            }
+        }
+        return xml;
+    }
+
+    /**
+     * This method must be overwritten by IQ subclasses to create their child content. It is important you don't use the builder
+     * <b>to add the final end tag</b>. This will be done automatically by {@link IQChildElementXmlStringBuilder}
+     * after eventual existing {@link ExtensionElement}s have been added.
+     * <p>
+     * For example to create an IQ with a extra attribute and an additional child element
+     * </p>
+     * <pre>
+     * {@code
+     * <iq to='foo@example.org' id='123'>
+     *   <bar xmlns='example:bar' extraAttribute='blaz'>
+     *      <extraElement>elementText</extraElement>
+     *   </bar>
+     * </iq>
+     * }
+     * </pre>
+     * the body of the {@code getIQChildElementBuilder} looks like
+     * <pre>
+     * {@code
+     * // The builder 'xml' will already have the child element and the 'xmlns' attribute added
+     * // So the current builder state is "<bar xmlns='example:bar'"
+     * xml.attribute("extraAttribute", "blaz");
+     * xml.rightAngleBracket();
+     * xml.element("extraElement", "elementText");
+     * // Do not close the 'bar' attribute by calling xml.closeElement('bar')
+     * }
+     * </pre>
+     * If your IQ only contains attributes and no child elements, i.e. it can be represented as empty element, then you
+     * can mark it as such.
+     * <pre>
+     * xml.attribute(&quot;myAttribute&quot;, &quot;myAttributeValue&quot;);
+     * xml.setEmptyElement();
+     * </pre>
+     * If your IQ does not contain any attributes or child elements (besides {@link ExtensionElement}s), consider sub-classing
+     * {@link SimpleIQ} instead.
+     *
+     * @param xml a pre-created builder which already has the child element and the 'xmlns' attribute set.
+     * @return the build to create the IQ child content.
+     */
+    protected abstract IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder xml);
+
+    /**
+     * @deprecated use {@link #initializeAsResultFor(IQ)} instead.
+     */
+    @Deprecated
+    protected final void initialzeAsResultFor(IQ request) {
+        initializeAsResultFor(request);
+    }
+
+    protected final void initializeAsResultFor(IQ request) {
+        if (!(request.getType() == Type.get || request.getType() == Type.set)) {
+            throw new IllegalArgumentException(
+                    "IQ must be of type 'set' or 'get'. Original IQ: " + request.toXML());
+        }
+        setStanzaId(request.getStanzaId());
+        setFrom(request.getTo());
+        setTo(request.getFrom());
+        setType(Type.result);
+    }
 
     /**
      * Convenience method to create a new empty {@link Type#result IQ.Type.result}
      * IQ based on a {@link Type#get IQ.Type.get} or {@link Type#set IQ.Type.set}
-     * IQ. The new packet will be initialized with:<ul>
+     * IQ. The new stanza will be initialized with:<ul>
      *      <li>The sender set to the recipient of the originating IQ.
      *      <li>The recipient set to the sender of the originating IQ.
      *      <li>The type set to {@link Type#result IQ.Type.result}.
@@ -120,80 +270,98 @@ public abstract class IQ extends Packet {
      * </ul>
      *
      * @param request the {@link Type#get IQ.Type.get} or {@link Type#set IQ.Type.set} IQ packet.
-     * @throws IllegalArgumentException if the IQ packet does not have a type of
+     * @throws IllegalArgumentException if the IQ stanza does not have a type of
      *      {@link Type#get IQ.Type.get} or {@link Type#set IQ.Type.set}.
      * @return a new {@link Type#result IQ.Type.result} IQ based on the originating IQ.
      */
     public static IQ createResultIQ(final IQ request) {
-        if (!(request.getType() == Type.get || request.getType() == Type.set)) {
-            throw new IllegalArgumentException(
-                    "IQ must be of type 'set' or 'get'. Original IQ: " + request.toXML());
-        }
-        final IQ result = new IQ() {
-            public String getChildElementXML() {
-                return null;
-            }
-        };
-        result.setType(Type.result);
-        result.setPacketID(request.getPacketID());
-        result.setFrom(request.getTo());
-        result.setTo(request.getFrom());
-        return result;
+        return new EmptyResultIQ(request);
     }
 
     /**
      * Convenience method to create a new {@link Type#error IQ.Type.error} IQ
      * based on a {@link Type#get IQ.Type.get} or {@link Type#set IQ.Type.set}
-     * IQ. The new packet will be initialized with:<ul>
+     * IQ. The new stanza will be initialized with:<ul>
      *      <li>The sender set to the recipient of the originating IQ.
      *      <li>The recipient set to the sender of the originating IQ.
      *      <li>The type set to {@link Type#error IQ.Type.error}.
      *      <li>The id set to the id of the originating IQ.
      *      <li>The child element contained in the associated originating IQ.
-     *      <li>The provided {@link XMPPError XMPPError}.
+     *      <li>The provided {@link StanzaError XMPPError}.
      * </ul>
      *
      * @param request the {@link Type#get IQ.Type.get} or {@link Type#set IQ.Type.set} IQ packet.
      * @param error the error to associate with the created IQ packet.
-     * @throws IllegalArgumentException if the IQ packet does not have a type of
+     * @throws IllegalArgumentException if the IQ stanza does not have a type of
      *      {@link Type#get IQ.Type.get} or {@link Type#set IQ.Type.set}.
      * @return a new {@link Type#error IQ.Type.error} IQ based on the originating IQ.
      */
-    public static IQ createErrorResponse(final IQ request, final XMPPError error) {
-        if (!(request.getType() == Type.get || request.getType() == Type.set)) {
+    public static ErrorIQ createErrorResponse(final IQ request, final StanzaError.Builder error) {
+        if (!request.isRequestIQ()) {
             throw new IllegalArgumentException(
                     "IQ must be of type 'set' or 'get'. Original IQ: " + request.toXML());
         }
-        final IQ result = new IQ() {
-            @Override
-            public CharSequence getChildElementXML() {
-                return request.getChildElementXML();
-            }
-        };
-        result.setType(Type.error);
-        result.setPacketID(request.getPacketID());
+        final ErrorIQ result = new ErrorIQ(error);
+        result.setStanzaId(request.getStanzaId());
         result.setFrom(request.getTo());
         result.setTo(request.getFrom());
-        result.setError(error);
+
+        error.setStanza(result);
+
         return result;
     }
 
+    public static ErrorIQ createErrorResponse(final IQ request, final StanzaError.Condition condition) {
+        return createErrorResponse(request, StanzaError.getBuilder(condition));
+    }
+
     /**
-     * A enum to represent the type of the IQ packet. The types are:
-     *
-     * <ul>
-     *      <li>IQ.Type.get
-     *      <li>IQ.Type.set
-     *      <li>IQ.Type.result
-     *      <li>IQ.Type.error
+     * Convenience method to create a new {@link Type#error IQ.Type.error} IQ
+     * based on a {@link Type#get IQ.Type.get} or {@link Type#set IQ.Type.set}
+     * IQ. The new stanza will be initialized with:<ul>
+     *      <li>The sender set to the recipient of the originating IQ.
+     *      <li>The recipient set to the sender of the originating IQ.
+     *      <li>The type set to {@link Type#error IQ.Type.error}.
+     *      <li>The id set to the id of the originating IQ.
+     *      <li>The child element contained in the associated originating IQ.
+     *      <li>The provided {@link StanzaError XMPPError}.
      * </ul>
+     *
+     * @param request the {@link Type#get IQ.Type.get} or {@link Type#set IQ.Type.set} IQ packet.
+     * @param error the error to associate with the created IQ packet.
+     * @throws IllegalArgumentException if the IQ stanza does not have a type of
+     *      {@link Type#get IQ.Type.get} or {@link Type#set IQ.Type.set}.
+     * @return a new {@link Type#error IQ.Type.error} IQ based on the originating IQ.
+     */
+    public static ErrorIQ createErrorResponse(final IQ request, final StanzaError error) {
+        return createErrorResponse(request, StanzaError.getBuilder(error));
+    }
+
+    /**
+     * A enum to represent the type of the IQ stanza.
      */
     public enum Type {
 
+        /**
+         * The IQ stanza requests information, inquires about what data is needed in order to complete further operations, etc.
+         */
         get,
+
+        /**
+         * The IQ stanza provides data that is needed for an operation to be completed, sets new values, replaces existing values, etc.
+         */
         set,
+
+        /**
+         * The IQ stanza is a response to a successful get or set request.
+         */
         result,
-        error;
+
+        /**
+         * The IQ stanza reports an error that has occurred regarding processing or delivery of a get or set request.
+         */
+        error,
+        ;
 
         /**
          * Converts a String into the corresponding types. Valid String values
@@ -206,6 +374,29 @@ public abstract class IQ extends Packet {
          */
         public static Type fromString(String string) {
             return Type.valueOf(string.toLowerCase(Locale.US));
+        }
+    }
+
+    public static class IQChildElementXmlStringBuilder extends XmlStringBuilder {
+        private final String element;
+
+        private boolean isEmptyElement;
+
+        private IQChildElementXmlStringBuilder(IQ iq) {
+            this(iq.getChildElementName(), iq.getChildElementNamespace());
+        }
+
+        public IQChildElementXmlStringBuilder(ExtensionElement pe) {
+            this(pe.getElementName(), pe.getNamespace());
+        }
+
+        private IQChildElementXmlStringBuilder(String element, String namespace) {
+            prelude(element, namespace);
+            this.element = element;
+        }
+
+        public void setEmptyElement() {
+            isEmptyElement = true;
         }
     }
 }

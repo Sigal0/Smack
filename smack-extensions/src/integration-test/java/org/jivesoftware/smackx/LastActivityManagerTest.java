@@ -35,7 +35,7 @@ public class LastActivityManagerTest extends SmackTestCase {
 
 		// Send a message as the last activity action from connection 1 to
 		// connection 0
-		conn1.sendPacket(new Message(getBareJID(0)));
+		conn1.sendStanza(new Message(getBareJID(0)));
 
 		// Wait 1 seconds to have some idle time
 		try {
@@ -70,7 +70,7 @@ public class LastActivityManagerTest extends SmackTestCase {
 
 		// Send a message as the last activity action from connection 2 to
 		// connection 0
-		conn2.sendPacket(new Message(getBareJID(0)));
+		conn2.sendStanza(new Message(getBareJID(0)));
 
 		// Wait 1 seconds to have some idle time
 		try {
@@ -84,9 +84,9 @@ public class LastActivityManagerTest extends SmackTestCase {
 			LastActivityManager.getLastActivity(conn0, getFullJID(2));
             fail("No error was received from the server. User was able to get info of other user not in his roster.");
         } catch (XMPPException e) {
-            assertNotNull("No error was returned from the server", e.getXMPPError());
+            assertNotNull("No error was returned from the server", e.getStanzaError());
             assertEquals("Forbidden error was not returned from the server", 403,
-                    e.getXMPPError().getCode());
+                    e.getStanzaError().getCode());
         }
 	}
 
@@ -121,7 +121,7 @@ public class LastActivityManagerTest extends SmackTestCase {
 		try {
 			lastActivity = LastActivityManager.getLastActivity(conn0, getHost());
 		} catch (XMPPException e) {
-			if (e.getXMPPError().getCode() == 403) {
+			if (e.getStanzaError().getCode() == 403) {
 				//The test can not be done since the host do not allow this kind of request
 				return;
 			}

@@ -23,16 +23,16 @@ package org.jivesoftware.smack.util;
  *
  * @see ObservableReader#addReaderListener
  * @see ObservableReader#removeReaderListener
- * 
+ *
  * @author Gaston Dombiak
  */
 public interface ReaderListener {
 
     /**
      * Notification that the Reader has read a new string.
-     * 
+     *
      * @param str the read String
      */
-    public abstract void read(String str);
-    
+    void read(String str);
+
 }

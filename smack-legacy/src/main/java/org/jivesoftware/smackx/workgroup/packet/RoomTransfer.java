@@ -17,24 +17,31 @@
 
 package org.jivesoftware.smackx.workgroup.packet;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
-import org.xmlpull.v1.XmlPullParser;
+import java.io.IOException;
+
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.IQ.IQChildElementXmlStringBuilder;
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.provider.ExtensionElementProvider;
+import org.jivesoftware.smack.util.XmlStringBuilder;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
 
 /**
- * Packet extension for {@link org.jivesoftware.smackx.workgroup.agent.TransferRequest}.
+ * Stanza extension for {@link org.jivesoftware.smackx.workgroup.agent.TransferRequest}.
  *
  * @author Gaston Dombiak
  */
-public class RoomTransfer implements PacketExtension {
+public class RoomTransfer implements ExtensionElement {
 
     /**
-     * Element name of the packet extension.
+     * Element name of the stanza extension.
      */
     public static final String ELEMENT_NAME = "transfer";
 
     /**
-     * Namespace of the packet extension.
+     * Namespace of the stanza extension.
      */
     public static final String NAMESPACE = "http://jabber.org/protocol/workgroup";
 
@@ -74,10 +81,12 @@ public class RoomTransfer implements PacketExtension {
     private RoomTransfer() {
     }
 
+    @Override
     public String getElementName() {
         return ELEMENT_NAME;
     }
 
+    @Override
     public String getNamespace() {
         return NAMESPACE;
     }
@@ -98,11 +107,15 @@ public class RoomTransfer implements PacketExtension {
         return sessionID;
     }
 
-    public String toXML() {
-        StringBuilder buf = new StringBuilder();
+    @Override
+    public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
+        XmlStringBuilder xml = getIQChildElementBuilder(new IQChildElementXmlStringBuilder(this));
+        xml.closeElement(this);
+        return xml;
+    }
 
-        buf.append("<").append(ELEMENT_NAME).append(" xmlns=\"").append(NAMESPACE);
-        buf.append("\" type=\"").append(type).append("\">");
+    public IQ.IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder buf) {
+        buf.append(" type=\"").append(type.name()).append("\">");
         buf.append("<session xmlns=\"http://jivesoftware.com/protocol/workgroup\" id=\"").append(sessionID).append("\"></session>");
         if (invitee != null) {
             buf.append("<invitee>").append(invitee).append("</invitee>");
@@ -113,16 +126,14 @@ public class RoomTransfer implements PacketExtension {
         if (reason != null) {
             buf.append("<reason>").append(reason).append("</reason>");
         }
-        // Add packet extensions, if any are defined.
-        buf.append("</").append(ELEMENT_NAME).append("> ");
 
-        return buf.toString();
+        return buf;
     }
 
     /**
      * Type of entity being invited to a groupchat support session.
      */
-    public static enum Type {
+    public enum Type {
         /**
          * A user is being invited to a groupchat support session. The user could be another agent
          * or just a regular XMPP user.
@@ -138,9 +149,24 @@ public class RoomTransfer implements PacketExtension {
         workgroup
     }
 
-    public static class Provider implements PacketExtensionProvider {
+    public static class RoomTransferIQ extends IQ {
+        private final RoomTransfer roomTransfer;
+        public RoomTransferIQ(RoomTransfer roomTransfer) {
+            super(ELEMENT_NAME, NAMESPACE);
+            this.roomTransfer = roomTransfer;
+        }
+        @Override
+        protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder xml) {
+            return roomTransfer.getIQChildElementBuilder(xml);
+        }
+    }
 
-        public PacketExtension parseExtension(XmlPullParser parser) throws Exception {
+    public static class Provider extends ExtensionElementProvider<RoomTransfer> {
+
+        @Override
+        public RoomTransfer parse(XmlPullParser parser,
+                        int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException,
+                        IOException {
             final RoomTransfer invitation = new RoomTransfer();
             invitation.type = RoomTransfer.Type.valueOf(parser.getAttributeValue("", "type"));
 
@@ -148,7 +174,7 @@ public class RoomTransfer implements PacketExtension {
             while (!done) {
                 parser.next();
                 String elementName = parser.getName();
-                if (parser.getEventType() == XmlPullParser.START_TAG) {
+                if (parser.getEventType() == XmlPullParser.Event.START_ELEMENT) {
                     if ("session".equals(elementName)) {
                         invitation.sessionID = parser.getAttributeValue("", "id");
                     }
@@ -165,7 +191,7 @@ public class RoomTransfer implements PacketExtension {
                         invitation.room = parser.nextText();
                     }
                 }
-                else if (parser.getEventType() == XmlPullParser.END_TAG && ELEMENT_NAME.equals(elementName)) {
+                else if (parser.getEventType() == XmlPullParser.Event.END_ELEMENT && ELEMENT_NAME.equals(elementName)) {
                     done = true;
                 }
             }

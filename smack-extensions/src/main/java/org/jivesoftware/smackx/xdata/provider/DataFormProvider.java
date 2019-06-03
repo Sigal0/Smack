@@ -17,138 +17,218 @@
 
 package org.jivesoftware.smackx.xdata.provider;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.provider.PacketExtensionProvider;
-import org.jivesoftware.smackx.xdata.FormField;
-import org.jivesoftware.smackx.xdata.packet.DataForm;
-import org.xmlpull.v1.XmlPullParser;
-
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.jivesoftware.smack.packet.XmlEnvironment;
+import org.jivesoftware.smack.parsing.SmackParsingException;
+import org.jivesoftware.smack.provider.ExtensionElementProvider;
+import org.jivesoftware.smack.roster.packet.RosterPacket;
+import org.jivesoftware.smack.roster.provider.RosterPacketProvider;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
+import org.jivesoftware.smackx.xdata.FormField;
+import org.jivesoftware.smackx.xdata.packet.DataForm;
+import org.jivesoftware.smackx.xdatalayout.packet.DataLayout;
+import org.jivesoftware.smackx.xdatalayout.provider.DataLayoutProvider;
+import org.jivesoftware.smackx.xdatavalidation.packet.ValidateElement;
+import org.jivesoftware.smackx.xdatavalidation.provider.DataValidationProvider;
+
 /**
  * The DataFormProvider parses DataForm packets.
- * 
+ *
  * @author Gaston Dombiak
  */
-public class DataFormProvider implements PacketExtensionProvider {
+public class DataFormProvider extends ExtensionElementProvider<DataForm> {
 
-    /**
-     * Creates a new DataFormProvider.
-     * ProviderManager requires that every PacketExtensionProvider has a public, no-argument constructor
-     */
-    public DataFormProvider() {
-    }
+    public static final DataFormProvider INSTANCE = new DataFormProvider();
 
-    public PacketExtension parseExtension(XmlPullParser parser) throws Exception {
-        boolean done = false;
-        DataForm dataForm = new DataForm(parser.getAttributeValue("", "type"));
-        while (!done) {
-            int eventType = parser.next();
-            if (eventType == XmlPullParser.START_TAG) {
-                if (parser.getName().equals("instructions")) { 
+    @Override
+    public DataForm parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException, SmackParsingException {
+        DataForm.Type dataFormType = DataForm.Type.fromString(parser.getAttributeValue("", "type"));
+        DataForm dataForm = new DataForm(dataFormType);
+        outerloop: while (true) {
+            XmlPullParser.Event eventType = parser.next();
+            switch (eventType) {
+            case START_ELEMENT:
+                String name = parser.getName();
+                String namespace = parser.getNamespace();
+                switch (name) {
+                case "instructions":
                     dataForm.addInstruction(parser.nextText());
-                }
-                else if (parser.getName().equals("title")) {                    
+                    break;
+                case "title":
                     dataForm.setTitle(parser.nextText());
-                }
-                else if (parser.getName().equals("field")) {                    
+                    break;
+                case "field":
                     dataForm.addField(parseField(parser));
-                }
-                else if (parser.getName().equals("item")) {                    
+                    break;
+                case "item":
                     dataForm.addItem(parseItem(parser));
-                }
-                else if (parser.getName().equals("reported")) {                    
+                    break;
+                case "reported":
                     dataForm.setReportedData(parseReported(parser));
+                    break;
+                // See XEP-133 Example 32 for a corner case where the data form contains this extension.
+                case RosterPacket.ELEMENT:
+                    if (namespace.equals(RosterPacket.NAMESPACE)) {
+                        dataForm.addExtensionElement(RosterPacketProvider.INSTANCE.parse(parser));
+                    }
+                    break;
+                // See XEP-141 Data Forms Layout
+                case DataLayout.ELEMENT:
+                    if (namespace.equals(DataLayout.NAMESPACE)) {
+                        dataForm.addExtensionElement(DataLayoutProvider.parse(parser));
+                    }
+                    break;
                 }
-            } else if (eventType == XmlPullParser.END_TAG) {
-                if (parser.getName().equals(dataForm.getElementName())) {
-                    done = true;
+                break;
+            case END_ELEMENT:
+                if (parser.getDepth() == initialDepth) {
+                    break outerloop;
                 }
+                break;
+            default:
+                // Catch all for incomplete switch (MissingCasesInEnumSwitch) statement.
+                break;
             }
         }
         return dataForm;
     }
 
-    private FormField parseField(XmlPullParser parser) throws Exception {
-        boolean done = false;
-        FormField formField = new FormField(parser.getAttributeValue("", "var"));
+    private static FormField parseField(XmlPullParser parser) throws XmlPullParserException, IOException {
+        final int initialDepth = parser.getDepth();
+        final String var = parser.getAttributeValue("", "var");
+        final FormField.Type type = FormField.Type.fromString(parser.getAttributeValue("", "type"));
+
+        final FormField formField;
+        if (type == FormField.Type.fixed) {
+            formField = new FormField();
+        } else {
+            formField = new FormField(var);
+            formField.setType(type);
+        }
         formField.setLabel(parser.getAttributeValue("", "label"));
-        formField.setType(parser.getAttributeValue("", "type"));
-        while (!done) {
-            int eventType = parser.next();
-            if (eventType == XmlPullParser.START_TAG) {
-                if (parser.getName().equals("desc")) { 
+
+        outerloop: while (true) {
+            XmlPullParser.Event eventType = parser.next();
+            switch (eventType) {
+            case START_ELEMENT:
+                String name = parser.getName();
+                String namespace = parser.getNamespace();
+                switch (name) {
+                case "desc":
                     formField.setDescription(parser.nextText());
-                }
-                else if (parser.getName().equals("value")) {                    
+                    break;
+                case "value":
                     formField.addValue(parser.nextText());
-                }
-                else if (parser.getName().equals("required")) {                    
+                    break;
+                case "required":
                     formField.setRequired(true);
-                }
-                else if (parser.getName().equals("option")) {                    
+                    break;
+                case "option":
                     formField.addOption(parseOption(parser));
+                    break;
+                // See XEP-122 Data Forms Validation
+                case ValidateElement.ELEMENT:
+                    if (namespace.equals(ValidateElement.NAMESPACE)) {
+                        formField.setValidateElement(DataValidationProvider.parse(parser));
+                    }
+                    break;
                 }
-            } else if (eventType == XmlPullParser.END_TAG) {
-                if (parser.getName().equals("field")) {
-                    done = true;
+                break;
+            case END_ELEMENT:
+                if (parser.getDepth() == initialDepth) {
+                    break outerloop;
                 }
+                break;
+            default:
+                // Catch all for incomplete switch (MissingCasesInEnumSwitch) statement.
+                break;
             }
         }
         return formField;
     }
 
-    private DataForm.Item parseItem(XmlPullParser parser) throws Exception {
-        boolean done = false;
-        List<FormField> fields = new ArrayList<FormField>();
-        while (!done) {
-            int eventType = parser.next();
-            if (eventType == XmlPullParser.START_TAG) {
-                if (parser.getName().equals("field")) { 
+    private static DataForm.Item parseItem(XmlPullParser parser) throws XmlPullParserException, IOException {
+        final int initialDepth = parser.getDepth();
+        List<FormField> fields = new ArrayList<>();
+        outerloop: while (true) {
+            XmlPullParser.Event eventType = parser.next();
+            switch (eventType) {
+            case START_ELEMENT:
+                String name = parser.getName();
+                switch (name) {
+                case "field":
                     fields.add(parseField(parser));
+                    break;
                 }
-            } else if (eventType == XmlPullParser.END_TAG) {
-                if (parser.getName().equals("item")) {
-                    done = true;
+                break;
+            case END_ELEMENT:
+                if (parser.getDepth() == initialDepth) {
+                    break outerloop;
                 }
+                break;
+            default:
+                // Catch all for incomplete switch (MissingCasesInEnumSwitch) statement.
+                break;
             }
         }
         return new DataForm.Item(fields);
     }
 
-    private DataForm.ReportedData parseReported(XmlPullParser parser) throws Exception {
-        boolean done = false;
-        List<FormField> fields = new ArrayList<FormField>();
-        while (!done) {
-            int eventType = parser.next();
-            if (eventType == XmlPullParser.START_TAG) {
-                if (parser.getName().equals("field")) { 
+    private static DataForm.ReportedData parseReported(XmlPullParser parser) throws XmlPullParserException, IOException {
+        final int initialDepth = parser.getDepth();
+        List<FormField> fields = new ArrayList<>();
+        outerloop: while (true) {
+            XmlPullParser.Event eventType = parser.next();
+            switch (eventType) {
+            case START_ELEMENT:
+                String name = parser.getName();
+                switch (name) {
+                case "field":
                     fields.add(parseField(parser));
+                    break;
                 }
-            } else if (eventType == XmlPullParser.END_TAG) {
-                if (parser.getName().equals("reported")) {
-                    done = true;
+                break;
+            case END_ELEMENT:
+                if (parser.getDepth() == initialDepth) {
+                    break outerloop;
                 }
+                break;
+            default:
+                // Catch all for incomplete switch (MissingCasesInEnumSwitch) statement.
+                break;
             }
         }
         return new DataForm.ReportedData(fields);
     }
 
-    private FormField.Option parseOption(XmlPullParser parser) throws Exception {
-        boolean done = false;
+    private static FormField.Option parseOption(XmlPullParser parser) throws XmlPullParserException, IOException {
+        final int initialDepth = parser.getDepth();
         FormField.Option option = null;
         String label = parser.getAttributeValue("", "label");
-        while (!done) {
-            int eventType = parser.next();
-            if (eventType == XmlPullParser.START_TAG) {
-                if (parser.getName().equals("value")) {
-                    option = new FormField.Option(label, parser.nextText());                     
+        outerloop: while (true) {
+            XmlPullParser.Event eventType = parser.next();
+            switch (eventType) {
+            case START_ELEMENT:
+                String name = parser.getName();
+                switch (name) {
+                case "value":
+                    option = new FormField.Option(label, parser.nextText());
+                    break;
                 }
-            } else if (eventType == XmlPullParser.END_TAG) {
-                if (parser.getName().equals("option")) {
-                    done = true;
+                break;
+            case END_ELEMENT:
+                if (parser.getDepth() == initialDepth) {
+                    break outerloop;
                 }
+                break;
+            default:
+                // Catch all for incomplete switch (MissingCasesInEnumSwitch) statement.
+                break;
             }
         }
         return option;

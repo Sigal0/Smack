@@ -17,26 +17,32 @@
 
 package org.jivesoftware.smackx.commands.packet;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import org.jivesoftware.smack.packet.ExtensionElement;
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.PacketExtension;
+
 import org.jivesoftware.smackx.commands.AdHocCommand;
 import org.jivesoftware.smackx.commands.AdHocCommand.Action;
 import org.jivesoftware.smackx.commands.AdHocCommand.SpecificErrorCondition;
 import org.jivesoftware.smackx.commands.AdHocCommandNote;
 import org.jivesoftware.smackx.xdata.packet.DataForm;
 
-import java.util.ArrayList;
-import java.util.List;
+import org.jxmpp.jid.Jid;
 
 /**
  * Represents the state and the request of the execution of an adhoc command.
- * 
+ *
  * @author Gabriel Guardincerri
  */
 public class AdHocCommandData extends IQ {
 
+    public static final String ELEMENT = "command";
+    public static final String NAMESPACE = "http://jabber.org/protocol/commands";
+
     /* JID of the command host */
-    private String id;
+    private Jid id;
 
     /* Command name */
     private String name;
@@ -47,7 +53,7 @@ public class AdHocCommandData extends IQ {
     /* Unique ID of the execution */
     private String sessionID;
 
-    private List<AdHocCommandNote> notes = new ArrayList<AdHocCommandNote>();
+    private final List<AdHocCommandNote> notes = new ArrayList<>();
 
     private DataForm form;
 
@@ -57,65 +63,45 @@ public class AdHocCommandData extends IQ {
     /* Current execution status */
     private AdHocCommand.Status status;
 
-    private ArrayList<AdHocCommand.Action> actions = new ArrayList<AdHocCommand.Action>();
+    private final ArrayList<AdHocCommand.Action> actions = new ArrayList<>();
 
     private AdHocCommand.Action executeAction;
 
-    private String lang;
-
     public AdHocCommandData() {
+        super(ELEMENT, NAMESPACE);
     }
 
     @Override
-    public String getChildElementXML() {
-        StringBuilder buf = new StringBuilder();
-        buf.append("<command xmlns=\"http://jabber.org/protocol/commands\"");
-        buf.append(" node=\"").append(node).append("\"");
-        if (sessionID != null) {
-            if (!sessionID.equals("")) {
-                buf.append(" sessionid=\"").append(sessionID).append("\"");
-            }
-        }
-        if (status != null) {
-            buf.append(" status=\"").append(status).append("\"");
-        }
-        if (action != null) {
-            buf.append(" action=\"").append(action).append("\"");
-        }
-
-        if (lang != null) {
-            if (!lang.equals("")) {
-                buf.append(" lang=\"").append(lang).append("\"");
-            }
-        }
-        buf.append(">");
+    protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder xml) {
+        xml.attribute("node", node);
+        xml.optAttribute("sessionid", sessionID);
+        xml.optAttribute("status", status);
+        xml.optAttribute("action", action);
+        xml.rightAngleBracket();
 
         if (getType() == Type.result) {
-            buf.append("<actions");
-
-            if (executeAction != null) {
-                buf.append(" execute=\"").append(executeAction).append("\"");
-            }
+            xml.halfOpenElement("actions");
+            xml.optAttribute("execute", executeAction);
             if (actions.size() == 0) {
-                buf.append("/>");
+                xml.closeEmptyElement();
             } else {
-                buf.append(">");
+                xml.rightAngleBracket();
 
                 for (AdHocCommand.Action action : actions) {
-                    buf.append("<").append(action).append("/>");
+                    xml.emptyElement(action);
                 }
-                buf.append("</actions>");
+                xml.closeElement("actions");
             }
         }
 
         if (form != null) {
-            buf.append(form.toXML());
+            xml.append(form.toXML());
         }
 
         for (AdHocCommandNote note : notes) {
-            buf.append("<note type=\"").append(note.getType().toString()).append("\">");
-            buf.append(note.getValue());
-            buf.append("</note>");
+            xml.halfOpenElement("note").attribute("type", note.getType().toString()).rightAngleBracket();
+            xml.append(note.getValue());
+            xml.closeElement("note");
         }
 
         // TODO ERRORS
@@ -123,8 +109,7 @@ public class AdHocCommandData extends IQ {
 //            buf.append(getError().toXML());
 //        }
 
-        buf.append("</command>");
-        return buf.toString();
+        return xml;
     }
 
     /**
@@ -132,16 +117,16 @@ public class AdHocCommandData extends IQ {
      *
      * @return the JID of the command host.
      */
-    public String getId() {
+    public Jid getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Jid id) {
         this.id = id;
     }
 
     /**
-     * Returns the human name of the command
+     * Returns the human name of the command.
      *
      * @return the name of the command.
      */
@@ -154,7 +139,7 @@ public class AdHocCommandData extends IQ {
     }
 
     /**
-     * Returns the identifier of the command
+     * Returns the identifier of the command.
      *
      * @return the node.
      */
@@ -179,7 +164,7 @@ public class AdHocCommandData extends IQ {
         this.notes.add(note);
     }
 
-    public void remveNote(AdHocCommandNote note) {
+    public void removeNote(AdHocCommandNote note) {
         this.notes.remove(note);
     }
 
@@ -238,6 +223,15 @@ public class AdHocCommandData extends IQ {
         return executeAction;
     }
 
+    /**
+     * Set the 'sessionid' attribute of the command.
+     * <p>
+     * This value can be null or empty for the first command, but MUST be set for subsequent commands. See also <a
+     * href="http://xmpp.org/extensions/xep-0050.html#impl-session">XEP-0050 § 3.3 Session Lifetime</a>.
+     * </p>
+     *
+     * @param sessionID
+     */
     public void setSessionID(String sessionID) {
         this.sessionID = sessionID;
     }
@@ -246,19 +240,21 @@ public class AdHocCommandData extends IQ {
         return sessionID;
     }
 
-    public static class SpecificError implements PacketExtension {
+    public static class SpecificError implements ExtensionElement {
 
         public static final String namespace = "http://jabber.org/protocol/commands";
-        
+
         public SpecificErrorCondition condition;
-        
+
         public SpecificError(SpecificErrorCondition condition) {
             this.condition = condition;
         }
-        
+
+        @Override
         public String getElementName() {
             return condition.toString();
         }
+        @Override
         public String getNamespace() {
             return namespace;
         }
@@ -266,10 +262,11 @@ public class AdHocCommandData extends IQ {
         public SpecificErrorCondition getCondition() {
             return condition;
         }
-        
-        public String toXML() {
+
+        @Override
+        public String toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
             StringBuilder buf = new StringBuilder();
-            buf.append("<").append(getElementName());
+            buf.append('<').append(getElementName());
             buf.append(" xmlns=\"").append(getNamespace()).append("\"/>");
             return buf.toString();
         }

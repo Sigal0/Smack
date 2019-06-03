@@ -27,9 +27,10 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.util.StringUtils;
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.packet.Message;
 import org.jivesoftware.smack.util.XmlStringBuilder;
+import org.jivesoftware.smack.util.stringencoder.Base64;
 
 /**
  * Properties provide an easy mechanism for clients to share data. Each property has a
@@ -38,20 +39,20 @@ import org.jivesoftware.smack.util.XmlStringBuilder;
  * Serializable interface).
  *
  */
-public class JivePropertiesExtension implements PacketExtension {
+public class JivePropertiesExtension implements ExtensionElement {
     /**
-     * Namespace used to store packet properties.
+     * Namespace used to store stanza properties.
      */
     public static final String NAMESPACE = "http://www.jivesoftware.com/xmlns/xmpp/properties";
 
     public static final String ELEMENT = "properties";
 
     private static final Logger LOGGER = Logger.getLogger(JivePropertiesExtension.class.getName());
-    
+
     private final Map<String, Object> properties;
 
     public JivePropertiesExtension() {
-        properties = new HashMap<String, Object>();
+        properties = new HashMap<>();
     }
 
     public JivePropertiesExtension(Map<String, Object> properties) {
@@ -59,7 +60,7 @@ public class JivePropertiesExtension implements PacketExtension {
     }
 
     /**
-     * Returns the packet property with the specified name or <tt>null</tt> if the
+     * Returns the stanza property with the specified name or <tt>null</tt> if the
      * property doesn't exist. Property values that were originally primitives will
      * be returned as their object equivalent. For example, an int property will be
      * returned as an Integer, a double as a Double, etc.
@@ -83,7 +84,7 @@ public class JivePropertiesExtension implements PacketExtension {
      */
     public synchronized void setProperty(String name, Object value) {
         if (!(value instanceof Serializable)) {
-            throw new IllegalArgumentException("Value must be serialiazble");
+            throw new IllegalArgumentException("Value must be serializable");
         }
         properties.put(name, value);
     }
@@ -109,7 +110,7 @@ public class JivePropertiesExtension implements PacketExtension {
         if (properties == null) {
             return Collections.emptySet();
         }
-        return Collections.unmodifiableSet(new HashSet<String>(properties.keySet()));
+        return Collections.unmodifiableSet(new HashSet<>(properties.keySet()));
     }
 
     /**
@@ -121,7 +122,7 @@ public class JivePropertiesExtension implements PacketExtension {
         if (properties == null) {
             return Collections.emptyMap();
         }
-        return Collections.unmodifiableMap(new HashMap<String, Object>(properties));
+        return Collections.unmodifiableMap(new HashMap<>(properties));
     }
 
     @Override
@@ -135,9 +136,9 @@ public class JivePropertiesExtension implements PacketExtension {
     }
 
     @Override
-    public CharSequence toXML() {
+    public CharSequence toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
         XmlStringBuilder xml = new XmlStringBuilder(this);
-        xml.rightAngelBracket();
+        xml.rightAngleBracket();
         // Loop through all properties and write them out.
         for (String name : getPropertyNames()) {
             Object value = getProperty(name);
@@ -175,41 +176,22 @@ public class JivePropertiesExtension implements PacketExtension {
             // a binary format, which won't work well inside of XML. Therefore, we base-64
             // encode the binary data before adding it.
             else {
-                ByteArrayOutputStream byteStream = null;
-                ObjectOutputStream out = null;
-                try {
-                    byteStream = new ByteArrayOutputStream();
-                    out = new ObjectOutputStream(byteStream);
+                try (
+                    ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+                    ObjectOutputStream out = new ObjectOutputStream(byteStream);
+                    ) {
                     out.writeObject(value);
                     type = "java-object";
-                    valueStr = StringUtils.encodeBase64(byteStream.toByteArray());
+                    valueStr = Base64.encodeToString(byteStream.toByteArray());
                 }
                 catch (Exception e) {
                     LOGGER.log(Level.SEVERE, "Error encoding java object", e);
                     type = "java-object";
                     valueStr = "Serializing error: " + e.getMessage();
                 }
-                finally {
-                    if (out != null) {
-                        try {
-                            out.close();
-                        }
-                        catch (Exception e) {
-                            // Ignore.
-                        }
-                    }
-                    if (byteStream != null) {
-                        try {
-                            byteStream.close();
-                        }
-                        catch (Exception e) {
-                            // Ignore.
-                        }
-                    }
-                }
             }
             xml.attribute("type", type);
-            xml.rightAngelBracket();
+            xml.rightAngleBracket();
             xml.escape(valueStr);
             xml.closeElement("value");
             xml.closeElement("property");
@@ -219,4 +201,14 @@ public class JivePropertiesExtension implements PacketExtension {
         return xml;
     }
 
+    /**
+     * Return a Jive properties extensions of the given message.
+     *
+     * @param message the message to return the extension from.
+     * @return a Jive properties extension or null.
+     * @since 4.2
+     */
+    public static JivePropertiesExtension from(Message message) {
+        return message.getExtension(ELEMENT, NAMESPACE);
+    }
 }

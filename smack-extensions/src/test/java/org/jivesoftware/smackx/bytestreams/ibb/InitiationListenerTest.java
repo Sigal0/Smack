@@ -16,37 +16,42 @@
  */
 package org.jivesoftware.smackx.bytestreams.ibb;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.XMPPError;
+import org.jivesoftware.smack.packet.StanzaError;
+
+import org.jivesoftware.smackx.InitExtensions;
 import org.jivesoftware.smackx.bytestreams.BytestreamRequest;
-import org.jivesoftware.smackx.bytestreams.ibb.InBandBytestreamListener;
-import org.jivesoftware.smackx.bytestreams.ibb.InBandBytestreamManager;
-import org.jivesoftware.smackx.bytestreams.ibb.InitiationListener;
 import org.jivesoftware.smackx.bytestreams.ibb.packet.Open;
+
 import org.junit.Before;
 import org.junit.Test;
+import org.jxmpp.jid.EntityFullJid;
+import org.jxmpp.jid.JidTestUtil;
+import org.jxmpp.jid.impl.JidCreate;
 import org.mockito.ArgumentCaptor;
 import org.powermock.reflect.Whitebox;
 
 /**
  * Test for the InitiationListener class.
- * 
+ *
  * @author Henning Staib
  */
-public class InitiationListenerTest {
+public class InitiationListenerTest extends InitExtensions {
 
-    String initiatorJID = "initiator@xmpp-server/Smack";
-    String targetJID = "target@xmpp-server/Smack";
-    String sessionID = "session_id";
+    private static final EntityFullJid initiatorJID = JidTestUtil.DUMMY_AT_EXAMPLE_ORG_SLASH_DUMMYRESOURCE;
+    private static final EntityFullJid targetJID = JidTestUtil.FULL_JID_1_RESOURCE_1;
+    private static final String sessionID = "session_id";
 
-    XMPPConnection connection;
-    InBandBytestreamManager byteStreamManager;
-    InitiationListener initiationListener;
-    Open initBytestream;
+    private XMPPConnection connection;
+    private InBandBytestreamManager byteStreamManager;
+    private InitiationListener initiationListener;
+    private Open initBytestream;
 
     /**
      * Initialize fields used in the tests.
@@ -73,26 +78,26 @@ public class InitiationListenerTest {
     /**
      * If no listeners are registered for incoming In-Band Bytestream requests, all request should
      * be rejected with an error.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
     public void shouldRespondWithError() throws Exception {
 
         // run the listener with the initiation packet
-        initiationListener.processPacket(initBytestream);
+        initiationListener.handleIQRequest(initBytestream);
 
         // wait because packet is processed in an extra thread
         Thread.sleep(200);
 
         // capture reply to the In-Band Bytestream open request
         ArgumentCaptor<IQ> argument = ArgumentCaptor.forClass(IQ.class);
-        verify(connection).sendPacket(argument.capture());
+        verify(connection).sendStanza(argument.capture());
 
         // assert that reply is the correct error packet
         assertEquals(initiatorJID, argument.getValue().getTo());
         assertEquals(IQ.Type.error, argument.getValue().getType());
-        assertEquals(XMPPError.Condition.no_acceptable.toString(),
+        assertEquals(StanzaError.Condition.not_acceptable,
                         argument.getValue().getError().getCondition());
 
     }
@@ -100,7 +105,7 @@ public class InitiationListenerTest {
     /**
      * Open request with a block size that exceeds the maximum block size should be replied with an
      * resource-constraint error.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -108,26 +113,26 @@ public class InitiationListenerTest {
         byteStreamManager.setMaximumBlockSize(1024);
 
         // run the listener with the initiation packet
-        initiationListener.processPacket(initBytestream);
+        initiationListener.handleIQRequest(initBytestream);
 
         // wait because packet is processed in an extra thread
         Thread.sleep(200);
 
         // capture reply to the In-Band Bytestream open request
         ArgumentCaptor<IQ> argument = ArgumentCaptor.forClass(IQ.class);
-        verify(connection).sendPacket(argument.capture());
+        verify(connection).sendStanza(argument.capture());
 
         // assert that reply is the correct error packet
         assertEquals(initiatorJID, argument.getValue().getTo());
         assertEquals(IQ.Type.error, argument.getValue().getType());
-        assertEquals(XMPPError.Condition.resource_constraint.toString(),
+        assertEquals(StanzaError.Condition.resource_constraint,
                         argument.getValue().getError().getCondition());
 
     }
 
     /**
      * If a listener for all requests is registered it should be notified on incoming requests.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -138,7 +143,7 @@ public class InitiationListenerTest {
         byteStreamManager.addIncomingBytestreamListener(listener);
 
         // run the listener with the initiation packet
-        initiationListener.processPacket(initBytestream);
+        initiationListener.handleIQRequest(initBytestream);
 
         // wait because packet is processed in an extra thread
         Thread.sleep(200);
@@ -155,7 +160,7 @@ public class InitiationListenerTest {
     /**
      * If a listener for a specific user in registered it should be notified on incoming requests
      * for that user.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -166,7 +171,7 @@ public class InitiationListenerTest {
         byteStreamManager.addIncomingBytestreamListener(listener, initiatorJID);
 
         // run the listener with the initiation packet
-        initiationListener.processPacket(initBytestream);
+        initiationListener.handleIQRequest(initBytestream);
 
         // wait because packet is processed in an extra thread
         Thread.sleep(200);
@@ -183,7 +188,7 @@ public class InitiationListenerTest {
     /**
      * If listener for a specific user is registered it should not be notified on incoming requests
      * from other users.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -191,10 +196,10 @@ public class InitiationListenerTest {
 
         // add listener for request of user "other_initiator"
         InBandBytestreamListener listener = mock(InBandBytestreamListener.class);
-        byteStreamManager.addIncomingBytestreamListener(listener, "other_" + initiatorJID);
+        byteStreamManager.addIncomingBytestreamListener(listener, JidCreate.from("other_" + initiatorJID));
 
         // run the listener with the initiation packet
-        initiationListener.processPacket(initBytestream);
+        initiationListener.handleIQRequest(initBytestream);
 
         // wait because packet is processed in an extra thread
         Thread.sleep(200);
@@ -205,19 +210,19 @@ public class InitiationListenerTest {
 
         // capture reply to the In-Band Bytestream open request
         ArgumentCaptor<IQ> argument = ArgumentCaptor.forClass(IQ.class);
-        verify(connection).sendPacket(argument.capture());
+        verify(connection).sendStanza(argument.capture());
 
         // assert that reply is the correct error packet
         assertEquals(initiatorJID, argument.getValue().getTo());
         assertEquals(IQ.Type.error, argument.getValue().getType());
-        assertEquals(XMPPError.Condition.no_acceptable.toString(),
+        assertEquals(StanzaError.Condition.not_acceptable,
                         argument.getValue().getError().getCondition());
     }
 
     /**
      * If a user specific listener and an all requests listener is registered only the user specific
      * listener should be notified.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -232,7 +237,7 @@ public class InitiationListenerTest {
         byteStreamManager.addIncomingBytestreamListener(userRequestsListener, initiatorJID);
 
         // run the listener with the initiation packet
-        initiationListener.processPacket(initBytestream);
+        initiationListener.handleIQRequest(initBytestream);
 
         // wait because packet is processed in an extra thread
         Thread.sleep(200);
@@ -250,7 +255,7 @@ public class InitiationListenerTest {
     /**
      * If a user specific listener and an all requests listener is registered only the all requests
      * listener should be notified on an incoming request for another user.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -262,11 +267,11 @@ public class InitiationListenerTest {
 
         // add listener for request of user "other_initiator"
         InBandBytestreamListener userRequestsListener = mock(InBandBytestreamListener.class);
-        byteStreamManager.addIncomingBytestreamListener(userRequestsListener, "other_"
-                        + initiatorJID);
+        byteStreamManager.addIncomingBytestreamListener(userRequestsListener, JidCreate.from("other_"
+                        + initiatorJID));
 
         // run the listener with the initiation packet
-        initiationListener.processPacket(initBytestream);
+        initiationListener.handleIQRequest(initBytestream);
 
         // wait because packet is processed in an extra thread
         Thread.sleep(200);
@@ -283,7 +288,7 @@ public class InitiationListenerTest {
 
     /**
      * If a request with a specific session ID should be ignored no listeners should be notified.
-     * 
+     *
      * @throws Exception should not happen
      */
     @Test
@@ -301,7 +306,7 @@ public class InitiationListenerTest {
         byteStreamManager.ignoreBytestreamRequestOnce(sessionID);
 
         // run the listener with the initiation packet
-        initiationListener.processPacket(initBytestream);
+        initiationListener.handleIQRequest(initBytestream);
 
         // wait because packet is processed in an extra thread
         Thread.sleep(200);
@@ -315,7 +320,7 @@ public class InitiationListenerTest {
         verify(allRequestsListener, never()).incomingBytestreamRequest(byteStreamRequest.capture());
 
         // run the listener with the initiation packet again
-        initiationListener.processPacket(initBytestream);
+        initiationListener.handleIQRequest(initBytestream);
 
         // wait because packet is processed in an extra thread
         Thread.sleep(200);

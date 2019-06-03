@@ -16,13 +16,17 @@
  */
 package org.jivesoftware.smackx.hoxt.provider;
 
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.util.PacketParserUtils;
-import org.jivesoftware.smackx.hoxt.packet.Base64BinaryChunk;
-import org.junit.Test;
-import org.xmlpull.v1.XmlPullParser;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import static org.junit.Assert.*;
+import org.jivesoftware.smack.packet.ExtensionElement;
+import org.jivesoftware.smack.util.PacketParserUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
+
+import org.jivesoftware.smackx.hoxt.packet.Base64BinaryChunk;
+
+import org.junit.jupiter.api.Test;
 
 /**
  * Tests correct parsing of 'chunk' elements in Message stanza.
@@ -32,34 +36,36 @@ public class Base64BinaryChunkProviderTest {
     @Test
     public void isNonLatsChunkParsedCorrectly() throws Exception {
         String base64Text = "iVBORw0KGgoAAAANSUhEUgAAASwAAAGQCAYAA";
-        String string = "<chunk xmlns='urn:xmpp:http' streamId='Stream0001'>" + base64Text + "</chunk>";
+        String string = "<chunk xmlns='urn:xmpp:http' streamId='Stream0001' nr='0'>" + base64Text + "</chunk>";
 
         Base64BinaryChunkProvider provider = new Base64BinaryChunkProvider();
         XmlPullParser parser = PacketParserUtils.getParserFor(string);
 
-        PacketExtension extension = provider.parseExtension(parser);
+        ExtensionElement extension = provider.parse(parser);
         assertTrue(extension instanceof Base64BinaryChunk);
 
         Base64BinaryChunk chunk = (Base64BinaryChunk) extension;
         assertEquals("Stream0001", chunk.getStreamId());
         assertFalse(chunk.isLast());
         assertEquals(base64Text, chunk.getText());
+        assertEquals(0, chunk.getNr());
     }
 
     @Test
     public void isLatsChunkParsedCorrectly() throws Exception {
         String base64Text = "2uPzi9u+tVWJd+e+y1AAAAABJRU5ErkJggg==";
-        String string = "<chunk xmlns='urn:xmpp:http' streamId='Stream0001' last='true'>" + base64Text + "</chunk>";
+        String string = "<chunk xmlns='urn:xmpp:http' streamId='Stream0001' nr='1' last='true'>" + base64Text + "</chunk>";
 
         Base64BinaryChunkProvider provider = new Base64BinaryChunkProvider();
         XmlPullParser parser = PacketParserUtils.getParserFor(string);
 
-        PacketExtension extension = provider.parseExtension(parser);
+        ExtensionElement extension = provider.parse(parser);
         assertTrue(extension instanceof Base64BinaryChunk);
 
         Base64BinaryChunk chunk = (Base64BinaryChunk) extension;
         assertEquals("Stream0001", chunk.getStreamId());
         assertTrue(chunk.isLast());
         assertEquals(base64Text, chunk.getText());
+        assertEquals(1, chunk.getNr());
     }
 }

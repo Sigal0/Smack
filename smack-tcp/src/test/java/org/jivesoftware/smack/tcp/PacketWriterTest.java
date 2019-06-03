@@ -1,6 +1,6 @@
 /**
  *
- * Copyright 2014 Florian Schmaus
+ * Copyright 2014-2019 Florian Schmaus
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,44 +16,76 @@
  */
 package org.jivesoftware.smack.tcp;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.fail;
+
 import java.io.IOException;
+import java.io.Reader;
+import java.io.StringReader;
 import java.io.Writer;
+import java.lang.reflect.Field;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.atomic.AtomicReference;
 
+import org.jivesoftware.smack.AbstractXMPPConnection;
+import org.jivesoftware.smack.SmackException;
 import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.packet.Message;
 import org.jivesoftware.smack.tcp.XMPPTCPConnection.PacketWriter;
-import org.junit.Test;
+import org.jivesoftware.smack.util.ExceptionUtil;
 
-import static org.junit.Assert.fail;
+import org.junit.jupiter.api.Test;
+import org.jxmpp.stringprep.XmppStringprepException;
 
 public class PacketWriterTest {
-    volatile boolean shutdown;
-    volatile boolean prematureUnblocked;
+
+    private static final Reader DUMMY_READER = new StringReader("");
+
+    private volatile boolean shutdown;
+    private volatile boolean prematureUnblocked;
 
     /**
-     * Make sure that packet writer does block once the queue reaches
+     * Make sure that stanza writer does block once the queue reaches
      * {@link PacketWriter#QUEUE_SIZE} and that
-     * {@link PacketWriter#sendPacket(org.jivesoftware.smack.tcp.packet.Packet)} does unblock after the
+     * {@link PacketWriter#sendStanza(org.jivesoftware.smack.tcp.packet.Packet)} does unblock after the
      * interrupt.
-     * 
+     *
      * @throws InterruptedException
      * @throws BrokenBarrierException
+     * @throws NotConnectedException
+     * @throws XmppStringprepException
+     * @throws SecurityException
+     * @throws NoSuchFieldException
+     * @throws IllegalAccessException
+     * @throws IllegalArgumentException
      */
-    @SuppressWarnings("javadoc")
     @Test
-    public void shouldBlockAndUnblockTest() throws InterruptedException, BrokenBarrierException, NotConnectedException {
-        XMPPTCPConnection connection = new XMPPTCPConnection("foobar.com");
-        final PacketWriter pw = connection.new PacketWriter();
-        pw.setWriter(new BlockingStringWriter());
-        pw.startup();
+    public void shouldBlockAndUnblockTest() throws InterruptedException, BrokenBarrierException, NotConnectedException, XmppStringprepException, NoSuchFieldException, SecurityException, IllegalArgumentException, IllegalAccessException {
+        XMPPTCPConnection connection = new XMPPTCPConnection("user", "pass", "example.org");
 
-        for (int i = 0; i < XMPPTCPConnection.PacketWriter.QUEUE_SIZE; i++) {
-            pw.sendPacket(new Message());
+        // Get the protected "Reader reader" field from AbstractXMPPConnection and set it to a dummy Reader,
+        // as otherwise it will be null when we perform the writer threads init() which will make the StAX parser
+        // to throw an exception.
+        Field readerField = AbstractXMPPConnection.class.getDeclaredField("reader");
+        readerField.setAccessible(true);
+        readerField.set(connection, DUMMY_READER);
+
+        final PacketWriter pw = connection.packetWriter;
+        BlockingStringWriter blockingStringWriter = new BlockingStringWriter();
+        connection.setWriter(blockingStringWriter);
+        connection.packetWriter.init();
+
+        // Now insert QUEUE_SIZE + 1 stanzas into the outgoing queue to make sure that the queue is filled until its
+        // full capacity. The +1 is because the writer thread will dequeue one stanza and try to write it into the
+        // blocking writer.
+        for (int i = 0; i < XMPPTCPConnection.PacketWriter.QUEUE_SIZE + 1; i++) {
+            pw.sendStreamElement(new Message());
         }
-        
+
         final CyclicBarrier barrier = new CyclicBarrier(2);
+        final AtomicReference<Exception> unexpectedThreadExceptionReference = new AtomicReference<>();
+        final AtomicReference<Exception> expectedThreadExceptionReference = new AtomicReference<>();
         shutdown = false;
         prematureUnblocked = false;
         Thread t = new Thread(new Runnable() {
@@ -61,18 +93,26 @@ public class PacketWriterTest {
             public void run() {
                 try {
                     barrier.await();
-                    pw.sendPacket(new Message());
+                    pw.sendStreamElement(new Message());
                     // should only return after the pw was interrupted
                     if (!shutdown) {
                         prematureUnblocked = true;
                     }
                 }
-                catch (Exception e) {
+                catch (InterruptedException | SmackException.NotConnectedException e) {
+                    // This is the exception we expect.
+                    expectedThreadExceptionReference.set(e);
                 }
+                catch (BrokenBarrierException e) {
+                    unexpectedThreadExceptionReference.set(e);
+
+                }
+
                 try {
                     barrier.await();
                 }
                 catch (InterruptedException | BrokenBarrierException e) {
+                    unexpectedThreadExceptionReference.set(e);
                 }
             }
         });
@@ -81,31 +121,61 @@ public class PacketWriterTest {
         // will block before we call shutdown. Otherwise we may get false positives (which is still
         // better then false negatives).
         barrier.await();
-        // Not really cool, but may increases the chances for 't' to block in sendPacket.
+        // Not really cool, but may increases the chances for 't' to block in sendStanza.
         Thread.sleep(250);
 
         // Set to true for testing purposes, so that shutdown() won't wait packet writer
-        pw.shutdownDone.set(true);
-        // Shutdown the packetwriter
-        pw.shutdown();
+        pw.shutdownDone.reportSuccess();
+        // Shutdown the packetwriter, this will also interrupt the writer thread, which is what we hope to happen in the
+        // thread created above.
+        pw.shutdown(false);
         shutdown = true;
         barrier.await();
-        if (prematureUnblocked) {
-            fail("Should not unblock before the thread got shutdown");
+
+        t.join(60000);
+
+        Exception unexpectedThreadException = unexpectedThreadExceptionReference.get();
+        try {
+            if (prematureUnblocked) {
+                String failureMessage = "Should not unblock before the thread got shutdown.";
+                if (unexpectedThreadException != null) {
+                    String stacktrace = ExceptionUtil.getStackTrace(unexpectedThreadException);
+                    failureMessage += " Unexpected thread exception thrown: " + unexpectedThreadException + "\n" + stacktrace;
+                }
+                fail(failureMessage);
+            }
+            else if (unexpectedThreadException != null) {
+                String stacktrace = ExceptionUtil.getStackTrace(unexpectedThreadException);
+                fail("Unexpected thread exception: " + unexpectedThreadException + "\n" + stacktrace);
+            }
+
+            assertNotNull(expectedThreadExceptionReference.get(), "Did not encounter expected exception on sendStreamElement()");
         }
-        synchronized (t) {
-            t.notify();
+        finally {
+            blockingStringWriter.unblock();
         }
     }
-    
-    public class BlockingStringWriter extends Writer {
+
+    public static class BlockingStringWriter extends Writer {
+        private boolean blocked = true;
+
         @Override
         public void write(char[] cbuf, int off, int len) throws IOException {
-            try {
-                wait();
+            synchronized (this) {
+                while (blocked) {
+                    try {
+                        wait();
+                    }
+                    catch (InterruptedException e) {
+                        throw new AssertionError(e);
+                    }
+                }
             }
-            catch (InterruptedException e) {
-            }
+        }
+
+        public synchronized void unblock() {
+            blocked = false;
+            notify();
         }
 
         @Override

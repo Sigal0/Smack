@@ -17,21 +17,29 @@
 
 package org.jivesoftware.smackx.iqprivate;
 
+import java.io.IOException;
+import java.util.Hashtable;
+import java.util.Map;
+import java.util.WeakHashMap;
+
 import org.jivesoftware.smack.Manager;
 import org.jivesoftware.smack.SmackException.NoResponseException;
 import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.XMPPConnection;
 import org.jivesoftware.smack.XMPPException.XMPPErrorException;
 import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.StanzaError.Condition;
+import org.jivesoftware.smack.packet.XmlEnvironment;
 import org.jivesoftware.smack.provider.IQProvider;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
+
 import org.jivesoftware.smackx.iqprivate.packet.DefaultPrivateData;
 import org.jivesoftware.smackx.iqprivate.packet.PrivateData;
+import org.jivesoftware.smackx.iqprivate.packet.PrivateDataIQ;
 import org.jivesoftware.smackx.iqprivate.provider.PrivateDataProvider;
-import org.xmlpull.v1.XmlPullParser;
 
-import java.util.Hashtable;
-import java.util.Map;
-import java.util.WeakHashMap;
+import org.jxmpp.util.XmppStringUtils;
 
 /**
  * Manages private data, which is a mechanism to allow users to store arbitrary XML
@@ -55,7 +63,7 @@ import java.util.WeakHashMap;
  *
  * @author Matt Tucker
  */
-public class PrivateDataManager extends Manager {
+public final class PrivateDataManager extends Manager {
     private static final Map<XMPPConnection, PrivateDataManager> instances = new WeakHashMap<XMPPConnection, PrivateDataManager>();
 
     public static synchronized PrivateDataManager getInstanceFor(XMPPConnection connection) {
@@ -69,12 +77,12 @@ public class PrivateDataManager extends Manager {
     /**
      * Map of provider instances.
      */
-    private static Map<String, PrivateDataProvider> privateDataProviders = new Hashtable<String, PrivateDataProvider>();
+    private static final Map<String, PrivateDataProvider> privateDataProviders = new Hashtable<>();
 
     /**
      * Returns the private data provider registered to the specified XML element name and namespace.
      * For example, if a provider was registered to the element name "prefs" and the
-     * namespace "http://www.xmppclient.com/prefs", then the following packet would trigger
+     * namespace "http://www.xmppclient.com/prefs", then the following stanza would trigger
      * the provider:
      *
      * <pre>
@@ -94,8 +102,8 @@ public class PrivateDataManager extends Manager {
      * @return the PrivateData provider.
      */
     public static PrivateDataProvider getPrivateDataProvider(String elementName, String namespace) {
-        String key = getProviderKey(elementName, namespace);
-        return (PrivateDataProvider)privateDataProviders.get(key);
+        String key = XmppStringUtils.generateKey(elementName, namespace);
+        return privateDataProviders.get(key);
     }
 
     /**
@@ -107,9 +115,8 @@ public class PrivateDataManager extends Manager {
      * @param provider the private data provider.
      */
     public static void addPrivateDataProvider(String elementName, String namespace,
-            PrivateDataProvider provider)
-    {
-        String key = getProviderKey(elementName, namespace);
+            PrivateDataProvider provider) {
+        String key = XmppStringUtils.generateKey(elementName, namespace);
         privateDataProviders.put(key, provider);
     }
 
@@ -120,7 +127,7 @@ public class PrivateDataManager extends Manager {
      * @param namespace The XML namespace.
      */
     public static void removePrivateDataProvider(String elementName, String namespace) {
-        String key = getProviderKey(elementName, namespace);
+        String key = XmppStringUtils.generateKey(elementName, namespace);
         privateDataProviders.remove(key);
     }
 
@@ -146,25 +153,16 @@ public class PrivateDataManager extends Manager {
      * @param elementName the element name.
      * @param namespace the namespace.
      * @return the private data.
-     * @throws XMPPErrorException 
-     * @throws NoResponseException 
-     * @throws NotConnectedException 
+     * @throws XMPPErrorException
+     * @throws NoResponseException
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public PrivateData getPrivateData(final String elementName, final String namespace) throws NoResponseException, XMPPErrorException, NotConnectedException
-    {
+    public PrivateData getPrivateData(final String elementName, final String namespace) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
         // Create an IQ packet to get the private data.
-        IQ privateDataGet = new IQ() {
-            public String getChildElementXML() {
-                StringBuilder buf = new StringBuilder();
-                buf.append("<query xmlns=\"jabber:iq:private\">");
-                buf.append("<").append(elementName).append(" xmlns=\"").append(namespace).append("\"/>");
-                buf.append("</query>");
-                return buf.toString();
-            }
-        };
-        privateDataGet.setType(IQ.Type.get);
+        IQ privateDataGet = new PrivateDataIQ(elementName, namespace);
 
-        PrivateDataResult response = (PrivateDataResult) connection().createPacketCollectorAndSend(
+        PrivateDataIQ response = connection().createStanzaCollectorAndSend(
                         privateDataGet).nextResultOrThrow();
         return response.getPrivateData();
     }
@@ -175,49 +173,76 @@ public class PrivateDataManager extends Manager {
      * element name and namespace, then the new private data will overwrite the old value.
      *
      * @param privateData the private data.
-     * @throws XMPPErrorException 
-     * @throws NoResponseException 
-     * @throws NotConnectedException 
+     * @throws XMPPErrorException
+     * @throws NoResponseException
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    public void setPrivateData(final PrivateData privateData) throws NoResponseException, XMPPErrorException, NotConnectedException {
+    public void setPrivateData(final PrivateData privateData) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
         // Create an IQ packet to set the private data.
-        IQ privateDataSet = new IQ() {
-            public String getChildElementXML() {
-                StringBuilder buf = new StringBuilder();
-                buf.append("<query xmlns=\"jabber:iq:private\">");
-                buf.append(privateData.toXML());
-                buf.append("</query>");
-                return buf.toString();
-            }
-        };
-        privateDataSet.setType(IQ.Type.set);
+        IQ privateDataSet = new PrivateDataIQ(privateData);
 
-        connection().createPacketCollectorAndSend(privateDataSet).nextResultOrThrow();
+        connection().createStanzaCollectorAndSend(privateDataSet).nextResultOrThrow();
     }
 
+    private static final PrivateData DUMMY_PRIVATE_DATA = new PrivateData() {
+        @Override
+        public String getElementName() {
+            return "smackDummyPrivateData";
+        }
+
+        @Override
+        public String getNamespace() {
+            return "https://igniterealtime.org/projects/smack/";
+        }
+
+        @Override
+        public CharSequence toXML() {
+            return '<' + getElementName() + " xmlns='" + getNamespace() + "'/>";
+        }
+    };
+
     /**
-     * Returns a String key for a given element name and namespace.
+     * Check if the service supports private data.
      *
-     * @param elementName the element name.
-     * @param namespace the namespace.
-     * @return a unique key for the element name and namespace pair.
+     * @return true if the service supports private data, false otherwise.
+     * @throws NoResponseException
+     * @throws NotConnectedException
+     * @throws InterruptedException
+     * @throws XMPPErrorException
+     * @since 4.2
      */
-    private static String getProviderKey(String elementName, String namespace) {
-        StringBuilder buf = new StringBuilder();
-        buf.append("<").append(elementName).append("/><").append(namespace).append("/>");
-        return buf.toString();
+    public boolean isSupported() throws NoResponseException, NotConnectedException,
+                    InterruptedException, XMPPErrorException {
+        // This is just a primitive hack, since XEP-49 does not specify a way to determine if the
+        // service supports it
+        try {
+            setPrivateData(DUMMY_PRIVATE_DATA);
+            return true;
+        }
+        catch (XMPPErrorException e) {
+            if (e.getStanzaError().getCondition() == Condition.service_unavailable) {
+                return false;
+            }
+            else {
+                throw e;
+            }
+        }
     }
 
     /**
      * An IQ provider to parse IQ results containing private data.
      */
-    public static class PrivateDataIQProvider implements IQProvider {
-        public IQ parseIQ(XmlPullParser parser) throws Exception {
+    public static class PrivateDataIQProvider extends IQProvider<PrivateDataIQ> {
+
+        @Override
+        public PrivateDataIQ parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment)
+                        throws XmlPullParserException, IOException {
             PrivateData privateData = null;
             boolean done = false;
             while (!done) {
-                int eventType = parser.next();
-                if (eventType == XmlPullParser.START_TAG) {
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT) {
                     String elementName = parser.getName();
                     String namespace = parser.getNamespace();
                     // See if any objects are registered to handle this private data type.
@@ -231,23 +256,20 @@ public class PrivateDataManager extends Manager {
                         DefaultPrivateData data = new DefaultPrivateData(elementName, namespace);
                         boolean finished = false;
                         while (!finished) {
-                            int event = parser.next();
-                            if (event == XmlPullParser.START_TAG) {
+                            XmlPullParser.Event event = parser.next();
+                            if (event == XmlPullParser.Event.START_ELEMENT) {
                                 String name = parser.getName();
-                                // If an empty element, set the value with the empty string.
-                                if (parser.isEmptyElementTag()) {
-                                    data.setValue(name,"");
+                                event = parser.next();
+                                if (event == XmlPullParser.Event.TEXT_CHARACTERS) {
+                                    String value = parser.getText();
+                                    data.setValue(name, value);
                                 }
-                                // Otherwise, get the the element text.
-                                else {
-                                    event = parser.next();
-                                    if (event == XmlPullParser.TEXT) {
-                                        String value = parser.getText();
-                                        data.setValue(name, value);
-                                    }
+                                else if (event == XmlPullParser.Event.END_ELEMENT) {
+                                    // If an empty element, set the value with the empty string.
+                                    data.setValue(name, "");
                                 }
                             }
-                            else if (event == XmlPullParser.END_TAG) {
+                            else if (event == XmlPullParser.Event.END_ELEMENT) {
                                 if (parser.getName().equals(elementName)) {
                                     finished = true;
                                 }
@@ -256,39 +278,13 @@ public class PrivateDataManager extends Manager {
                         privateData = data;
                     }
                 }
-                else if (eventType == XmlPullParser.END_TAG) {
+                else if (eventType == XmlPullParser.Event.END_ELEMENT) {
                     if (parser.getName().equals("query")) {
                         done = true;
                     }
                 }
             }
-            return new PrivateDataResult(privateData);
-        }
-    }
-
-    /**
-     * An IQ packet to hold PrivateData GET results.
-     */
-    private static class PrivateDataResult extends IQ {
-
-        private PrivateData privateData;
-
-        PrivateDataResult(PrivateData privateData) {
-            this.privateData = privateData;
-        }
-
-        public PrivateData getPrivateData() {
-            return privateData;
-        }
-
-        public String getChildElementXML() {
-            StringBuilder buf = new StringBuilder();
-            buf.append("<query xmlns=\"jabber:iq:private\">");
-            if (privateData != null) {
-                buf.append(privateData.toXML());
-            }
-            buf.append("</query>");
-            return buf.toString();
+            return new PrivateDataIQ(privateData);
         }
     }
 }

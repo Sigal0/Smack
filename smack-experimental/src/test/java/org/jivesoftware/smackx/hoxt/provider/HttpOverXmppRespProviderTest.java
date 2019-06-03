@@ -16,13 +16,17 @@
  */
 package org.jivesoftware.smackx.hoxt.provider;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import org.jivesoftware.smack.packet.IQ;
 import org.jivesoftware.smack.util.PacketParserUtils;
-import org.jivesoftware.smackx.hoxt.packet.HttpOverXmppResp;
-import org.junit.Test;
-import org.xmlpull.v1.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParser;
 
-import static org.junit.Assert.*;
+import org.jivesoftware.smackx.hoxt.packet.HttpOverXmppResp;
+
+import org.junit.jupiter.api.Test;
 
 /**
  * Tests correct attribute parsing in 'resp' element.
@@ -35,10 +39,9 @@ public class HttpOverXmppRespProviderTest {
         HttpOverXmppRespProvider provider = new HttpOverXmppRespProvider();
         XmlPullParser parser = PacketParserUtils.getParserFor(string);
 
-        IQ iq = provider.parseIQ(parser);
+        IQ iq = provider.parse(parser);
         assertTrue(iq instanceof HttpOverXmppResp);
-        HttpOverXmppResp castedIq = (HttpOverXmppResp) iq;
-        HttpOverXmppResp.Resp resp = castedIq.getResp();
+        HttpOverXmppResp resp = (HttpOverXmppResp) iq;
 
         assertEquals(resp.getVersion(), "1.1");
         assertEquals(resp.getStatusCode(), 200);
@@ -51,10 +54,9 @@ public class HttpOverXmppRespProviderTest {
         HttpOverXmppRespProvider provider = new HttpOverXmppRespProvider();
         XmlPullParser parser = PacketParserUtils.getParserFor(string);
 
-        IQ iq = provider.parseIQ(parser);
+        IQ iq = provider.parse(parser);
         assertTrue(iq instanceof HttpOverXmppResp);
-        HttpOverXmppResp castedIq = (HttpOverXmppResp) iq;
-        HttpOverXmppResp.Resp resp = castedIq.getResp();
+        HttpOverXmppResp resp = (HttpOverXmppResp) iq;
 
         assertEquals(resp.getVersion(), "1.1");
         assertEquals(resp.getStatusCode(), 200);

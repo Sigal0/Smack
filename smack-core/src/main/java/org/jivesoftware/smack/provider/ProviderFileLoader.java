@@ -17,7 +17,6 @@
 package org.jivesoftware.smack.provider;
 
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedList;
@@ -25,23 +24,24 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import org.jivesoftware.smack.packet.ExtensionElement;
 import org.jivesoftware.smack.packet.IQ;
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.xmlpull.v1.XmlPullParserFactory;
-import org.xmlpull.v1.XmlPullParser;
+import org.jivesoftware.smack.util.PacketParserUtils;
+import org.jivesoftware.smack.xml.XmlPullParser;
 
 /**
- * Loads the {@link IQProvider} and {@link PacketExtensionProvider} information from a standard provider file in preparation 
+ * Loads the {@link IQProvider} and {@link ExtensionElementProvider} information from a standard provider file in preparation
  * for loading into the {@link ProviderManager}.
- * 
+ *
  * @author Robin Collier
  *
  */
 public class ProviderFileLoader implements ProviderLoader {
     private static final Logger LOGGER = Logger.getLogger(ProviderFileLoader.class.getName());
 
-    private Collection<IQProviderInfo> iqProviders;
-    private Collection<ExtensionProviderInfo> extProviders;
+    private final Collection<IQProviderInfo> iqProviders = new LinkedList<IQProviderInfo>();
+    private final Collection<ExtensionProviderInfo> extProviders  = new LinkedList<ExtensionProviderInfo>();
+    private final Collection<StreamFeatureProviderInfo> sfProviders = new LinkedList<StreamFeatureProviderInfo>();
 
     private List<Exception> exceptions = new LinkedList<Exception>();
 
@@ -51,19 +51,14 @@ public class ProviderFileLoader implements ProviderLoader {
 
     @SuppressWarnings("unchecked")
     public ProviderFileLoader(InputStream providerStream, ClassLoader classLoader) {
-        iqProviders = new ArrayList<IQProviderInfo>();
-        extProviders = new ArrayList<ExtensionProviderInfo>();
-        
         // Load processing providers.
-        try {
-            XmlPullParser parser = XmlPullParserFactory.newInstance().newPullParser();
-            parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true);
-            parser.setInput(providerStream, "UTF-8");
-            int eventType = parser.getEventType();
+        try (InputStream is = providerStream) {
+            XmlPullParser parser = PacketParserUtils.getParserFor(is);
+            XmlPullParser.Event eventType = parser.getEventType();
             do {
-                if (eventType == XmlPullParser.START_TAG) {
-                    String typeName = parser.getName();
-                    
+                if (eventType == XmlPullParser.Event.START_ELEMENT) {
+                    final String typeName = parser.getName();
+
                     try {
                         if (!"smackProviders".equals(typeName)) {
                             parser.next();
@@ -78,37 +73,54 @@ public class ProviderFileLoader implements ProviderLoader {
 
                             try {
                                 final Class<?> provider = classLoader.loadClass(className);
-                                // Attempt to load the provider class and then create
-                                // a new instance if it's an IQProvider. Otherwise, if it's
-                                // an IQ class, add the class object itself, then we'll use
-                                // reflection later to create instances of the class.
-                                if ("iqProvider".equals(typeName)) {
+                                switch (typeName) {
+                                case "iqProvider":
+                                    // Attempt to load the provider class and then create
+                                    // a new instance if it's an IQProvider. Otherwise, if it's
+                                    // an IQ class, add the class object itself, then we'll use
+                                    // reflection later to create instances of the class.
                                     // Add the provider to the map.
-                                    
                                     if (IQProvider.class.isAssignableFrom(provider)) {
-                                        iqProviders.add(new IQProviderInfo(elementName, namespace, (IQProvider) provider.newInstance()));
+                                        IQProvider<IQ> iqProvider = (IQProvider<IQ>) provider.getConstructor().newInstance();
+                                        iqProviders.add(new IQProviderInfo(elementName, namespace, iqProvider));
                                     }
-                                    else if (IQ.class.isAssignableFrom(provider)) {
-                                        iqProviders.add(new IQProviderInfo(elementName, namespace, (Class<? extends IQ>)provider));
+                                    else {
+                                        exceptions.add(new IllegalArgumentException(className + " is not a IQProvider"));
                                     }
-                                }
-                                else {
+                                    break;
+                                case "extensionProvider":
                                     // Attempt to load the provider class and then create
                                     // a new instance if it's an ExtensionProvider. Otherwise, if it's
                                     // a PacketExtension, add the class object itself and
                                     // then we'll use reflection later to create instances
                                     // of the class.
-                                    if (PacketExtensionProvider.class.isAssignableFrom(provider)) {
-                                        extProviders.add(new ExtensionProviderInfo(elementName, namespace, (PacketExtensionProvider) provider.newInstance()));
+                                    if (ExtensionElementProvider.class.isAssignableFrom(provider)) {
+                                        ExtensionElementProvider<ExtensionElement> extensionElementProvider = (ExtensionElementProvider<ExtensionElement>) provider.getConstructor().newInstance();
+                                        extProviders.add(new ExtensionProviderInfo(elementName, namespace,
+                                                        extensionElementProvider));
                                     }
-                                    else if (PacketExtension.class.isAssignableFrom(provider)) {
-                                        extProviders.add(new ExtensionProviderInfo(elementName, namespace, provider));
+                                    else {
+                                        exceptions.add(new IllegalArgumentException(className
+                                                        + " is not a PacketExtensionProvider"));
                                     }
+                                    break;
+                                case "streamFeatureProvider":
+                                    ExtensionElementProvider<ExtensionElement> streamFeatureProvider = (ExtensionElementProvider<ExtensionElement>) provider.getConstructor().newInstance();
+                                    sfProviders.add(new StreamFeatureProviderInfo(elementName,
+                                                    namespace,
+                                                    streamFeatureProvider));
+                                    break;
+                                default:
+                                    LOGGER.warning("Unknown provider type: " + typeName);
                                 }
                             }
                             catch (ClassNotFoundException cnfe) {
                                 LOGGER.log(Level.SEVERE, "Could not find provider class", cnfe);
                                 exceptions.add(cnfe);
+                            }
+                            catch (InstantiationException ie) {
+                                LOGGER.log(Level.SEVERE, "Could not instanciate " + className, ie);
+                                exceptions.add(ie);
                             }
                         }
                     }
@@ -119,19 +131,11 @@ public class ProviderFileLoader implements ProviderLoader {
                 }
                 eventType = parser.next();
             }
-            while (eventType != XmlPullParser.END_DOCUMENT);
+            while (eventType != XmlPullParser.Event.END_DOCUMENT);
         }
-        catch (Exception e){
+        catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Unknown error occurred while parsing provider file", e);
             exceptions.add(e);
-        }
-        finally {
-            try {
-                providerStream.close();
-            }
-            catch (Exception e) {
-                // Ignore.
-            }
         }
     }
 
@@ -143,6 +147,11 @@ public class ProviderFileLoader implements ProviderLoader {
     @Override
     public Collection<ExtensionProviderInfo> getExtensionProviderInfo() {
         return extProviders;
+    }
+
+    @Override
+    public Collection<StreamFeatureProviderInfo> getStreamFeatureProviderInfo() {
+        return sfProviders;
     }
 
     public List<Exception> getLoadingExceptions() {

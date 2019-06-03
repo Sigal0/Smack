@@ -17,22 +17,28 @@
 package org.jivesoftware.smackx.bytestreams.socks5.packet;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
-import org.jivesoftware.smack.packet.Element;
 import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.NamedElement;
+import org.jivesoftware.smack.util.Objects;
+import org.jivesoftware.smack.util.StringUtils;
 import org.jivesoftware.smack.util.XmlStringBuilder;
 
+import org.jxmpp.jid.Jid;
+
 /**
- * A packet representing part of a SOCKS5 Bytestream negotiation.
- * 
+ * A stanza representing part of a SOCKS5 Bytestream negotiation.
+ *
  * @author Alexander Wenckus
  */
 public class Bytestream extends IQ {
+
+    public static final String ELEMENT = QUERY_ELEMENT;
+
     /**
-     * The XMPP namespace of the SOCKS5 Bytestream
+     * The XMPP namespace of the SOCKS5 Bytestream.
      */
     public static final String NAMESPACE = "http://jabber.org/protocol/bytestreams";
 
@@ -40,34 +46,34 @@ public class Bytestream extends IQ {
 
     private Mode mode = Mode.tcp;
 
-    private final List<StreamHost> streamHosts = new ArrayList<StreamHost>();
+    private final List<StreamHost> streamHosts = new ArrayList<>();
 
     private StreamHostUsed usedHost;
 
     private Activate toActivate;
 
     /**
-     * The default constructor
+     * The default constructor.
      */
     public Bytestream() {
-        super();
+        super(ELEMENT, NAMESPACE);
     }
 
     /**
      * A constructor where the session ID can be specified.
-     * 
+     *
      * @param SID The session ID related to the negotiation.
      * @see #setSessionID(String)
      */
     public Bytestream(final String SID) {
-        super();
+        this();
         setSessionID(SID);
     }
 
     /**
      * Set the session ID related to the bytestream. The session ID is a unique identifier used to
      * differentiate between stream negotiations.
-     * 
+     *
      * @param sessionID the unique session ID that identifies the transfer.
      */
     public void setSessionID(final String sessionID) {
@@ -76,7 +82,7 @@ public class Bytestream extends IQ {
 
     /**
      * Returns the session ID related to the bytestream negotiation.
-     * 
+     *
      * @return Returns the session ID related to the bytestream negotiation.
      * @see #setSessionID(String)
      */
@@ -86,7 +92,7 @@ public class Bytestream extends IQ {
 
     /**
      * Set the transport mode. This should be put in the initiation of the interaction.
-     * 
+     *
      * @param mode the transport mode, either UDP or TCP
      * @see Mode
      */
@@ -96,7 +102,7 @@ public class Bytestream extends IQ {
 
     /**
      * Returns the transport mode.
-     * 
+     *
      * @return Returns the transport mode.
      * @see #setMode(Mode)
      */
@@ -106,26 +112,25 @@ public class Bytestream extends IQ {
 
     /**
      * Adds a potential stream host that the remote user can connect to to receive the file.
-     * 
+     *
      * @param JID The JID of the stream host.
      * @param address The internet address of the stream host.
      * @return The added stream host.
      */
-    public StreamHost addStreamHost(final String JID, final String address) {
+    public StreamHost addStreamHost(final Jid JID, final String address) {
         return addStreamHost(JID, address, 0);
     }
 
     /**
      * Adds a potential stream host that the remote user can connect to to receive the file.
-     * 
+     *
      * @param JID The JID of the stream host.
      * @param address The internet address of the stream host.
      * @param port The port on which the remote host is seeking connections.
      * @return The added stream host.
      */
-    public StreamHost addStreamHost(final String JID, final String address, final int port) {
-        StreamHost host = new StreamHost(JID, address);
-        host.setPort(port);
+    public StreamHost addStreamHost(final Jid JID, final String address, final int port) {
+        StreamHost host = new StreamHost(JID, address, port);
         addStreamHost(host);
 
         return host;
@@ -133,7 +138,7 @@ public class Bytestream extends IQ {
 
     /**
      * Adds a potential stream host that the remote user can transfer the file through.
-     * 
+     *
      * @param host The potential stream host.
      */
     public void addStreamHost(final StreamHost host) {
@@ -142,20 +147,20 @@ public class Bytestream extends IQ {
 
     /**
      * Returns the list of stream hosts contained in the packet.
-     * 
+     *
      * @return Returns the list of stream hosts contained in the packet.
      */
-    public Collection<StreamHost> getStreamHosts() {
-        return Collections.unmodifiableCollection(streamHosts);
+    public List<StreamHost> getStreamHosts() {
+        return Collections.unmodifiableList(streamHosts);
     }
 
     /**
      * Returns the stream host related to the given JID, or null if there is none.
-     * 
+     *
      * @param JID The JID of the desired stream host.
      * @return Returns the stream host related to the given JID, or null if there is none.
      */
-    public StreamHost getStreamHost(final String JID) {
+    public StreamHost getStreamHost(final Jid JID) {
         if (JID == null) {
             return null;
         }
@@ -170,7 +175,7 @@ public class Bytestream extends IQ {
 
     /**
      * Returns the count of stream hosts contained in this packet.
-     * 
+     *
      * @return Returns the count of stream hosts contained in this packet.
      */
     public int countStreamHosts() {
@@ -180,16 +185,16 @@ public class Bytestream extends IQ {
     /**
      * Upon connecting to the stream host the target of the stream replies to the initiator with the
      * JID of the SOCKS5 host that they used.
-     * 
+     *
      * @param JID The JID of the used host.
      */
-    public void setUsedHost(final String JID) {
+    public void setUsedHost(final Jid JID) {
         this.usedHost = new StreamHostUsed(JID);
     }
 
     /**
      * Returns the SOCKS5 host connected to by the remote user.
-     * 
+     *
      * @return Returns the SOCKS5 host connected to by the remote user.
      */
     public StreamHostUsed getUsedHost() {
@@ -197,10 +202,10 @@ public class Bytestream extends IQ {
     }
 
     /**
-     * Returns the activate element of the packet sent to the proxy host to verify the identity of
+     * Returns the activate element of the stanza sent to the proxy host to verify the identity of
      * the initiator and match them to the appropriate stream.
-     * 
-     * @return Returns the activate element of the packet sent to the proxy host to verify the
+     *
+     * @return Returns the activate element of the stanza sent to the proxy host to verify the
      *         identity of the initiator and match them to the appropriate stream.
      */
     public Activate getToActivate() {
@@ -208,31 +213,23 @@ public class Bytestream extends IQ {
     }
 
     /**
-     * Upon the response from the target of the used host the activate packet is sent to the SOCKS5
+     * Upon the response from the target of the used host the activate stanza is sent to the SOCKS5
      * proxy. The proxy will activate the stream or return an error after verifying the identity of
      * the initiator, using the activate packet.
-     * 
+     *
      * @param targetID The JID of the target of the file transfer.
      */
-    public void setToActivate(final String targetID) {
+    public void setToActivate(final Jid targetID) {
         this.toActivate = new Activate(targetID);
     }
 
     @Override
-    public XmlStringBuilder getChildElementXML() {
-        XmlStringBuilder xml = new XmlStringBuilder();
-        xml.openElement(IQ.QUERY_ELEMENT);
-        xml.xmlnsAttribute(NAMESPACE);
-
-        switch(getType()) {
+    protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder xml) {
+        switch (getType()) {
         case set:
-            if (getSessionID() != null) {
-                xml.attribute("sid", getSessionID());
-            }
-            if (getMode() != null) {
-                xml.attribute("mode", getMode());
-            }
-            xml.rightAngelBracket();
+            xml.optAttribute("sid", getSessionID());
+            xml.optAttribute("mode", getMode());
+            xml.rightAngleBracket();
             if (getToActivate() == null) {
                 for (StreamHost streamHost : getStreamHosts()) {
                     xml.append(streamHost.toXML());
@@ -243,97 +240,92 @@ public class Bytestream extends IQ {
             }
             break;
         case result:
-            xml.rightAngelBracket();
-            if (getUsedHost() != null) {
-                xml.append(getUsedHost().toXML());
-            }
+            xml.rightAngleBracket();
+            xml.optAppend(getUsedHost());
+            // TODO Bytestream can include either used host *or* streamHosts. Never both. This should be ensured by the
+            // constructions mechanisms of Bytestream
             // A result from the server can also contain stream hosts
-            else if (countStreamHosts() > 0) {
-                for (StreamHost host : streamHosts) {
-                    xml.append(host.toXML());
-                }
+            for (StreamHost host : streamHosts) {
+                xml.append(host.toXML());
             }
             break;
         case get:
-            xml.closeEmptyElement();
-            return xml;
+            xml.setEmptyElement();
+            break;
         default:
             throw new IllegalStateException();
         }
-        xml.closeElement(IQ.QUERY_ELEMENT);
 
         return xml;
     }
 
     /**
-     * Packet extension that represents a potential SOCKS5 proxy for the file transfer. Stream hosts
+     * Stanza extension that represents a potential SOCKS5 proxy for the file transfer. Stream hosts
      * are forwarded to the target of the file transfer who then chooses and connects to one.
-     * 
+     *
      * @author Alexander Wenckus
      */
-    public static class StreamHost implements Element {
+    public static class StreamHost implements NamedElement {
 
         public static String ELEMENTNAME = "streamhost";
 
-        private final String JID;
+        private final Jid jid;
 
-        private final String addy;
+        private final String address;
 
-        private int port = 0;
+        private final int port;
+
+        public StreamHost(Jid jid, String address) {
+            this(jid, address, 0);
+        }
 
         /**
          * Default constructor.
-         * 
-         * @param JID The JID of the stream host.
+         *
+         * @param jid The JID of the stream host.
          * @param address The internet address of the stream host.
+         * @param port port of the stream host.
          */
-        public StreamHost(final String JID, final String address) {
-            this.JID = JID;
-            this.addy = address;
-        }
-
-        /**
-         * Returns the JID of the stream host.
-         * 
-         * @return Returns the JID of the stream host.
-         */
-        public String getJID() {
-            return JID;
-        }
-
-        /**
-         * Returns the internet address of the stream host.
-         * 
-         * @return Returns the internet address of the stream host.
-         */
-        public String getAddress() {
-            return addy;
-        }
-
-        /**
-         * Sets the port of the stream host.
-         * 
-         * @param port The port on which the potential stream host would accept the connection.
-         */
-        public void setPort(final int port) {
+        public StreamHost(final Jid jid, final String address, int port) {
+            this.jid = Objects.requireNonNull(jid, "StreamHost JID must not be null");
+            this.address = StringUtils.requireNotNullNorEmpty(address, "StreamHost address must not be null");
             this.port = port;
         }
 
         /**
+         * Returns the JID of the stream host.
+         *
+         * @return Returns the JID of the stream host.
+         */
+        public Jid getJID() {
+            return jid;
+        }
+
+        /**
+         * Returns the internet address of the stream host.
+         *
+         * @return Returns the internet address of the stream host.
+         */
+        public String getAddress() {
+            return address;
+        }
+
+        /**
          * Returns the port on which the potential stream host would accept the connection.
-         * 
+         *
          * @return Returns the port on which the potential stream host would accept the connection.
          */
         public int getPort() {
             return port;
         }
 
+        @Override
         public String getElementName() {
             return ELEMENTNAME;
         }
 
         @Override
-        public XmlStringBuilder toXML() {
+        public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
             XmlStringBuilder xml = new XmlStringBuilder(this);
             xml.attribute("jid", getJID());
             xml.attribute("host", getAddress());
@@ -345,44 +337,50 @@ public class Bytestream extends IQ {
             xml.closeEmptyElement();
             return xml;
         }
+
+        @Override
+        public String toString() {
+            return "SOCKS5 Stream Host: " + jid + "[" + address + ":" + port + "]";
+        }
     }
 
     /**
      * After selected a SOCKS5 stream host and successfully connecting, the target of the file
-     * transfer returns a byte stream packet with the stream host used extension.
-     * 
+     * transfer returns a byte stream stanza with the stream host used extension.
+     *
      * @author Alexander Wenckus
      */
-    public static class StreamHostUsed implements Element {
+    public static class StreamHostUsed implements NamedElement {
 
         public static String ELEMENTNAME = "streamhost-used";
 
-        private final String JID;
+        private final Jid jid;
 
         /**
          * Default constructor.
-         * 
-         * @param JID The JID of the selected stream host.
+         *
+         * @param jid The JID of the selected stream host.
          */
-        public StreamHostUsed(final String JID) {
-            this.JID = JID;
+        public StreamHostUsed(final Jid jid) {
+            this.jid = jid;
         }
 
         /**
          * Returns the JID of the selected stream host.
-         * 
+         *
          * @return Returns the JID of the selected stream host.
          */
-        public String getJID() {
-            return JID;
+        public Jid getJID() {
+            return jid;
         }
 
+        @Override
         public String getElementName() {
             return ELEMENTNAME;
         }
 
         @Override
-        public XmlStringBuilder toXML() {
+        public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
             XmlStringBuilder xml = new XmlStringBuilder(this);
             xml.attribute("jid", getJID());
             xml.closeEmptyElement();
@@ -391,42 +389,43 @@ public class Bytestream extends IQ {
     }
 
     /**
-     * The packet sent by the stream initiator to the stream proxy to activate the connection.
-     * 
+     * The stanza sent by the stream initiator to the stream proxy to activate the connection.
+     *
      * @author Alexander Wenckus
      */
-    public static class Activate implements Element {
+    public static class Activate implements NamedElement {
 
         public static String ELEMENTNAME = "activate";
 
-        private final String target;
+        private final Jid target;
 
         /**
          * Default constructor specifying the target of the stream.
-         * 
+         *
          * @param target The target of the stream.
          */
-        public Activate(final String target) {
+        public Activate(final Jid target) {
             this.target = target;
         }
 
         /**
          * Returns the target of the activation.
-         * 
+         *
          * @return Returns the target of the activation.
          */
-        public String getTarget() {
+        public Jid getTarget() {
             return target;
         }
 
+        @Override
         public String getElementName() {
             return ELEMENTNAME;
         }
 
         @Override
-        public XmlStringBuilder toXML() {
+        public XmlStringBuilder toXML(org.jivesoftware.smack.packet.XmlEnvironment enclosingNamespace) {
             XmlStringBuilder xml = new XmlStringBuilder(this);
-            xml.rightAngelBracket();
+            xml.rightAngleBracket();
             xml.escape(getTarget());
             xml.closeElement(this);
             return xml;
@@ -435,7 +434,7 @@ public class Bytestream extends IQ {
 
     /**
      * The stream can be either a TCP stream or a UDP stream.
-     * 
+     *
      * @author Alexander Wenckus
      */
     public enum Mode {

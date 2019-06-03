@@ -17,15 +17,16 @@
 
 package org.jivesoftware.smackx.disco;
 
-import org.jivesoftware.smack.packet.PacketExtension;
+import java.util.List;
+
+import org.jivesoftware.smack.packet.ExtensionElement;
+
 import org.jivesoftware.smackx.disco.packet.DiscoverInfo;
 import org.jivesoftware.smackx.disco.packet.DiscoverItems;
 
-import java.util.List;
-
 
 /**
- * The NodeInformationProvider is responsible for providing supported indentities, features
+ * The NodeInformationProvider is responsible for providing supported identities, features
  * and hosted items (i.e. DiscoverItems.Item) about a given node. This information will be
  * requested each time this XMPPP client receives a disco info or items requests on the
  * given node. each time this XMPPP client receives a disco info or items requests on the
@@ -37,9 +38,9 @@ public interface NodeInformationProvider {
 
     /**
      * Returns a list of the Items {@link org.jivesoftware.smackx.disco.packet.DiscoverItems.Item}
-     * defined in the node. For example, the MUC protocol specifies that an XMPP client should 
+     * defined in the node. For example, the MUC protocol specifies that an XMPP client should
      * answer an Item for each joined room when asked for the rooms where the use has joined.
-     *  
+     *
      * @return a list of the Items defined in the node.
      */
     List<DiscoverItems.Item> getNodeItems();
@@ -55,7 +56,7 @@ public interface NodeInformationProvider {
     List<String> getNodeFeatures();
 
     /**
-     * Returns a list of the indentites defined in the node. For
+     * Returns a list of the identities defined in the node. For
      * example, the x-command protocol must provide an identity of
      * category automation and type command-node for each command.
      *
@@ -64,9 +65,9 @@ public interface NodeInformationProvider {
     List<DiscoverInfo.Identity> getNodeIdentities();
 
     /**
-     * Returns a list of the packet extensions defined in the node.
+     * Returns a list of the stanza extensions defined in the node.
      *
-     * @return a list of the packet extensions defined in the node.
+     * @return a list of the stanza extensions defined in the node.
      */
-    List<PacketExtension> getNodePacketExtensions();
+    List<ExtensionElement> getNodePacketExtensions();
 }

@@ -25,22 +25,25 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import org.jivesoftware.smack.SmackException.NotConnectedException;
+import org.jivesoftware.smack.SmackException.NotLoggedInException;
+import org.jivesoftware.smack.StanzaListener;
 import org.jivesoftware.smack.XMPPConnection;
-import org.jivesoftware.smack.PacketListener;
 import org.jivesoftware.smack.filter.AndFilter;
-import org.jivesoftware.smack.filter.PacketFilter;
-import org.jivesoftware.smack.filter.PacketTypeFilter;
+import org.jivesoftware.smack.filter.StanzaFilter;
+import org.jivesoftware.smack.filter.StanzaTypeFilter;
 import org.jivesoftware.smack.packet.IQ;
 import org.jivesoftware.smack.packet.Message;
-import org.jivesoftware.smack.packet.Packet;
-import org.jivesoftware.smack.packet.PacketExtension;
-import org.jivesoftware.smack.packet.XMPPError;
-import org.jivesoftware.smack.util.StringUtils;
+import org.jivesoftware.smack.packet.Stanza;
+import org.jivesoftware.smack.packet.StanzaError;
+import org.jivesoftware.smack.util.stringencoder.Base64;
+
 import org.jivesoftware.smackx.bytestreams.BytestreamSession;
 import org.jivesoftware.smackx.bytestreams.ibb.packet.Close;
 import org.jivesoftware.smackx.bytestreams.ibb.packet.Data;
 import org.jivesoftware.smackx.bytestreams.ibb.packet.DataPacketExtension;
 import org.jivesoftware.smackx.bytestreams.ibb.packet.Open;
+
+import org.jxmpp.jid.Jid;
 
 /**
  * InBandBytestreamSession class represents an In-Band Bytestream session.
@@ -52,7 +55,7 @@ import org.jivesoftware.smackx.bytestreams.ibb.packet.Open;
  * closed individually the session will be closed automatically once the second stream is closed.
  * Use the {@link #setCloseBothStreamsEnabled(boolean)} method if both streams should be closed
  * automatically if one of them is closed.
- * 
+ *
  * @author Henning Staib
  */
 public class InBandBytestreamSession implements BytestreamSession {
@@ -74,7 +77,7 @@ public class InBandBytestreamSession implements BytestreamSession {
     private IBBOutputStream outputStream;
 
     /* JID of the remote peer */
-    private String remoteJID;
+    private Jid remoteJID;
 
     /* flag to close both streams if one of them is closed */
     private boolean closeBothStreamsEnabled = false;
@@ -84,13 +87,13 @@ public class InBandBytestreamSession implements BytestreamSession {
 
     /**
      * Constructor.
-     * 
+     *
      * @param connection the XMPP connection
      * @param byteStreamRequest the In-Band Bytestream open request for this session
      * @param remoteJID JID of the remote peer
      */
     protected InBandBytestreamSession(XMPPConnection connection, Open byteStreamRequest,
-                    String remoteJID) {
+                    Jid remoteJID) {
         this.connection = connection;
         this.byteStreamRequest = byteStreamRequest;
         this.remoteJID = remoteJID;
@@ -109,18 +112,22 @@ public class InBandBytestreamSession implements BytestreamSession {
 
     }
 
+    @Override
     public InputStream getInputStream() {
         return this.inputStream;
     }
 
+    @Override
     public OutputStream getOutputStream() {
         return this.outputStream;
     }
 
+    @Override
     public int getReadTimeout() {
         return this.inputStream.readTimeout;
     }
 
+    @Override
     public void setReadTimeout(int timeout) {
         if (timeout < 0) {
             throw new IllegalArgumentException("Timeout must be >= 0");
@@ -131,7 +138,7 @@ public class InBandBytestreamSession implements BytestreamSession {
     /**
      * Returns whether both streams should be closed automatically if one of the streams is closed.
      * Default is <code>false</code>.
-     * 
+     *
      * @return <code>true</code> if both streams will be closed if one of the streams is closed,
      *         <code>false</code> if both streams can be closed independently.
      */
@@ -142,7 +149,7 @@ public class InBandBytestreamSession implements BytestreamSession {
     /**
      * Sets whether both streams should be closed automatically if one of the streams is closed.
      * Default is <code>false</code>.
-     * 
+     *
      * @param closeBothStreamsEnabled <code>true</code> if both streams should be closed if one of
      *        the streams is closed, <code>false</code> if both streams should be closed
      *        independently
@@ -151,6 +158,7 @@ public class InBandBytestreamSession implements BytestreamSession {
         this.closeBothStreamsEnabled = closeBothStreamsEnabled;
     }
 
+    @Override
     public void close() throws IOException {
         closeByLocal(true); // close input stream
         closeByLocal(false); // close output stream
@@ -158,11 +166,12 @@ public class InBandBytestreamSession implements BytestreamSession {
 
     /**
      * This method is invoked if a request to close the In-Band Bytestream has been received.
-     * 
+     *
      * @param closeRequest the close request from the remote peer
-     * @throws NotConnectedException 
+     * @throws NotConnectedException
+     * @throws InterruptedException
      */
-    protected void closeByPeer(Close closeRequest) throws NotConnectedException {
+    protected void closeByPeer(Close closeRequest) throws NotConnectedException, InterruptedException {
 
         /*
          * close streams without flushing them, because stream is already considered closed on the
@@ -174,14 +183,15 @@ public class InBandBytestreamSession implements BytestreamSession {
 
         // acknowledge close request
         IQ confirmClose = IQ.createResultIQ(closeRequest);
-        this.connection.sendPacket(confirmClose);
+        this.connection.sendStanza(confirmClose);
 
     }
 
     /**
      * This method is invoked if one of the streams has been closed locally, if an error occurred
      * locally or if the whole session should be closed.
-     * 
+     *
+     * @param in do we want to close the Input- or OutputStream?
      * @throws IOException if an error occurs while sending the close request
      */
     protected synchronized void closeByLocal(boolean in) throws IOException {
@@ -210,7 +220,7 @@ public class InBandBytestreamSession implements BytestreamSession {
             Close close = new Close(this.byteStreamRequest.getSessionID());
             close.setTo(this.remoteJID);
             try {
-                connection.createPacketCollectorAndSend(close).nextResultOrThrow();
+                connection.createStanzaCollectorAndSend(close).nextResultOrThrow();
             }
             catch (Exception e) {
                 // Sadly we are unable to use the IOException(Throwable) constructor because this
@@ -223,20 +233,22 @@ public class InBandBytestreamSession implements BytestreamSession {
             this.inputStream.cleanup();
 
             // remove session from manager
-            InBandBytestreamManager.getByteStreamManager(this.connection).getSessions().remove(this);
+            // Thanks Google Error Prone for finding the bug where remove() was called with 'this' as argument. Changed
+            // now to remove(byteStreamRequest.getSessionID).
+            InBandBytestreamManager.getByteStreamManager(this.connection).getSessions().remove(byteStreamRequest.getSessionID());
         }
 
     }
 
     /**
      * IBBInputStream class is the base implementation of an In-Band Bytestream input stream.
-     * Subclasses of this input stream must provide a packet listener along with a packet filter to
+     * Subclasses of this input stream must provide a stanza listener along with a stanza filter to
      * collect the In-Band Bytestream data packets.
      */
     private abstract class IBBInputStream extends InputStream {
 
         /* the data packet listener to fill the data queue */
-        private final PacketListener dataPacketListener;
+        private final StanzaListener dataPacketListener;
 
         /* queue containing received In-Band Bytestream data packets */
         protected final BlockingQueue<DataPacketExtension> dataQueue = new LinkedBlockingQueue<DataPacketExtension>();
@@ -262,26 +274,27 @@ public class InBandBytestreamSession implements BytestreamSession {
         /**
          * Constructor.
          */
-        public IBBInputStream() {
+        protected IBBInputStream() {
             // add data packet listener to connection
             this.dataPacketListener = getDataPacketListener();
-            connection.addPacketListener(this.dataPacketListener, getDataPacketFilter());
+            connection.addSyncStanzaListener(this.dataPacketListener, getDataPacketFilter());
         }
 
         /**
-         * Returns the packet listener that processes In-Band Bytestream data packets.
-         * 
-         * @return the data packet listener
+         * Returns the stanza listener that processes In-Band Bytestream data packets.
+         *
+         * @return the data stanza listener
          */
-        protected abstract PacketListener getDataPacketListener();
+        protected abstract StanzaListener getDataPacketListener();
 
         /**
-         * Returns the packet filter that accepts In-Band Bytestream data packets.
-         * 
-         * @return the data packet filter
+         * Returns the stanza filter that accepts In-Band Bytestream data packets.
+         *
+         * @return the data stanza filter
          */
-        protected abstract PacketFilter getDataPacketFilter();
+        protected abstract StanzaFilter getDataPacketFilter();
 
+        @Override
         public synchronized int read() throws IOException {
             checkClosed();
 
@@ -294,9 +307,10 @@ public class InBandBytestreamSession implements BytestreamSession {
             }
 
             // return byte and increment buffer pointer
-            return ((int) buffer[bufferPointer++]) & 0xff;
+            return buffer[bufferPointer++] & 0xff;
         }
 
+        @Override
         public synchronized int read(byte[] b, int off, int len) throws IOException {
             if (b == null) {
                 throw new NullPointerException();
@@ -330,14 +344,15 @@ public class InBandBytestreamSession implements BytestreamSession {
             return len;
         }
 
+        @Override
         public synchronized int read(byte[] b) throws IOException {
             return read(b, 0, b.length);
         }
 
         /**
-         * This method blocks until a data packet is received, the stream is closed or the current
+         * This method blocks until a data stanza is received, the stream is closed or the current
          * thread is interrupted.
-         * 
+         *
          * @return <code>true</code> if data was received, otherwise <code>false</code>
          * @throws IOException if data packets are out of sequence
          */
@@ -391,7 +406,7 @@ public class InBandBytestreamSession implements BytestreamSession {
 
         /**
          * Checks if this stream is closed and throws an IOException if necessary
-         * 
+         *
          * @throws IOException if stream is closed and no data should be read anymore
          */
         private void checkClosed() throws IOException {
@@ -404,10 +419,12 @@ public class InBandBytestreamSession implements BytestreamSession {
             }
         }
 
+        @Override
         public boolean markSupported() {
             return false;
         }
 
+        @Override
         public void close() throws IOException {
             if (closeInvoked) {
                 return;
@@ -419,7 +436,7 @@ public class InBandBytestreamSession implements BytestreamSession {
         }
 
         /**
-         * This method sets the close flag and removes the data packet listener.
+         * This method sets the close flag and removes the data stanza listener.
          */
         private void closeInternal() {
             if (isClosed) {
@@ -432,7 +449,7 @@ public class InBandBytestreamSession implements BytestreamSession {
          * Invoked if the session is closed.
          */
         private void cleanup() {
-            connection.removePacketListener(this.dataPacketListener);
+            connection.removeSyncStanzaListener(this.dataPacketListener);
         }
 
     }
@@ -443,24 +460,24 @@ public class InBandBytestreamSession implements BytestreamSession {
      */
     private class IQIBBInputStream extends IBBInputStream {
 
-        protected PacketListener getDataPacketListener() {
-            return new PacketListener() {
+        @Override
+        protected StanzaListener getDataPacketListener() {
+            return new StanzaListener() {
 
                 private long lastSequence = -1;
 
-                public void processPacket(Packet packet) throws NotConnectedException {
+                @Override
+                public void processStanza(Stanza packet) throws NotConnectedException, InterruptedException {
                     // get data packet extension
-                    DataPacketExtension data = (DataPacketExtension) packet.getExtension(
-                                    DataPacketExtension.ELEMENT,
-                                    DataPacketExtension.NAMESPACE);
+                    DataPacketExtension data = ((Data) packet).getDataPacketExtension();
 
                     /*
                      * check if sequence was not used already (see XEP-0047 Section 2.2)
                      */
                     if (data.getSeq() <= this.lastSequence) {
-                        IQ unexpectedRequest = IQ.createErrorResponse((IQ) packet, new XMPPError(
-                                        XMPPError.Condition.unexpected_request));
-                        connection.sendPacket(unexpectedRequest);
+                        IQ unexpectedRequest = IQ.createErrorResponse((IQ) packet,
+                                        StanzaError.Condition.unexpected_request);
+                        connection.sendStanza(unexpectedRequest);
                         return;
 
                     }
@@ -468,9 +485,9 @@ public class InBandBytestreamSession implements BytestreamSession {
                     // check if encoded data is valid (see XEP-0047 Section 2.2)
                     if (data.getDecodedData() == null) {
                         // data is invalid; respond with bad-request error
-                        IQ badRequest = IQ.createErrorResponse((IQ) packet, new XMPPError(
-                                        XMPPError.Condition.bad_request));
-                        connection.sendPacket(badRequest);
+                        IQ badRequest = IQ.createErrorResponse((IQ) packet,
+                                        StanzaError.Condition.bad_request);
+                        connection.sendStanza(badRequest);
                         return;
                     }
 
@@ -479,7 +496,7 @@ public class InBandBytestreamSession implements BytestreamSession {
 
                     // confirm IQ
                     IQ confirmData = IQ.createResultIQ((IQ) packet);
-                    connection.sendPacket(confirmData);
+                    connection.sendStanza(confirmData);
 
                     // set last seen sequence
                     this.lastSequence = data.getSeq();
@@ -492,12 +509,13 @@ public class InBandBytestreamSession implements BytestreamSession {
             };
         }
 
-        protected PacketFilter getDataPacketFilter() {
+        @Override
+        protected StanzaFilter getDataPacketFilter() {
             /*
              * filter all IQ stanzas having type 'SET' (represented by Data class), containing a
-             * data packet extension, matching session ID and recipient
+             * data stanza extension, matching session ID and recipient
              */
-            return new AndFilter(new PacketTypeFilter(Data.class), new IBBDataPacketFilter());
+            return new AndFilter(new StanzaTypeFilter(Data.class), new IBBDataPacketFilter());
         }
 
     }
@@ -508,12 +526,14 @@ public class InBandBytestreamSession implements BytestreamSession {
      */
     private class MessageIBBInputStream extends IBBInputStream {
 
-        protected PacketListener getDataPacketListener() {
-            return new PacketListener() {
+        @Override
+        protected StanzaListener getDataPacketListener() {
+            return new StanzaListener() {
 
-                public void processPacket(Packet packet) {
+                @Override
+                public void processStanza(Stanza packet) {
                     // get data packet extension
-                    DataPacketExtension data = (DataPacketExtension) packet.getExtension(
+                    DataPacketExtension data = packet.getExtension(
                                     DataPacketExtension.ELEMENT,
                                     DataPacketExtension.NAMESPACE);
 
@@ -539,38 +559,44 @@ public class InBandBytestreamSession implements BytestreamSession {
         }
 
         @Override
-        protected PacketFilter getDataPacketFilter() {
+        protected StanzaFilter getDataPacketFilter() {
             /*
-             * filter all message stanzas containing a data packet extension, matching session ID
+             * filter all message stanzas containing a data stanza extension, matching session ID
              * and recipient
              */
-            return new AndFilter(new PacketTypeFilter(Message.class), new IBBDataPacketFilter());
+            return new AndFilter(new StanzaTypeFilter(Message.class), new IBBDataPacketFilter());
         }
 
     }
 
     /**
      * IBBDataPacketFilter class filters all packets from the remote peer of this session,
-     * containing an In-Band Bytestream data packet extension whose session ID matches this sessions
+     * containing an In-Band Bytestream data stanza extension whose session ID matches this sessions
      * ID.
      */
-    private class IBBDataPacketFilter implements PacketFilter {
+    private class IBBDataPacketFilter implements StanzaFilter {
 
-        public boolean accept(Packet packet) {
+        @Override
+        public boolean accept(Stanza packet) {
             // sender equals remote peer
-            if (!packet.getFrom().equalsIgnoreCase(remoteJID)) {
+            if (!packet.getFrom().equals(remoteJID)) {
                 return false;
             }
 
-            // stanza contains data packet extension
-            PacketExtension packetExtension = packet.getExtension(DataPacketExtension.ELEMENT,
-                            DataPacketExtension.NAMESPACE);
-            if (packetExtension == null || !(packetExtension instanceof DataPacketExtension)) {
-                return false;
+            DataPacketExtension data;
+            if (packet instanceof Data) {
+                data = ((Data) packet).getDataPacketExtension();
+            } else {
+                // stanza contains data packet extension
+                data = packet.getExtension(
+                        DataPacketExtension.ELEMENT,
+                        DataPacketExtension.NAMESPACE);
+                if (data == null) {
+                    return false;
+                }
             }
 
             // session ID equals this session ID
-            DataPacketExtension data = (DataPacketExtension) packetExtension;
             if (!data.getSessionID().equals(byteStreamRequest.getSessionID())) {
                 return false;
             }
@@ -601,19 +627,21 @@ public class InBandBytestreamSession implements BytestreamSession {
         /**
          * Constructor.
          */
-        public IBBOutputStream() {
+        private IBBOutputStream() {
             this.buffer = new byte[byteStreamRequest.getBlockSize()];
         }
 
         /**
-         * Writes the given data packet to the XMPP stream.
-         * 
+         * Writes the given data stanza to the XMPP stream.
+         *
          * @param data the data packet
          * @throws IOException if an I/O error occurred while sending or if the stream is closed
-         * @throws NotConnectedException 
+         * @throws NotConnectedException
+         * @throws InterruptedException
          */
-        protected abstract void writeToXML(DataPacketExtension data) throws IOException, NotConnectedException;
+        protected abstract void writeToXML(DataPacketExtension data) throws IOException, NotConnectedException, InterruptedException;
 
+        @Override
         public synchronized void write(int b) throws IOException {
             if (this.isClosed) {
                 throw new IOException("Stream is closed");
@@ -627,7 +655,8 @@ public class InBandBytestreamSession implements BytestreamSession {
             buffer[bufferPointer++] = (byte) b;
         }
 
-        public synchronized void write(byte b[], int off, int len) throws IOException {
+        @Override
+        public synchronized void write(byte[] b, int off, int len) throws IOException {
             if (b == null) {
                 throw new NullPointerException();
             }
@@ -657,6 +686,7 @@ public class InBandBytestreamSession implements BytestreamSession {
             }
         }
 
+        @Override
         public synchronized void write(byte[] b) throws IOException {
             write(b, 0, b.length);
         }
@@ -665,13 +695,13 @@ public class InBandBytestreamSession implements BytestreamSession {
          * Fills the buffer with the given data and sends it over the XMPP stream if the buffers
          * capacity has been reached. This method is only called from this class so it is assured
          * that the amount of data to send is <= buffer capacity
-         * 
+         *
          * @param b the data
          * @param off the data
          * @param len the number of bytes to write
          * @throws IOException if an I/O error occurred while sending or if the stream is closed
          */
-        private synchronized void writeOut(byte b[], int off, int len) throws IOException {
+        private synchronized void writeOut(byte[] b, int off, int len) throws IOException {
             if (this.isClosed) {
                 throw new IOException("Stream is closed");
             }
@@ -693,6 +723,7 @@ public class InBandBytestreamSession implements BytestreamSession {
             bufferPointer += len - available;
         }
 
+        @Override
         public synchronized void flush() throws IOException {
             if (this.isClosed) {
                 throw new IOException("Stream is closed");
@@ -708,7 +739,7 @@ public class InBandBytestreamSession implements BytestreamSession {
             }
 
             // create data packet
-            String enc = StringUtils.encodeBase64(buffer, 0, bufferPointer, false);
+            String enc = Base64.encodeToString(buffer, 0, bufferPointer);
             DataPacketExtension data = new DataPacketExtension(byteStreamRequest.getSessionID(),
                             this.seq, enc);
 
@@ -716,7 +747,7 @@ public class InBandBytestreamSession implements BytestreamSession {
             try {
                 writeToXML(data);
             }
-            catch (NotConnectedException e) {
+            catch (InterruptedException | NotConnectedException e) {
                 IOException ioException = new IOException();
                 ioException.initCause(e);
                 throw ioException;
@@ -730,6 +761,7 @@ public class InBandBytestreamSession implements BytestreamSession {
 
         }
 
+        @Override
         public void close() throws IOException {
             if (isClosed) {
                 return;
@@ -739,7 +771,7 @@ public class InBandBytestreamSession implements BytestreamSession {
 
         /**
          * Sets the close flag and optionally flushes the stream.
-         * 
+         *
          * @param flush if <code>true</code> flushes the stream
          */
         protected void closeInternal(boolean flush) {
@@ -776,7 +808,7 @@ public class InBandBytestreamSession implements BytestreamSession {
             iq.setTo(remoteJID);
 
             try {
-                connection.createPacketCollectorAndSend(iq).nextResultOrThrow();
+                connection.createStanzaCollectorAndSend(iq).nextResultOrThrow();
             }
             catch (Exception e) {
                 // close session unless it is already closed
@@ -801,15 +833,26 @@ public class InBandBytestreamSession implements BytestreamSession {
     private class MessageIBBOutputStream extends IBBOutputStream {
 
         @Override
-        protected synchronized void writeToXML(DataPacketExtension data) throws NotConnectedException {
+        protected synchronized void writeToXML(DataPacketExtension data) throws NotConnectedException, InterruptedException {
             // create message stanza containing data packet
             Message message = new Message(remoteJID);
             message.addExtension(data);
 
-            connection.sendPacket(message);
+            connection.sendStanza(message);
 
         }
 
+    }
+
+    /**
+     * Process IQ stanza.
+     * @param data
+     * @throws NotConnectedException
+     * @throws InterruptedException
+     * @throws NotLoggedInException
+     */
+    public void processIQPacket(Data data) throws NotConnectedException, InterruptedException, NotLoggedInException {
+        inputStream.dataPacketListener.processStanza(data);
     }
 
 }

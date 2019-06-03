@@ -17,13 +17,15 @@
 
 package org.jivesoftware.smackx.workgroup.ext.macros;
 
-import java.io.StringReader;
+import java.io.IOException;
 
 import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.XmlEnvironment;
 import org.jivesoftware.smack.provider.IQProvider;
+import org.jivesoftware.smack.util.PacketParserUtils;
 import org.jivesoftware.smack.util.StringUtils;
-import org.xmlpull.v1.XmlPullParserFactory;
-import org.xmlpull.v1.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParser;
+import org.jivesoftware.smack.xml.XmlPullParserException;
 
 /**
  * Macros iq is responsible for handling global and personal macros in the a Live Assistant
@@ -31,9 +33,23 @@ import org.xmlpull.v1.XmlPullParser;
  */
 public class Macros extends IQ {
 
+    /**
+     * Element name of the stanza extension.
+     */
+    public static final String ELEMENT_NAME = "macros";
+
+    /**
+     * Namespace of the stanza extension.
+     */
+    public static final String NAMESPACE = "http://jivesoftware.com/protocol/workgroup";
+
     private MacroGroup rootGroup;
     private boolean personal;
     private MacroGroup personalMacroGroup;
+
+    public Macros() {
+        super(ELEMENT_NAME, NAMESPACE);
+    }
 
     public MacroGroup getRootGroup() {
         return rootGroup;
@@ -59,32 +75,20 @@ public class Macros extends IQ {
         this.personalMacroGroup = personalMacroGroup;
     }
 
+    @Override
+    protected IQChildElementXmlStringBuilder getIQChildElementBuilder(IQChildElementXmlStringBuilder buf) {
+        buf.rightAngleBracket();
 
-    /**
-     * Element name of the packet extension.
-     */
-    public static final String ELEMENT_NAME = "macros";
-
-    /**
-     * Namespace of the packet extension.
-     */
-    public static final String NAMESPACE = "http://jivesoftware.com/protocol/workgroup";
-
-    public String getChildElementXML() {
-        StringBuilder buf = new StringBuilder();
-
-        buf.append("<").append(ELEMENT_NAME).append(" xmlns=\"").append(NAMESPACE).append("\">");
         if (isPersonal()) {
             buf.append("<personal>true</personal>");
         }
-        if (getPersonalMacroGroup() != null) {        	
-        	buf.append("<personalMacro>");
-        	buf.append(StringUtils.escapeForXML(getPersonalMacroGroup().toXML()));
-        	buf.append("</personalMacro>");
+        if (getPersonalMacroGroup() != null) {
+            buf.append("<personalMacro>");
+            buf.append(StringUtils.escapeForXmlText(getPersonalMacroGroup().toXML()));
+            buf.append("</personalMacro>");
         }
-        buf.append("</").append(ELEMENT_NAME).append("> ");
 
-        return buf.toString();
+        return buf;
     }
 
     /**
@@ -92,26 +96,23 @@ public class Macros extends IQ {
      *
      * @author Derek DeMoro
      */
-    public static class InternalProvider implements IQProvider {
+    public static class InternalProvider extends IQProvider<Macros> {
 
-        public InternalProvider() {
-            super();
-        }
-
-        public IQ parseIQ(XmlPullParser parser) throws Exception {
+        @Override
+        public Macros parse(XmlPullParser parser, int initialDepth, XmlEnvironment xmlEnvironment) throws XmlPullParserException, IOException {
             Macros macroGroup = new Macros();
 
             boolean done = false;
             while (!done) {
-                int eventType = parser.next();
-                if (eventType == XmlPullParser.START_TAG) {
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT) {
                     if (parser.getName().equals("model")) {
                         String macros = parser.nextText();
                         MacroGroup group = parseMacroGroups(macros);
                         macroGroup.setRootGroup(group);
                     }
                 }
-                else if (eventType == XmlPullParser.END_TAG) {
+                else if (eventType == XmlPullParser.Event.END_ELEMENT) {
                     if (parser.getName().equals(ELEMENT_NAME)) {
                         done = true;
                     }
@@ -120,77 +121,76 @@ public class Macros extends IQ {
 
             return macroGroup;
         }
-        
-        public Macro parseMacro(XmlPullParser parser) throws Exception {
-        	Macro macro = new Macro();
-        	 boolean done = false;
+
+        public Macro parseMacro(XmlPullParser parser) throws XmlPullParserException, IOException {
+            Macro macro = new Macro();
+             boolean done = false;
             while (!done) {
-	        	int eventType = parser.next();
-	        	if (eventType == XmlPullParser.START_TAG) {
-	        		if (parser.getName().equals("title")) {
-	        			parser.next();
-	        			macro.setTitle(parser.getText());
-	        		}
-	        		else if (parser.getName().equals("description")) {
-	        			macro.setDescription(parser.nextText());
-	        		}
-	        		else if (parser.getName().equals("response")) {
-	        			macro.setResponse(parser.nextText());
-	        		}
-	        		else if (parser.getName().equals("type")) {
-	        			macro.setType(Integer.valueOf(parser.nextText()).intValue());
-	        		}
-	        	}
-	            else if (eventType == XmlPullParser.END_TAG) {
-	                if (parser.getName().equals("macro")) {
-	                    done = true;
-	                }
-	            }
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT) {
+                    if (parser.getName().equals("title")) {
+                        parser.next();
+                        macro.setTitle(parser.getText());
+                    }
+                    else if (parser.getName().equals("description")) {
+                        macro.setDescription(parser.nextText());
+                    }
+                    else if (parser.getName().equals("response")) {
+                        macro.setResponse(parser.nextText());
+                    }
+                    else if (parser.getName().equals("type")) {
+                        macro.setType(Integer.valueOf(parser.nextText()).intValue());
+                    }
+                }
+                else if (eventType == XmlPullParser.Event.END_ELEMENT) {
+                    if (parser.getName().equals("macro")) {
+                        done = true;
+                    }
+                }
             }
-        	return macro;
+            return macro;
         }
-        
-        public MacroGroup parseMacroGroup(XmlPullParser parser) throws Exception {
-        	MacroGroup group = new MacroGroup();
-        	
+
+        public MacroGroup parseMacroGroup(XmlPullParser parser) throws XmlPullParserException, IOException {
+            MacroGroup group = new MacroGroup();
+
             boolean done = false;
             while (!done) {
-	        	int eventType = parser.next();
-	        	if (eventType == XmlPullParser.START_TAG) {
-	        		if (parser.getName().equals("macrogroup")) {
-	        			group.addMacroGroup(parseMacroGroup(parser));
-	        		}
-	        		if (parser.getName().equals("title")) {
-	        			group.setTitle(parser.nextText());
-	        		}
-	        		if (parser.getName().equals("macro")) {
-	        			group.addMacro(parseMacro(parser));
-	        		}
-	        	}
-	            else if (eventType == XmlPullParser.END_TAG) {
-	                if (parser.getName().equals("macrogroup")) {
-	                    done = true;
-	                }
-	            }
+                XmlPullParser.Event eventType = parser.next();
+                if (eventType == XmlPullParser.Event.START_ELEMENT) {
+                    if (parser.getName().equals("macrogroup")) {
+                        group.addMacroGroup(parseMacroGroup(parser));
+                    }
+                    if (parser.getName().equals("title")) {
+                        group.setTitle(parser.nextText());
+                    }
+                    if (parser.getName().equals("macro")) {
+                        group.addMacro(parseMacro(parser));
+                    }
+                }
+                else if (eventType == XmlPullParser.Event.END_ELEMENT) {
+                    if (parser.getName().equals("macrogroup")) {
+                        done = true;
+                    }
+                }
             }
-        	return group; 
+            return group;
         }
-        
-        public MacroGroup parseMacroGroups(String macros) throws Exception {
 
-        	MacroGroup group = null;
-        	XmlPullParser parser = XmlPullParserFactory.newInstance().newPullParser();
-        	parser.setInput(new StringReader(macros));
-			int eventType = parser.getEventType();
-			while (eventType != XmlPullParser.END_DOCUMENT) {		
-				eventType = parser.next();
-				 if (eventType == XmlPullParser.START_TAG) {
-	                    if (parser.getName().equals("macrogroup")) {
-	                    	group = parseMacroGroup(parser);
-	                    }
-				 }
-			}
-			return group;
+        public MacroGroup parseMacroGroups(String macros) throws XmlPullParserException, IOException {
+            MacroGroup group = null;
+            XmlPullParser parser = PacketParserUtils.getParserFor(macros);
+
+            XmlPullParser.Event eventType = parser.getEventType();
+            while (eventType != XmlPullParser.Event.END_DOCUMENT) {
+                eventType = parser.next();
+                 if (eventType == XmlPullParser.Event.START_ELEMENT) {
+                        if (parser.getName().equals("macrogroup")) {
+                            group = parseMacroGroup(parser);
+                        }
+                 }
+            }
+            return group;
         }
     }
 }

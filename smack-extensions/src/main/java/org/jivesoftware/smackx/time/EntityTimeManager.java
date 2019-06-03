@@ -19,33 +19,33 @@ package org.jivesoftware.smackx.time;
 import java.util.Map;
 import java.util.WeakHashMap;
 
+import org.jivesoftware.smack.ConnectionCreationListener;
+import org.jivesoftware.smack.Manager;
 import org.jivesoftware.smack.SmackException.NoResponseException;
 import org.jivesoftware.smack.SmackException.NotConnectedException;
 import org.jivesoftware.smack.XMPPConnection;
-import org.jivesoftware.smack.ConnectionCreationListener;
-import org.jivesoftware.smack.Manager;
-import org.jivesoftware.smack.PacketListener;
 import org.jivesoftware.smack.XMPPConnectionRegistry;
 import org.jivesoftware.smack.XMPPException.XMPPErrorException;
-import org.jivesoftware.smack.filter.AndFilter;
-import org.jivesoftware.smack.filter.IQTypeFilter;
-import org.jivesoftware.smack.filter.PacketFilter;
-import org.jivesoftware.smack.filter.PacketTypeFilter;
-import org.jivesoftware.smack.packet.Packet;
+import org.jivesoftware.smack.iqrequest.AbstractIqRequestHandler;
+import org.jivesoftware.smack.iqrequest.IQRequestHandler.Mode;
+import org.jivesoftware.smack.packet.IQ;
+import org.jivesoftware.smack.packet.IQ.Type;
+import org.jivesoftware.smack.packet.StanzaError.Condition;
+
 import org.jivesoftware.smackx.disco.ServiceDiscoveryManager;
 import org.jivesoftware.smackx.time.packet.Time;
 
-public class EntityTimeManager extends Manager {
+import org.jxmpp.jid.Jid;
 
-    private static final Map<XMPPConnection, EntityTimeManager> INSTANCES = new WeakHashMap<XMPPConnection, EntityTimeManager>();
+public final class EntityTimeManager extends Manager {
 
-    private static final PacketFilter TIME_PACKET_FILTER = new AndFilter(new PacketTypeFilter(
-                    Time.class), IQTypeFilter.GET);
+    private static final Map<XMPPConnection, EntityTimeManager> INSTANCES = new WeakHashMap<>();
 
     private static boolean autoEnable = true;
 
     static {
         XMPPConnectionRegistry.addConnectionCreationListener(new ConnectionCreationListener() {
+            @Override
             public void connectionCreated(XMPPConnection connection) {
                 getInstanceFor(connection);
             }
@@ -56,10 +56,11 @@ public class EntityTimeManager extends Manager {
         EntityTimeManager.autoEnable = autoEnable;
     }
 
-    public synchronized static EntityTimeManager getInstanceFor(XMPPConnection connection) {
+    public static synchronized EntityTimeManager getInstanceFor(XMPPConnection connection) {
         EntityTimeManager entityTimeManager = INSTANCES.get(connection);
         if (entityTimeManager == null) {
             entityTimeManager = new EntityTimeManager(connection);
+            INSTANCES.put(connection, entityTimeManager);
         }
         return entityTimeManager;
     }
@@ -68,18 +69,21 @@ public class EntityTimeManager extends Manager {
 
     private EntityTimeManager(XMPPConnection connection) {
         super(connection);
-        INSTANCES.put(connection, this);
         if (autoEnable)
             enable();
 
-        connection.addPacketListener(new PacketListener() {
+        connection.registerIQRequestHandler(new AbstractIqRequestHandler(Time.ELEMENT, Time.NAMESPACE, Type.get,
+                        Mode.async) {
             @Override
-            public void processPacket(Packet packet) throws NotConnectedException {
-                if (!enabled)
-                    return;
-                connection().sendPacket(Time.createResponse(packet));
+            public IQ handleIQRequest(IQ iqRequest) {
+                if (enabled) {
+                    return Time.createResponse(iqRequest);
+                }
+                else {
+                    return IQ.createErrorResponse(iqRequest, Condition.not_acceptable);
+                }
             }
-        }, TIME_PACKET_FILTER);
+        });
     }
 
     public synchronized void enable() {
@@ -98,16 +102,17 @@ public class EntityTimeManager extends Manager {
         enabled = false;
     }
 
-    public boolean isTimeSupported(String jid) throws NoResponseException, XMPPErrorException, NotConnectedException  {
+    public boolean isTimeSupported(Jid jid) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException  {
         return ServiceDiscoveryManager.getInstanceFor(connection()).supportsFeature(jid, Time.NAMESPACE);
     }
 
-    public Time getTime(String jid) throws NoResponseException, XMPPErrorException, NotConnectedException {
+    public Time getTime(Jid jid) throws NoResponseException, XMPPErrorException, NotConnectedException, InterruptedException {
         if (!isTimeSupported(jid))
             return null;
 
         Time request = new Time();
-        Time response = (Time) connection().createPacketCollectorAndSend(request).nextResultOrThrow();
-        return response;
+        // TODO Add Time(Jid) constructor and use this constructor instead
+        request.setTo(jid);
+        return connection().createStanzaCollectorAndSend(request).nextResultOrThrow();
     }
 }
